@@ -104,14 +104,39 @@ model, transform = torch.hub.load("fkryan/gazelle", "gazelle_dinov2_vitl14_inout
 
 ## 推理流程
 
-### 输入格式
+### 输入 / 输出合约
 
-Gaze-LLE 支持多人推理。输入包括：
+Gaze-LLE 支持多人推理。一次前向推理接收一批场景图像，以及每张图中需要预测视线的一个或多个人的头部框。对于同一张图，DINOv2 场景特征只编码一次，然后复用到每个人的 gaze heatmap 预测中。
 
-- `images`：形状为 `[B, 3, 448, 448]` 的图像张量。
-- `bboxes`：每张图像对应一个 head bbox 列表，格式为 `[(xmin, ymin, xmax, ymax)]`。
-- bbox 坐标是归一化图像坐标，范围为 `[0, 1]`。
-- 对单人场景，如果没有 head bbox，可以传入 `None`；多人场景必须提供 head bbox，用于指定要预测哪一个人的视线。
+输入字段：
+
+| 字段 | 类型 / 形状 | 含义 |
+| ---- | ----------- | ---- |
+| `input["images"]` | `torch.Tensor`，形状为 `[B, 3, 448, 448]` | 经过模型 transform 后的 RGB 图像 batch。 |
+| `input["bboxes"]` | 长度为 `B` 的 Python list | 每张图对应一个 head bbox 列表。 |
+| head bbox | `(xmin, ymin, xmax, ymax)` | 归一化图像坐标，范围为 `[0, 1]`；调用方应保证 bbox 已裁剪、合法，并满足 `xmin < xmax`、`ymin < ymax`。 |
+| `None` head bbox | `None` | 仅建议作为单人场景 fallback。多人场景必须传入真实 head bbox，否则模型无法区分要预测哪一个人的视线。 |
+
+`model(input)` 返回一个 dict：
+
+| 字段 | 类型 / 形状 | 含义 |
+| ---- | ----------- | ---- |
+| `output["heatmap"]` | 长度为 `B` 的 list；每项形状为 `[num_people, 64, 64]` | 每个人的 gaze target heatmap，数值范围为 `[0, 1]`，数值越高表示越可能是视线目标区域。 |
+| `output["inout"]` | `None`，或长度为 `B` 的 list；每项形状为 `[num_people]` | 仅 `*_inout` 模型输出。接近 `1` 表示模型认为视线目标在画面内。 |
+
+输出顺序与输入 head bbox 顺序一致。例如 `output["heatmap"][i][j]` 表示第 `i` 张图中第 `j` 个 head bbox 对应人物的 gaze heatmap。
+
+### 模型内部数据流
+
+当前代码中的前向推理流程如下：
+
+1. `transform` 将 PIL RGB 图像转换为归一化张量，并 resize 到 `448x448`。
+2. `DinoV2Backbone` 对每张图像编码一次；对于 `448x448` 输入和 ViT-14 backbone，通常得到 `32x32` patch feature map。
+3. 每个归一化 head bbox 会被 rasterize 成与 feature map 同尺寸的低分辨率 head map。
+4. 图像特征会按照每张图的人数进行复制，再与 head token 和 head map 融合。
+5. Transformer decoder 为每个人输出一个 gaze heatmap；`*_inout` 模型还会使用额外 token 输出 in/out-of-frame score。
+
+注意：调用 `get_gazelle_model(...)` 构建模型时会通过 PyTorch Hub 构建 DINOv2 backbone。如果本地没有 DINOv2 缓存，首次构建模型可能会联网下载 backbone 权重。
 
 ### 单图单人示例
 
@@ -175,6 +200,19 @@ viz = visualize_heatmap(image, predicted_heatmap)
 plt.imshow(viz)
 plt.show()
 ```
+
+### 数据集、训练与评估 I/O
+
+数据集加载和评估脚本依赖 `data_prep/preprocess_gazefollow.py` 或 `data_prep/preprocess_vat.py` 生成的预处理 JSON。
+
+- GazeFollow 读取 `{split}_preprocessed.json`，每个元素是一张图像记录。
+- VideoAttentionTarget 读取 `{split}_preprocessed.json`，原始结构是 sequence，加载时会按帧展开。
+- 每个图像或帧记录包含 `path`、`height`、`width`、`heads`。
+- 每个 head 记录包含 `bbox`、`bbox_norm`、`gazex`、`gazey`、`gazex_norm`、`gazey_norm`、`inout`。
+- 训练阶段 `GazeDataset` 返回图像张量、归一化 head bbox、归一化 gaze 点、`inout`、原始图像尺寸，以及 `[64, 64]` 的监督 heatmap。
+- 训练脚本默认冻结 DINOv2 backbone，并通过 `model.get_gazelle_state_dict()` 只保存 Gaze-LLE decoder 权重。
+- `scripts/eval_gazefollow.py` 输出 `AUC`、`Avg L2`、`Min L2`。
+- `scripts/eval_vat.py` 输出 `AUC`、`Avg L2`、`Inout AP`。
 
 ## 推荐执行顺序
 
@@ -271,7 +309,7 @@ python scripts/eval_vat.py `
 ```powershell
 python scripts/train_gazefollow.py `
   --data_path /path/to/gazefollow/data_new `
-  --model_name gazelle_dinov2_vitb `
+  --model gazelle_dinov2_vitb14 `
   --exp_name train_gazelle_vitb_gazefollow
 ```
 
@@ -280,7 +318,7 @@ python scripts/train_gazefollow.py `
 ```powershell
 python scripts/train_gazefollow.py `
   --data_path /path/to/gazefollow/data_new `
-  --model_name gazelle_dinov2_vitl `
+  --model gazelle_dinov2_vitl14 `
   --exp_name train_gazelle_vitl_gazefollow
 ```
 
@@ -293,7 +331,7 @@ VideoAttentionTarget 训练通常从对应的 GazeFollow checkpoint 初始化。
 ```powershell
 python scripts/train_vat.py `
   --data_path /path/to/videoattentiontarget `
-  --model_name gazelle_dinov2_vitb_inout `
+  --model gazelle_dinov2_vitb14_inout `
   --init_ckpt /path/to/gazelle_dinov2_vitb_checkpoint.pt `
   --exp_name train_gazelle_vitb_vat
 ```
@@ -303,7 +341,7 @@ python scripts/train_vat.py `
 ```powershell
 python scripts/train_vat.py `
   --data_path /path/to/videoattentiontarget `
-  --model_name gazelle_dinov2_vitl_inout `
+  --model gazelle_dinov2_vitl14_inout `
   --init_ckpt /path/to/gazelle_dinov2_vitl_checkpoint.pt `
   --exp_name train_gazelle_vitl_vat
 ```
@@ -315,10 +353,14 @@ python scripts/train_vat.py `
 1. 先在本仓库完成独立推理接口和文档。
 2. 确认 Windows + CUDA 环境下能稳定 import、加载 checkpoint、输出 heatmap。
 3. 为 Multi-Pose 提供稳定的输入输出约定：
-   - 输入：RGB 图像、多人 head bbox、设备、可选 in/out threshold。
-   - 输出：每个 head bbox 对应的 `[64, 64]` heatmap、可选 in/out score。
+   - 输入：当前 RGB 帧、tracked person id、每个人对应的归一化 head bbox、设备、可选 in/out threshold。
+   - 输出：每个 head bbox 对应的 `[64, 64]` gaze heatmap、可选 in/out score。
 4. Multi-Pose 中只调用该稳定接口，不复制 Gazelle 内部模型代码。
 5. 权重和 DINOv2 cache 仍作为本地运行资产，不提交到任一仓库。
+
+Multi-Pose 侧应负责人物跟踪、head/person bbox 生成、推理频率控制，以及将 `[64, 64]` heatmap 映射回原图或 BEV 坐标。Gazelle 本身不做人脸身份识别，也不会输出身份 embedding。
+
+当前 `gazelle/model.py` 中的 source factory 支持 `gazelle_dinov2_vitb14`、`gazelle_dinov2_vitl14`、`gazelle_dinov2_vitb14_inout`、`gazelle_dinov2_vitl14_inout`。上方表格中的 ChildPlay checkpoint 是可下载的预训练资产，但当前 source factory 尚未提供单独的 ChildPlay 模型名。
 
 ## 常见问题
 
