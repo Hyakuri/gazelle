@@ -1,6 +1,8 @@
 # Gaze-LLE
 #### CVPR 2025 (Highlight)
 
+[中文说明](README_CN.md)
+
 [Gaze-LLE: Gaze Target Estimation via Large-Scale Learned Encoders](https://arxiv.org/abs/2412.09586) \
 [Fiona Ryan](https://fkryan.github.io/), [Ajay Bati](https://www.linkedin.com/in/abati777/), [Sangmin Lee](https://sites.google.com/view/sangmin-lee), [Daniel Bolya](https://dbolya.github.io/), [Judy Hoffman](https://faculty.cc.gatech.edu/~judy/)\*, [James M. Rehg](https://rehg.org/)\*
 
@@ -14,6 +16,10 @@ This is the official implementation for Gaze-LLE, a transformer approach for est
 <div style="text-align:center;">
     <img src="./assets/gazelle_arch.png" height="200"/>
 </div>
+
+## Documentation Maintenance
+
+When adding user-facing features, scripts, environment requirements, model download instructions, or integration notes, update both `README.md` and `README_CN.md` in the same change. Keep examples runnable from the repository root, and state clearly whether a command downloads weights, opens a UI, trains a model, or only validates imports.
 
 
 ## Installation
