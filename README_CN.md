@@ -18,7 +18,7 @@
 
 ## 文档维护约定
 
-之后新增用户可见功能、脚本、环境依赖、模型下载方式、推理接口或与 Multi-Pose 的集成说明时，请同时更新 `README.md` 和 `README_CN.md`。命令示例应默认从仓库根目录执行，并明确说明命令是否会下载权重、打开界面、训练模型，或只是进行安全的 import/CLI 验证。
+之后新增用户可见功能、脚本、CLI 参数、环境依赖、模型下载方式、输出格式、推理接口或与 Multi-Pose 的集成说明时，请同时更新 `README.md` 和 `README_CN.md`。命令示例应默认从仓库根目录执行，并明确说明命令是否会下载权重、打开界面、训练模型、执行推理、使用 CUDA、写入输出文件，或只是进行安全的 import/CLI 验证。如果某次纯代码改动不需要更新 README，需要在开发报告或 PR comment 中明确说明原因。
 
 ## 项目能力概览
 
@@ -101,6 +101,33 @@ model, transform = torch.hub.load("fkryan/gazelle", "gazelle_dinov2_vitl14_inout
 ```
 
 如果希望使用本 fork 版本，请优先从源码路径导入，并显式加载 checkpoint。
+
+## 统一 Runtime 入口预览
+
+当前分支正在为原始研究模型增加统一的本地 runtime。新的入口是：
+
+```powershell
+python main.py --help
+```
+
+当前里程碑只提供安全的 CLI 和模型注册表检查：
+
+```powershell
+python main.py --list-models
+```
+
+这些命令不会构建 DINOv2 backbone，不会下载 Gazelle checkpoint，不会访问 PyTorch Hub，不会执行图片或视频推理，不会启动摄像头，不会使用 CUDA 执行模型计算，也不会写入输出文件。它们只用于验证本地 CLI 层，并打印当前注册的模型元数据。
+
+当前 runtime registry 只列出 `gazelle/model.py` 目前实际可以构建的四个模型：
+
+- `gazelle_dinov2_vitb14`
+- `gazelle_dinov2_vitl14`
+- `gazelle_dinov2_vitb14_inout`
+- `gazelle_dinov2_vitl14_inout`
+
+其中 `gazelle_dinov2_vitb14` checkpoint 会被有意显示为 ambiguous，因为 `README.md` 中写的是 `gazelle_dinov2_vitb14.pt`，而 `hubconf.py` 中使用的是 `gazelle_dinov2_vitb14_hub.pt`。后续资源准备阶段会实际验证 URL、state-dict key、tensor shape 和 strict load 行为，然后再决定默认使用哪一个。
+
+以下 runtime 功能在当前里程碑尚未完成：`--prepare-only`、checkpoint 自动下载、Torch Hub cache 准备、严格 checkpoint 校验、图片推理、视频流式推理、`none/static/json` head provider、结果渲染、JSON/JSONL 输出，以及可选 raw heatmap 导出。
 
 ## 推理流程
 

@@ -19,7 +19,7 @@ This is the official implementation for Gaze-LLE, a transformer approach for est
 
 ## Documentation Maintenance
 
-When adding user-facing features, scripts, environment requirements, model download instructions, or integration notes, update both `README.md` and `README_CN.md` in the same change. Keep examples runnable from the repository root, and state clearly whether a command downloads weights, opens a UI, trains a model, or only validates imports.
+When adding user-facing features, scripts, CLI arguments, environment requirements, model download instructions, output formats, or integration notes, update both `README.md` and `README_CN.md` in the same change. Keep examples runnable from the repository root, and state clearly whether a command downloads weights, opens a UI, trains a model, runs inference, uses CUDA, writes outputs, or only validates imports. If a code-only change does not require a README update, note that explicitly in the development report or PR comment.
 
 
 ## Installation
@@ -61,6 +61,33 @@ model, transform = torch.hub.load('fkryan/gazelle', 'gazelle_dinov2_vitl14')
 model, transform = torch.hub.load('fkryan/gazelle', 'gazelle_dinov2_vitb14_inout')
 model, transform = torch.hub.load('fkryan/gazelle', 'gazelle_dinov2_vitl14_inout')
 ```
+
+## Unified Runtime Preview
+
+This branch is adding a unified local runtime around the original research model. The runtime entry point is:
+
+```powershell
+python main.py --help
+```
+
+The current milestone only exposes safe CLI and model-registry inspection:
+
+```powershell
+python main.py --list-models
+```
+
+These commands do not construct the DINOv2 backbone, download Gazelle checkpoints, access PyTorch Hub, run image or video inference, use a camera, use CUDA for model execution, or write output files. They only validate the local CLI layer and print the registered model metadata.
+
+At this stage, the runtime registry lists the four model names that are currently constructible from `gazelle/model.py`:
+
+- `gazelle_dinov2_vitb14`
+- `gazelle_dinov2_vitl14`
+- `gazelle_dinov2_vitb14_inout`
+- `gazelle_dinov2_vitl14_inout`
+
+The `gazelle_dinov2_vitb14` checkpoint is intentionally shown as ambiguous because `README.md` lists `gazelle_dinov2_vitb14.pt`, while `hubconf.py` uses `gazelle_dinov2_vitb14_hub.pt`. A later resource-preparation milestone will verify the URLs, state-dict keys, tensor shapes, and strict load behavior before choosing a default.
+
+The following runtime features are planned but not available yet in this milestone: `--prepare-only`, automatic checkpoint download, Torch Hub cache preparation, strict checkpoint validation, image inference, streaming video inference, `none/static/json` head providers, rendering, JSON/JSONL output, and optional raw heatmap export.
 
 
 ## Usage
