@@ -110,13 +110,13 @@ model, transform = torch.hub.load("fkryan/gazelle", "gazelle_dinov2_vitl14_inout
 python main.py --help
 ```
 
-当前里程碑只提供安全的 CLI 和模型注册表检查：
+当前 runtime 已提供安全的 CLI / 模型注册表检查，以及资源准备：
 
 ```powershell
 python main.py --list-models
 ```
 
-这些命令不会构建 DINOv2 backbone，不会下载 Gazelle checkpoint，不会访问 PyTorch Hub，不会执行图片或视频推理，不会启动摄像头，不会使用 CUDA 执行模型计算，也不会写入输出文件。它们只用于验证本地 CLI 层，并打印当前注册的模型元数据。
+`--help` 和 `--list-models` 不会构建 DINOv2 backbone，不会下载 Gazelle checkpoint，不会访问 PyTorch Hub，不会执行图片或视频推理，不会启动摄像头，不会使用 CUDA 执行模型计算，也不会写入输出文件。它们只用于验证本地 CLI 层，并打印当前注册的模型元数据。
 
 当前 runtime registry 只列出 `gazelle/model.py` 目前实际可以构建的四个模型：
 
@@ -125,9 +125,54 @@ python main.py --list-models
 - `gazelle_dinov2_vitb14_inout`
 - `gazelle_dinov2_vitl14_inout`
 
-其中 `gazelle_dinov2_vitb14` checkpoint 会被有意显示为 ambiguous，因为 `README.md` 中写的是 `gazelle_dinov2_vitb14.pt`，而 `hubconf.py` 中使用的是 `gazelle_dinov2_vitb14_hub.pt`。后续资源准备阶段会实际验证 URL、state-dict key、tensor shape 和 strict load 行为，然后再决定默认使用哪一个。
+`gazelle_dinov2_vitb14` 默认使用 README 中的 `gazelle_dinov2_vitb14.pt`。开发 runtime 时已经验证过旧 `hubconf.py` 文件名 `gazelle_dinov2_vitb14_hub.pt`，它可以 strict load，且与 README checkpoint 字节完全一致。
 
-以下 runtime 功能在当前里程碑尚未完成：`--prepare-only`、checkpoint 自动下载、Torch Hub cache 准备、严格 checkpoint 校验、图片推理、视频流式推理、`none/static/json` head provider、结果渲染、JSON/JSONL 输出，以及可选 raw heatmap 导出。
+### 资源准备
+
+使用 `--prepare-only` 可以只准备本地模型资源，不执行图片或视频推理：
+
+```powershell
+python main.py --prepare-only --model gazelle_dinov2_vitb14_inout
+```
+
+该命令可能下载 Gazelle checkpoint，并且会通过 PyTorch Hub 构建 DINOv2 backbone。如果本地没有 DINOv2 缓存，构建 DINOv2 时可能下载 DINOv2 权重。它不会处理图片、处理视频、打开摄像头、渲染输出，也不会写入 JSON/JSONL 预测结果。
+
+缓存根目录优先级：
+
+1. `--cache-dir`
+2. `GAZELLE_CACHE_DIR`
+3. `models`
+
+runtime 使用以下目录结构：
+
+```text
+models/
+├── checkpoints/
+└── torch_hub/
+```
+
+如果希望使用本地 checkpoint，并跳过注册 checkpoint 下载，可以指定：
+
+```powershell
+python main.py `
+  --prepare-only `
+  --model gazelle_dinov2_vitb14_inout `
+  --checkpoint C:\path\to\gazelle_dinov2_vitb14_inout.pt
+```
+
+如果希望删除已缓存的注册 checkpoint 并重新下载，可以使用 `--force-download`：
+
+```powershell
+python main.py `
+  --prepare-only `
+  --model gazelle_dinov2_vitb14_inout `
+  --cache-dir models `
+  --force-download
+```
+
+runtime 路径中的 checkpoint 校验是严格的：空 state dict、缺失 key、额外 key、tensor shape 不一致、非 tensor 值、checkpoint 顶层结构不兼容都会让准备流程报错停止。
+
+以下 runtime 功能在当前里程碑尚未完成：图片推理、视频流式推理、`none/static/json` head provider、结果渲染、JSON/JSONL 输出，以及可选 raw heatmap 导出。
 
 ## 推理流程
 

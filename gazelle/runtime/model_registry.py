@@ -45,7 +45,6 @@ MODEL_SPECS = (
         input_size=(448, 448),
         checkpoint_candidates=(
             _candidate("README", "gazelle_dinov2_vitb14.pt"),
-            _candidate("hubconf.py", "gazelle_dinov2_vitb14_hub.pt"),
         ),
     ),
     ModelSpec(

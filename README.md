@@ -70,13 +70,13 @@ A unified local runtime is being developed around the original research model. T
 python main.py --help
 ```
 
-The current milestone only exposes safe CLI and model-registry inspection:
+The runtime currently exposes safe CLI/model-registry inspection and resource preparation:
 
 ```powershell
 python main.py --list-models
 ```
 
-These commands do not construct the DINOv2 backbone, download Gazelle checkpoints, access PyTorch Hub, run image or video inference, use a camera, use CUDA for model execution, or write output files. They only validate the local CLI layer and print the registered model metadata.
+`--help` and `--list-models` do not construct the DINOv2 backbone, download Gazelle checkpoints, access PyTorch Hub, run image or video inference, use a camera, use CUDA for model execution, or write output files. They only validate the local CLI layer and print the registered model metadata.
 
 At this stage, the runtime registry lists the four model names that are currently constructible from `gazelle/model.py`:
 
@@ -85,9 +85,54 @@ At this stage, the runtime registry lists the four model names that are currentl
 - `gazelle_dinov2_vitb14_inout`
 - `gazelle_dinov2_vitl14_inout`
 
-The `gazelle_dinov2_vitb14` checkpoint is intentionally shown as ambiguous because `README.md` lists `gazelle_dinov2_vitb14.pt`, while `hubconf.py` uses `gazelle_dinov2_vitb14_hub.pt`. A later resource-preparation milestone will verify the URLs, state-dict keys, tensor shapes, and strict load behavior before choosing a default.
+`gazelle_dinov2_vitb14` uses the README checkpoint file `gazelle_dinov2_vitb14.pt` by default. The older `hubconf.py` filename `gazelle_dinov2_vitb14_hub.pt` was checked during runtime development and found to be strict-load compatible and byte-identical to the README checkpoint.
 
-The following runtime features are planned but not available yet in this milestone: `--prepare-only`, automatic checkpoint download, Torch Hub cache preparation, strict checkpoint validation, image inference, streaming video inference, `none/static/json` head providers, rendering, JSON/JSONL output, and optional raw heatmap export.
+### Resource Preparation
+
+Use `--prepare-only` to prepare local model resources without running image or video inference:
+
+```powershell
+python main.py --prepare-only --model gazelle_dinov2_vitb14_inout
+```
+
+This command may download the Gazelle checkpoint and may construct the DINOv2 backbone through PyTorch Hub. Constructing DINOv2 can download DINOv2 weights if they are not already cached. It does not process images, process videos, open a camera, render output, or write JSON/JSONL predictions.
+
+Cache root priority:
+
+1. `--cache-dir`
+2. `GAZELLE_CACHE_DIR`
+3. `models`
+
+The runtime uses this directory layout:
+
+```text
+models/
+├── checkpoints/
+└── torch_hub/
+```
+
+Use a local checkpoint path to skip the registered checkpoint download:
+
+```powershell
+python main.py `
+  --prepare-only `
+  --model gazelle_dinov2_vitb14_inout `
+  --checkpoint C:\path\to\gazelle_dinov2_vitb14_inout.pt
+```
+
+Use `--force-download` to delete the cached registered checkpoint for the selected model and download it again:
+
+```powershell
+python main.py `
+  --prepare-only `
+  --model gazelle_dinov2_vitb14_inout `
+  --cache-dir models `
+  --force-download
+```
+
+Checkpoint validation is strict in the runtime path: empty state dicts, missing keys, unexpected keys, shape mismatches, non-tensor values, and incompatible checkpoint structures stop preparation with an error.
+
+The following runtime features are planned but not available yet in this milestone: image inference, streaming video inference, `none/static/json` head providers, rendering, JSON/JSONL output, and optional raw heatmap export.
 
 
 ## Usage

@@ -27,8 +27,12 @@ class RuntimeConfig:
 
     model: str = "gazelle_dinov2_vitb14_inout"
     list_models: bool = False
+    prepare_only: bool = False
     input_path: Optional[str] = None
     device: str = "auto"
+    cache_dir: Optional[str] = None
+    checkpoint: Optional[str] = None
+    force_download: bool = False
 
     def validate(self) -> "RuntimeConfig":
         get_model_spec(self.model)
@@ -40,6 +44,10 @@ class RuntimeConfig:
         return cls(
             model=args.model,
             list_models=args.list_models,
+            prepare_only=args.prepare_only,
             input_path=args.input,
             device=args.device,
+            cache_dir=args.cache_dir,
+            checkpoint=args.checkpoint,
+            force_download=args.force_download,
         ).validate()

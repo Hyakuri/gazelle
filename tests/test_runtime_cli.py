@@ -2,6 +2,8 @@ from contextlib import redirect_stderr
 import io
 import sys
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from gazelle.runtime.cli import build_parser, main, parse_runtime_config
 from gazelle.runtime.config import validate_device_name
@@ -37,6 +39,26 @@ class RuntimeCliTest(unittest.TestCase):
         config = parse_runtime_config(["--list-models"])
         self.assertTrue(config.list_models)
         self.assertEqual(config.model, "gazelle_dinov2_vitb14_inout")
+
+    def test_prepare_only_config_does_not_require_input(self):
+        config = parse_runtime_config(["--prepare-only", "--cache-dir", "models"])
+        self.assertTrue(config.prepare_only)
+        self.assertIsNone(config.input_path)
+        self.assertEqual(config.cache_dir, "models")
+
+    def test_prepare_only_route_calls_resource_preparation(self):
+        prepared = SimpleNamespace(
+            model_name="gazelle_dinov2_vitb14_inout",
+            checkpoint_path="models/checkpoints/example.pt",
+            cache_paths=SimpleNamespace(root_dir="models", torch_hub_dir="models/torch_hub"),
+            candidate_results=(),
+        )
+        with patch("gazelle.runtime.resources.prepare_runtime_resources", return_value=prepared) as mock_prepare:
+            stdout = io.StringIO()
+            exit_code = main(["--prepare-only", "--cache-dir", "models"], stdout=stdout)
+        self.assertEqual(exit_code, 0)
+        mock_prepare.assert_called_once()
+        self.assertIn("Prepared Gazelle resources", stdout.getvalue())
 
     def test_invalid_model_uses_registry_error(self):
         stderr = io.StringIO()

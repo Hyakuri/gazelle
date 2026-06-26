@@ -30,14 +30,11 @@ class ModelRegistryTest(unittest.TestCase):
         self.assertTrue(get_model_spec("gazelle_dinov2_vitb14_inout").supports_inout)
         self.assertTrue(get_model_spec("gazelle_dinov2_vitl14_inout").supports_inout)
 
-    def test_vitb14_non_inout_keeps_checkpoint_ambiguity_visible(self):
+    def test_vitb14_non_inout_uses_verified_readme_checkpoint(self):
         spec = get_model_spec("gazelle_dinov2_vitb14")
         filenames = [candidate.filename for candidate in spec.checkpoint_candidates]
-        self.assertEqual(
-            filenames,
-            ["gazelle_dinov2_vitb14.pt", "gazelle_dinov2_vitb14_hub.pt"],
-        )
-        self.assertTrue(spec.has_ambiguous_checkpoint)
+        self.assertEqual(filenames, ["gazelle_dinov2_vitb14.pt"])
+        self.assertFalse(spec.has_ambiguous_checkpoint)
 
     def test_unknown_model_has_readable_error(self):
         with self.assertRaisesRegex(ValueError, "Unknown Gazelle model"):
@@ -46,7 +43,7 @@ class ModelRegistryTest(unittest.TestCase):
     def test_format_model_table_does_not_require_model_construction(self):
         table = format_model_table()
         self.assertIn("gazelle_dinov2_vitl14_inout", table)
-        self.assertIn("AMBIGUOUS", table)
+        self.assertIn("gazelle_dinov2_vitb14.pt", table)
 
 
 if __name__ == "__main__":
