@@ -3,7 +3,7 @@ import sys
 from typing import Optional, Sequence, TextIO
 
 from gazelle.runtime.config import RuntimeConfig
-from gazelle.runtime.model_registry import format_model_table, supported_model_names
+from gazelle.runtime.model_registry import format_model_table
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -19,8 +19,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--model",
         default="gazelle_dinov2_vitb14_inout",
-        choices=supported_model_names(),
-        help="Gazelle model to use. This does not load DINOv2 unless runtime preparation is requested.",
+        help=(
+            "Gazelle model to use. Run --list-models to see supported names. "
+            "This does not load DINOv2 unless runtime preparation is requested."
+        ),
     )
     parser.add_argument(
         "--input",

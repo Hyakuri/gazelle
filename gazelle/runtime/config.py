@@ -4,6 +4,23 @@ from typing import Optional
 from gazelle.runtime.model_registry import get_model_spec
 
 
+def validate_device_name(device: str) -> str:
+    normalized = str(device).strip()
+    if not normalized:
+        raise ValueError(
+            "Invalid device '{}'. Use auto, cpu, cuda, or cuda:<non-negative-index>.".format(device)
+        )
+    if normalized in ("auto", "cpu", "cuda"):
+        return normalized
+    if normalized.startswith("cuda:"):
+        index = normalized[len("cuda:") :]
+        if index and index.isascii() and index.isdigit():
+            return normalized
+    raise ValueError(
+        "Invalid device '{}'. Use auto, cpu, cuda, or cuda:<non-negative-index>.".format(device)
+    )
+
+
 @dataclass(frozen=True)
 class RuntimeConfig:
     """Validated CLI configuration for the Gazelle runtime."""
@@ -15,8 +32,7 @@ class RuntimeConfig:
 
     def validate(self) -> "RuntimeConfig":
         get_model_spec(self.model)
-        if self.device not in ("auto", "cpu", "cuda") and not self.device.startswith("cuda:"):
-            raise ValueError("Invalid device '{}'. Use auto, cpu, cuda, or cuda:<index>.".format(self.device))
+        object.__setattr__(self, "device", validate_device_name(self.device))
         return self
 
     @classmethod

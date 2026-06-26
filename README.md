@@ -64,7 +64,7 @@ model, transform = torch.hub.load('fkryan/gazelle', 'gazelle_dinov2_vitl14_inout
 
 ## Unified Runtime Preview
 
-This branch is adding a unified local runtime around the original research model. The runtime entry point is:
+A unified local runtime is being developed around the original research model. The runtime entry point is:
 
 ```powershell
 python main.py --help

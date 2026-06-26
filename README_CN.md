@@ -104,7 +104,7 @@ model, transform = torch.hub.load("fkryan/gazelle", "gazelle_dinov2_vitl14_inout
 
 ## 统一 Runtime 入口预览
 
-当前分支正在为原始研究模型增加统一的本地 runtime。新的入口是：
+本项目正在围绕原始研究模型增加统一的本地 runtime。新的入口是：
 
 ```powershell
 python main.py --help
