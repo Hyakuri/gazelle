@@ -137,6 +137,29 @@ class ImagePipelineTest(unittest.TestCase):
         self.assertEqual(fake.calls[0][1][0].bbox, None)
         self.assertEqual(result.heads[0].person_id, 0)
 
+    def test_run_image_pipeline_existing_output_dir_rejects_before_predictor(self):
+        with TemporaryDirectory() as tmpdir:
+            image_path = Path(tmpdir) / "frame.png"
+            write_test_image(image_path)
+            output_dir = Path(tmpdir) / "outputs"
+            existing_output = output_dir / "frame_gazelle"
+            existing_output.mkdir(parents=True)
+            factory_calls = []
+
+            def fail_if_called(config):
+                factory_calls.append(config)
+                raise AssertionError("predictor should not be constructed")
+
+            config = make_config(input_path=str(image_path), output_dir=str(output_dir))
+
+            with self.assertRaises(FileExistsError):
+                run_image_pipeline(config, predictor_factory=fail_if_called)
+
+            self.assertEqual(factory_calls, [])
+            self.assertFalse((existing_output / "predictions.json").exists())
+            self.assertFalse((existing_output / "run_config.json").exists())
+            self.assertFalse((existing_output / "heatmaps").exists())
+
     def test_run_image_pipeline_static_head_source(self):
         with TemporaryDirectory() as tmpdir:
             image_path = Path(tmpdir) / "frame.png"

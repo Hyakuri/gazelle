@@ -89,6 +89,8 @@ def _run_config_payload(config, *, input_path, image_width: int, image_height: i
 
 def run_image_pipeline(config, predictor_factory: Optional[Callable[[object], object]] = None) -> ImagePipelineResult:
     image, width, height = load_image_rgb(config.input_path)
+    output_dir = create_output_dir(config.input_path, config.output_dir, overwrite=config.overwrite)
+
     head_provider = build_head_provider_from_config(config)
     heads = tuple(
         head_provider.get_heads(
@@ -103,7 +105,6 @@ def run_image_pipeline(config, predictor_factory: Optional[Callable[[object], ob
     predictor = predictor_factory(config) if predictor_factory is not None else _build_real_predictor(config)
     predictions = tuple(predictor.predict_frame(image, heads))
 
-    output_dir = create_output_dir(config.input_path, config.output_dir, overwrite=config.overwrite)
     heatmap_paths: List[str] = []
     if config.save_heatmaps:
         heatmap_paths = save_prediction_heatmaps(output_dir / "heatmaps", predictions)
