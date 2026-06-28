@@ -18,7 +18,7 @@
 
 ## 文档维护约定
 
-之后新增用户可见功能、脚本、环境依赖、模型下载方式、推理接口或与 Multi-Pose 的集成说明时，请同时更新 `README.md` 和 `README_CN.md`。命令示例应默认从仓库根目录执行，并明确说明命令是否会下载权重、打开界面、训练模型，或只是进行安全的 import/CLI 验证。
+之后新增用户可见功能、脚本、CLI 参数、环境依赖、模型下载方式、输出格式、推理接口或与 Multi-Pose 的集成说明时，请同时更新 `README.md` 和 `README_CN.md`。命令示例应默认从仓库根目录执行，并明确说明命令是否会下载权重、打开界面、训练模型、执行推理、使用 CUDA、写入输出文件，或只是进行安全的 import/CLI 验证。如果某次纯代码改动不需要更新 README，需要在开发报告或 PR comment 中明确说明原因。
 
 ## 项目能力概览
 
@@ -101,6 +101,188 @@ model, transform = torch.hub.load("fkryan/gazelle", "gazelle_dinov2_vitl14_inout
 ```
 
 如果希望使用本 fork 版本，请优先从源码路径导入，并显式加载 checkpoint。
+
+## 统一 Runtime 入口预览
+
+本项目正在围绕原始研究模型增加统一的本地 runtime。新的入口是：
+
+```powershell
+python main.py --help
+```
+
+当前 runtime 已提供安全的 CLI / 模型注册表检查、资源准备，以及单张图片推理：
+
+```powershell
+python main.py --list-models
+```
+
+`--help` 和 `--list-models` 不会构建 DINOv2 backbone，不会下载 Gazelle checkpoint，不会访问 PyTorch Hub，不会执行图片或视频推理，不会启动摄像头，不会使用 CUDA 执行模型计算，也不会写入输出文件。它们只用于验证本地 CLI 层，并打印当前注册的模型元数据。
+
+当前 runtime registry 只列出 `gazelle/model.py` 目前实际可以构建的四个模型：
+
+- `gazelle_dinov2_vitb14`
+- `gazelle_dinov2_vitl14`
+- `gazelle_dinov2_vitb14_inout`
+- `gazelle_dinov2_vitl14_inout`
+
+`gazelle_dinov2_vitb14` 默认使用 README 中的 `gazelle_dinov2_vitb14.pt`。开发 runtime 时已经验证过旧 `hubconf.py` 文件名 `gazelle_dinov2_vitb14_hub.pt`，它可以 strict load，且与 README checkpoint 字节完全一致。
+
+### 资源准备
+
+使用 `--prepare-only` 可以只准备本地模型资源，不执行图片或视频推理：
+
+```powershell
+python main.py --prepare-only --model gazelle_dinov2_vitb14_inout
+```
+
+该命令可能下载 Gazelle checkpoint，并且会通过 PyTorch Hub 构建 DINOv2 backbone。如果本地没有 DINOv2 缓存，构建 DINOv2 时可能下载 DINOv2 权重。它不会处理图片、处理视频、打开摄像头、渲染输出，也不会写入 JSON/JSONL 预测结果。
+
+成功时，该命令会输出解析后的 checkpoint 路径、`checkpoint_source`、缓存根目录、Torch Hub 缓存目录，以及注册 checkpoint 候选的 strict-load 校验信息。使用 `--checkpoint` 时，`checkpoint_source` 为 `local`；使用 runtime 注册 checkpoint 时，`checkpoint_source` 为对应候选来源。
+
+缓存根目录优先级：
+
+1. `--cache-dir`
+2. `GAZELLE_CACHE_DIR`
+3. `models`
+
+runtime 使用以下目录结构：
+
+```text
+models/
+├── checkpoints/
+└── torch_hub/
+```
+
+如果希望使用本地 checkpoint，并跳过注册 checkpoint 下载，可以指定：
+
+```powershell
+python main.py `
+  --prepare-only `
+  --model gazelle_dinov2_vitb14_inout `
+  --checkpoint C:\path\to\gazelle_dinov2_vitb14_inout.pt
+```
+
+如果希望刷新已缓存的注册 checkpoint，可以使用 `--force-download`：
+
+```powershell
+python main.py `
+  --prepare-only `
+  --model gazelle_dinov2_vitb14_inout `
+  --cache-dir models `
+  --force-download
+```
+
+为了避免网络失败导致旧缓存丢失，强制下载会先写入 checkpoint 缓存下的临时 `.downloads` 目录。只有新文件下载完成且确认存在后，runtime 才会替换旧 checkpoint。如果下载失败，已有 checkpoint 会被保留。
+
+runtime 路径中的 checkpoint 校验是严格的：空 state dict、缺失 key、额外 key、tensor shape 不一致、非 tensor 值、checkpoint 顶层结构不兼容都会让准备流程报错停止。
+
+### 单张图片推理
+
+runtime 现在可以对一张图片执行 Gazelle 推理，并写出结构化结果：
+
+```powershell
+python main.py `
+  --input samples\frame.jpg `
+  --output-dir outputs `
+  --head-source none `
+  --model gazelle_dinov2_vitb14_inout
+```
+
+该命令会构建 Gazelle 模型和 DINOv2 backbone。如果所选 Gazelle checkpoint 或 DINOv2 权重尚未缓存，运行时可能访问网络并下载它们。命令会创建类似 `outputs/frame_gazelle/` 的单图输出目录，并写入 `predictions.json` 和 `run_config.json`。当前 image pipeline 只支持单张图片；不支持视频处理、摄像头或视频 JSONL 输出。
+
+head 输入来源：
+
+- `--head-source none` 会创建一个单人 fallback head，bbox 为 `None`。
+- `--head-source static` 使用命令行传入的一个或多个 bbox：
+
+```powershell
+python main.py `
+  --input samples\frame.jpg `
+  --output-dir outputs `
+  --head-source static `
+  --bbox 0.10 0.12 0.22 0.30 `
+  --bbox-format normalized
+```
+
+`--bbox` 可以重复传入以支持多人。`--bbox-format normalized` 表示 `[0, 1]` 归一化坐标，`--bbox-format pixel` 表示图片像素坐标。`--person-id` 可以重复传入，并且数量必须与 `--bbox` 一致；不传时 person id 默认为 `0, 1, 2, ...`。
+
+- `--head-source json` 从 JSON 中读取单图 head 数据：
+
+```powershell
+python main.py `
+  --input samples\frame.jpg `
+  --output-dir outputs `
+  --head-source json `
+  --head-data samples\frame_heads.json
+```
+
+单图推理会读取 `frame_index=0` 的 head 数据。JSON 使用 runtime head provider 的内部 record 格式，`bbox_format` 可以是 `normalized` 或 `pixel`，`heads` 中包含 `person_id`、`bbox` 和可选 `confidence`。
+
+使用 `--save-heatmaps` 可以保存每个人的 raw heatmap tensor：
+
+```powershell
+python main.py `
+  --input samples\frame.jpg `
+  --output-dir outputs `
+  --head-source none `
+  --save-heatmaps
+```
+
+raw heatmap 会保存在单图输出目录的 `heatmaps/` 下，并在 `predictions.json` 中以路径引用。heatmap 不会直接写入 JSON，`heatmap_peak_value` 也不应被理解为校准后的概率。
+
+使用 `--save-rendered` 可以保存可视化 overlay 图片：
+
+```powershell
+python main.py `
+  --input samples\frame.jpg `
+  --output-dir outputs `
+  --head-source static `
+  --bbox 0.10 0.12 0.22 0.30 `
+  --bbox-format normalized `
+  --save-rendered
+```
+
+默认情况下，单图推理只写入 `predictions.json` 和 `run_config.json`；只有传入 `--save-rendered` 时才会写可视化图片。默认文件名是 `rendered.png`。可以用 `--rendered-name` 指定 `.png`、`.jpg` 或 `.jpeg` 文件名，用 `--heatmap-alpha` 控制 heatmap 透明度。可视化 overlay 可以包含 heatmap、head bbox、gaze peak、person id 和可选的 `inout_score`；可以用 `--no-head-box`、`--no-gaze-peak` 或 `--no-labels` 关闭对应绘制元素。渲染不会改变 `predictions.json`，`heatmap_peak_value` 也不是校准后的概率。当前 renderer 只支持单张图片；视频 overlay / 重合成尚未实现。
+
+### 编程式单帧 Predictor
+
+`GazellePredictor` 为已经准备好的 checkpoint 提供编程式单帧接口：
+
+```python
+from PIL import Image
+
+from gazelle.runtime.contracts import HeadObservation
+from gazelle.runtime.predictor import GazellePredictor
+
+predictor = GazellePredictor.from_checkpoint(
+    model_name="gazelle_dinov2_vitb14_inout",
+    checkpoint_path="models/checkpoints/gazelle_dinov2_vitb14_inout.pt",
+    cache_dir="models",
+    device="auto",
+)
+
+frame = Image.open("path/to/frame.png").convert("RGB")
+predictions = predictor.predict_frame(
+    frame,
+    [
+        HeadObservation(person_id=1, bbox=(0.10, 0.12, 0.22, 0.30)),
+        HeadObservation(person_id=2, bbox=(0.45, 0.10, 0.58, 0.31)),
+    ],
+)
+```
+
+构建 predictor 会加载 Gazelle checkpoint，并通过 PyTorch Hub 构建 DINOv2。请传入与 `--prepare-only` 相同的 `cache_dir`，让 DINOv2 使用已经准备好的 Torch Hub cache；如果该 cache 中没有 DINOv2，这一步可能访问网络。`predict_frame(...)` 接收一帧内存中的 RGB frame，以及按顺序排列的 `HeadObservation` 列表，并按相同 person 顺序返回 `GazePrediction`。每个 prediction 包含 `person_id`、裁剪后的 `bbox`、CPU 上的 `[64, 64]` heatmap tensor、归一化 `gaze_peak`、`heatmap_peak_value`，以及可选 `inout_score`。
+
+runtime 对 head 的处理规则是严格的：
+
+- `heads=[]` 会直接返回空 prediction list，不调用 Gazelle 模型。
+- 单个 `HeadObservation(..., bbox=None)` 会使用 Gazelle 的无 bbox fallback 模式。
+- 多人推理必须为每个 head 提供有效 bbox。
+- bbox 会按有限数值的归一化 `(xmin, ymin, xmax, ymax)` 校验，裁剪到 `[0, 1]`，并拒绝裁剪后为空的 bbox。
+
+编程式 predictor API 仍然可以直接用于内存中的单帧调用。上面的 CLI image pipeline 是它的第一个用户可见封装；视频 CLI 集成仍未完成。
+
+以下 runtime 功能在当前里程碑尚未完成：自动 head detection、视频流式推理、视频重合成、视频 overlay、视频 JSONL 输出、ROI / 工序逻辑，以及 Multi-Pose 集成。
 
 ## 推理流程
 

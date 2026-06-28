@@ -19,7 +19,7 @@ This is the official implementation for Gaze-LLE, a transformer approach for est
 
 ## Documentation Maintenance
 
-When adding user-facing features, scripts, environment requirements, model download instructions, or integration notes, update both `README.md` and `README_CN.md` in the same change. Keep examples runnable from the repository root, and state clearly whether a command downloads weights, opens a UI, trains a model, or only validates imports.
+When adding user-facing features, scripts, CLI arguments, environment requirements, model download instructions, output formats, or integration notes, update both `README.md` and `README_CN.md` in the same change. Keep examples runnable from the repository root, and state clearly whether a command downloads weights, opens a UI, trains a model, runs inference, uses CUDA, writes outputs, or only validates imports. If a code-only change does not require a README update, note that explicitly in the development report or PR comment.
 
 
 ## Installation
@@ -61,6 +61,188 @@ model, transform = torch.hub.load('fkryan/gazelle', 'gazelle_dinov2_vitl14')
 model, transform = torch.hub.load('fkryan/gazelle', 'gazelle_dinov2_vitb14_inout')
 model, transform = torch.hub.load('fkryan/gazelle', 'gazelle_dinov2_vitl14_inout')
 ```
+
+## Unified Runtime Preview
+
+A unified local runtime is being developed around the original research model. The runtime entry point is:
+
+```powershell
+python main.py --help
+```
+
+The runtime currently exposes safe CLI/model-registry inspection, resource preparation, and single-image inference:
+
+```powershell
+python main.py --list-models
+```
+
+`--help` and `--list-models` do not construct the DINOv2 backbone, download Gazelle checkpoints, access PyTorch Hub, run image or video inference, use a camera, use CUDA for model execution, or write output files. They only validate the local CLI layer and print the registered model metadata.
+
+At this stage, the runtime registry lists the four model names that are currently constructible from `gazelle/model.py`:
+
+- `gazelle_dinov2_vitb14`
+- `gazelle_dinov2_vitl14`
+- `gazelle_dinov2_vitb14_inout`
+- `gazelle_dinov2_vitl14_inout`
+
+`gazelle_dinov2_vitb14` uses the README checkpoint file `gazelle_dinov2_vitb14.pt` by default. The older `hubconf.py` filename `gazelle_dinov2_vitb14_hub.pt` was checked during runtime development and found to be strict-load compatible and byte-identical to the README checkpoint.
+
+### Resource Preparation
+
+Use `--prepare-only` to prepare local model resources without running image or video inference:
+
+```powershell
+python main.py --prepare-only --model gazelle_dinov2_vitb14_inout
+```
+
+This command may download the Gazelle checkpoint and may construct the DINOv2 backbone through PyTorch Hub. Constructing DINOv2 can download DINOv2 weights if they are not already cached. It does not process images, process videos, open a camera, render output, or write JSON/JSONL predictions.
+
+On success, the command prints the resolved checkpoint path, `checkpoint_source`, cache root, Torch Hub cache directory, and strict-load validation details for registered checkpoint candidates. `checkpoint_source` is `local` when `--checkpoint` is used, or the registered candidate source when the runtime prepares a downloaded checkpoint.
+
+Cache root priority:
+
+1. `--cache-dir`
+2. `GAZELLE_CACHE_DIR`
+3. `models`
+
+The runtime uses this directory layout:
+
+```text
+models/
+├── checkpoints/
+└── torch_hub/
+```
+
+Use a local checkpoint path to skip the registered checkpoint download:
+
+```powershell
+python main.py `
+  --prepare-only `
+  --model gazelle_dinov2_vitb14_inout `
+  --checkpoint C:\path\to\gazelle_dinov2_vitb14_inout.pt
+```
+
+Use `--force-download` to refresh the cached registered checkpoint for the selected model:
+
+```powershell
+python main.py `
+  --prepare-only `
+  --model gazelle_dinov2_vitb14_inout `
+  --cache-dir models `
+  --force-download
+```
+
+For safety, forced downloads are written to a temporary `.downloads` directory under the checkpoint cache first. The old cached checkpoint is replaced only after the new file is downloaded and found on disk. If the download fails, the existing cached checkpoint is preserved.
+
+Checkpoint validation is strict in the runtime path: empty state dicts, missing keys, unexpected keys, shape mismatches, non-tensor values, and incompatible checkpoint structures stop preparation with an error.
+
+### Single-Image Inference
+
+The runtime can run Gazelle on one image and write structured outputs:
+
+```powershell
+python main.py `
+  --input samples\frame.jpg `
+  --output-dir outputs `
+  --head-source none `
+  --model gazelle_dinov2_vitb14_inout
+```
+
+This command constructs the Gazelle model and DINOv2 backbone. If the selected Gazelle checkpoint or DINOv2 weights are not already cached, it may download them. It writes a per-image output directory such as `outputs/frame_gazelle/` containing `predictions.json` and `run_config.json`. The current image pipeline supports single images only; it does not process video, open a camera, or write video JSONL.
+
+Head input sources:
+
+- `--head-source none` creates one single-person fallback head with `bbox=None`.
+- `--head-source static` uses one or more CLI bboxes:
+
+```powershell
+python main.py `
+  --input samples\frame.jpg `
+  --output-dir outputs `
+  --head-source static `
+  --bbox 0.10 0.12 0.22 0.30 `
+  --bbox-format normalized
+```
+
+`--bbox` can be repeated for multiple people. Use `--bbox-format normalized` for `[0, 1]` coordinates or `--bbox-format pixel` for image pixel coordinates. Optional `--person-id` values can be repeated to match the number of `--bbox` entries; otherwise person ids default to `0, 1, 2, ...`.
+
+- `--head-source json` loads image head data from JSON:
+
+```powershell
+python main.py `
+  --input samples\frame.jpg `
+  --output-dir outputs `
+  --head-source json `
+  --head-data samples\frame_heads.json
+```
+
+For single-image inference, JSON head data is read from `frame_index=0`. The JSON format is the same internal head record format used by the runtime head providers, with `bbox_format` set to `normalized` or `pixel` and `heads` containing `person_id`, `bbox`, and optional `confidence`.
+
+Use `--save-heatmaps` to save raw per-person heatmap tensors:
+
+```powershell
+python main.py `
+  --input samples\frame.jpg `
+  --output-dir outputs `
+  --head-source none `
+  --save-heatmaps
+```
+
+Raw heatmaps are saved under `heatmaps/` in the per-image output directory and referenced from `predictions.json`. Heatmaps are not embedded directly in JSON, and `heatmap_peak_value` should not be treated as a calibrated probability.
+
+Use `--save-rendered` to save a visual overlay image:
+
+```powershell
+python main.py `
+  --input samples\frame.jpg `
+  --output-dir outputs `
+  --head-source static `
+  --bbox 0.10 0.12 0.22 0.30 `
+  --bbox-format normalized `
+  --save-rendered
+```
+
+By default, image inference writes `predictions.json` and `run_config.json`; rendered output is written only when `--save-rendered` is passed. The default rendered file is `rendered.png`. Use `--rendered-name` to choose a `.png`, `.jpg`, or `.jpeg` file name, and `--heatmap-alpha` to control heatmap transparency. The rendered overlay can include the heatmap, head bbox, gaze peak, person id, and optional `inout_score`; pass `--no-head-box`, `--no-gaze-peak`, or `--no-labels` to disable those drawing components. Rendering does not change `predictions.json`, and `heatmap_peak_value` is not a calibrated probability. The renderer is currently for single images only; video overlay/recomposition is not implemented yet.
+
+### Programmatic Single-Frame Predictor
+
+`GazellePredictor` provides a programmatic single-frame interface for already prepared checkpoints:
+
+```python
+from PIL import Image
+
+from gazelle.runtime.contracts import HeadObservation
+from gazelle.runtime.predictor import GazellePredictor
+
+predictor = GazellePredictor.from_checkpoint(
+    model_name="gazelle_dinov2_vitb14_inout",
+    checkpoint_path="models/checkpoints/gazelle_dinov2_vitb14_inout.pt",
+    cache_dir="models",
+    device="auto",
+)
+
+frame = Image.open("path/to/frame.png").convert("RGB")
+predictions = predictor.predict_frame(
+    frame,
+    [
+        HeadObservation(person_id=1, bbox=(0.10, 0.12, 0.22, 0.30)),
+        HeadObservation(person_id=2, bbox=(0.45, 0.10, 0.58, 0.31)),
+    ],
+)
+```
+
+Constructing the predictor loads the Gazelle checkpoint and constructs DINOv2 through PyTorch Hub. Pass the same `cache_dir` used for `--prepare-only` so DINOv2 uses the prepared Torch Hub cache; if DINOv2 is not cached there, construction may access the network. `predict_frame(...)` accepts one in-memory RGB frame plus an ordered list of `HeadObservation` values and returns `GazePrediction` values in the same person order. Each prediction contains `person_id`, the clipped `bbox`, the `[64, 64]` heatmap tensor on CPU, normalized `gaze_peak`, `heatmap_peak_value`, and optional `inout_score`.
+
+Runtime head behavior is intentionally strict:
+
+- `heads=[]` returns an empty prediction list without calling the Gazelle model.
+- A single `HeadObservation(..., bbox=None)` uses Gazelle's no-bbox fallback mode.
+- Multi-person inference requires a valid bbox for every head.
+- Bboxes are validated as finite normalized `(xmin, ymin, xmax, ymax)` values, clipped to `[0, 1]`, and rejected if clipping leaves an empty box.
+
+The programmatic predictor API remains available for direct in-memory use. The CLI image pipeline above is the first user-facing wrapper around it; video CLI integration is still pending.
+
+The following runtime features are planned but not available yet in this milestone: automatic head detection, streaming video inference, video recomposition, video overlays, video JSONL output, ROI/process logic, and Multi-Pose integration.
 
 
 ## Usage
