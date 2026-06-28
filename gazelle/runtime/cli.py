@@ -55,7 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--force-download",
         action="store_true",
-        help="Delete the registered cached checkpoint and download it again.",
+        help="Refresh the registered cached checkpoint after a successful temporary download.",
     )
     return parser
 
@@ -79,8 +79,12 @@ def main(argv: Optional[Sequence[str]] = None, stdout: Optional[TextIO] = None) 
         from gazelle.runtime.resources import prepare_runtime_resources
 
         prepared = prepare_runtime_resources(config)
+        checkpoint_source = (
+            "local" if prepared.checkpoint_candidate is None else prepared.checkpoint_candidate.source
+        )
         stdout.write("Prepared Gazelle resources for {}\n".format(prepared.model_name))
         stdout.write("checkpoint: {}\n".format(prepared.checkpoint_path))
+        stdout.write("checkpoint_source: {}\n".format(checkpoint_source))
         stdout.write("cache_dir: {}\n".format(prepared.cache_paths.root_dir))
         stdout.write("torch_hub_dir: {}\n".format(prepared.cache_paths.torch_hub_dir))
         for result in prepared.candidate_results:

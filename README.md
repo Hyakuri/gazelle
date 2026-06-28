@@ -97,6 +97,8 @@ python main.py --prepare-only --model gazelle_dinov2_vitb14_inout
 
 This command may download the Gazelle checkpoint and may construct the DINOv2 backbone through PyTorch Hub. Constructing DINOv2 can download DINOv2 weights if they are not already cached. It does not process images, process videos, open a camera, render output, or write JSON/JSONL predictions.
 
+On success, the command prints the resolved checkpoint path, `checkpoint_source`, cache root, Torch Hub cache directory, and strict-load validation details for registered checkpoint candidates. `checkpoint_source` is `local` when `--checkpoint` is used, or the registered candidate source when the runtime prepares a downloaded checkpoint.
+
 Cache root priority:
 
 1. `--cache-dir`
@@ -120,7 +122,7 @@ python main.py `
   --checkpoint C:\path\to\gazelle_dinov2_vitb14_inout.pt
 ```
 
-Use `--force-download` to delete the cached registered checkpoint for the selected model and download it again:
+Use `--force-download` to refresh the cached registered checkpoint for the selected model:
 
 ```powershell
 python main.py `
@@ -129,6 +131,8 @@ python main.py `
   --cache-dir models `
   --force-download
 ```
+
+For safety, forced downloads are written to a temporary `.downloads` directory under the checkpoint cache first. The old cached checkpoint is replaced only after the new file is downloaded and found on disk. If the download fails, the existing cached checkpoint is preserved.
 
 Checkpoint validation is strict in the runtime path: empty state dicts, missing keys, unexpected keys, shape mismatches, non-tensor values, and incompatible checkpoint structures stop preparation with an error.
 

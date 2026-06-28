@@ -50,6 +50,7 @@ class RuntimeCliTest(unittest.TestCase):
         prepared = SimpleNamespace(
             model_name="gazelle_dinov2_vitb14_inout",
             checkpoint_path="models/checkpoints/example.pt",
+            checkpoint_candidate=None,
             cache_paths=SimpleNamespace(root_dir="models", torch_hub_dir="models/torch_hub"),
             candidate_results=(),
         )
@@ -59,6 +60,7 @@ class RuntimeCliTest(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         mock_prepare.assert_called_once()
         self.assertIn("Prepared Gazelle resources", stdout.getvalue())
+        self.assertIn("checkpoint_source: local", stdout.getvalue())
 
     def test_invalid_model_uses_registry_error(self):
         stderr = io.StringIO()

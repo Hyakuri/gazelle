@@ -1,5 +1,6 @@
 import hashlib
 import os
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Dict, Mapping, Optional, Tuple
@@ -61,26 +62,56 @@ def ensure_checkpoint(
     checkpoint_path = paths.checkpoints_dir / candidate.filename
     if checkpoint_path.exists() and not force_download:
         return checkpoint_path
-    if checkpoint_path.exists() and force_download:
-        checkpoint_path.unlink()
 
     downloader = torch.hub.load_state_dict_from_url if downloader is None else downloader
+    temp_dir = paths.checkpoints_dir / ".downloads" / candidate.filename
+    temp_checkpoint_path = temp_dir / candidate.filename
     try:
-        downloader(
-            candidate.url,
-            model_dir=str(paths.checkpoints_dir),
-            file_name=candidate.filename,
-            progress=True,
-            weights_only=True,
-        )
-    except Exception as exc:
-        raise RuntimeError(
-            "Failed to download checkpoint from {} to {}: {}".format(
+        if temp_dir.exists():
+            shutil.rmtree(temp_dir)
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            downloader(
                 candidate.url,
-                checkpoint_path,
-                exc,
+                model_dir=str(temp_dir),
+                file_name=candidate.filename,
+                progress=True,
+                weights_only=True,
             )
-        )
+        except Exception as exc:
+            if checkpoint_path.exists():
+                raise RuntimeError(
+                    "Failed to download checkpoint from {} to {}; existing cached checkpoint "
+                    "was preserved at {}: {}".format(
+                        candidate.url,
+                        checkpoint_path,
+                        checkpoint_path,
+                        exc,
+                    )
+                )
+            raise RuntimeError(
+                "Failed to download checkpoint from {} to {}: {}".format(
+                    candidate.url,
+                    checkpoint_path,
+                    exc,
+                )
+            )
+        if not temp_checkpoint_path.exists():
+            raise RuntimeError(
+                "Checkpoint download completed but file was not found: {}".format(
+                    temp_checkpoint_path
+                )
+            )
+        temp_checkpoint_path.replace(checkpoint_path)
+        if not checkpoint_path.exists():
+            raise RuntimeError(
+                "Checkpoint download completed but file was not found: {}".format(
+                    checkpoint_path
+                )
+            )
+    finally:
+        if temp_dir.exists():
+            shutil.rmtree(temp_dir)
     return checkpoint_path
 
 

@@ -137,6 +137,8 @@ python main.py --prepare-only --model gazelle_dinov2_vitb14_inout
 
 该命令可能下载 Gazelle checkpoint，并且会通过 PyTorch Hub 构建 DINOv2 backbone。如果本地没有 DINOv2 缓存，构建 DINOv2 时可能下载 DINOv2 权重。它不会处理图片、处理视频、打开摄像头、渲染输出，也不会写入 JSON/JSONL 预测结果。
 
+成功时，该命令会输出解析后的 checkpoint 路径、`checkpoint_source`、缓存根目录、Torch Hub 缓存目录，以及注册 checkpoint 候选的 strict-load 校验信息。使用 `--checkpoint` 时，`checkpoint_source` 为 `local`；使用 runtime 注册 checkpoint 时，`checkpoint_source` 为对应候选来源。
+
 缓存根目录优先级：
 
 1. `--cache-dir`
@@ -160,7 +162,7 @@ python main.py `
   --checkpoint C:\path\to\gazelle_dinov2_vitb14_inout.pt
 ```
 
-如果希望删除已缓存的注册 checkpoint 并重新下载，可以使用 `--force-download`：
+如果希望刷新已缓存的注册 checkpoint，可以使用 `--force-download`：
 
 ```powershell
 python main.py `
@@ -169,6 +171,8 @@ python main.py `
   --cache-dir models `
   --force-download
 ```
+
+为了避免网络失败导致旧缓存丢失，强制下载会先写入 checkpoint 缓存下的临时 `.downloads` 目录。只有新文件下载完成且确认存在后，runtime 才会替换旧 checkpoint。如果下载失败，已有 checkpoint 会被保留。
 
 runtime 路径中的 checkpoint 校验是严格的：空 state dict、缺失 key、额外 key、tensor shape 不一致、非 tensor 值、checkpoint 顶层结构不兼容都会让准备流程报错停止。
 

@@ -88,7 +88,8 @@ class ResourcesTest(unittest.TestCase):
 
             checkpoint = ensure_checkpoint(candidate, paths, downloader=downloader)
             self.assertTrue(checkpoint.exists())
-            self.assertEqual(calls, [(candidate.url, str(paths.checkpoints_dir), candidate.filename, True, True)])
+            temp_dir = paths.checkpoints_dir / ".downloads" / candidate.filename
+            self.assertEqual(calls, [(candidate.url, str(temp_dir), candidate.filename, True, True)])
 
     def test_force_download_replaces_cached_checkpoint(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -103,6 +104,34 @@ class ResourcesTest(unittest.TestCase):
 
             ensure_checkpoint(candidate, paths, force_download=True, downloader=downloader)
             self.assertEqual(checkpoint.read_bytes(), b"new")
+
+    def test_force_download_failure_preserves_cached_checkpoint(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            paths = resolve_cache_paths(tmpdir)
+            paths.checkpoints_dir.mkdir(parents=True)
+            candidate = CheckpointCandidate("test", "model.pt", "https://example.invalid/model.pt")
+            checkpoint = paths.checkpoints_dir / candidate.filename
+            checkpoint.write_bytes(b"old")
+
+            def downloader(*args, **kwargs):
+                raise RuntimeError("network unavailable")
+
+            with self.assertRaisesRegex(RuntimeError, "existing cached checkpoint was preserved"):
+                ensure_checkpoint(candidate, paths, force_download=True, downloader=downloader)
+            self.assertTrue(checkpoint.exists())
+            self.assertEqual(checkpoint.read_bytes(), b"old")
+
+    def test_download_without_created_file_raises(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            paths = resolve_cache_paths(tmpdir)
+            candidate = CheckpointCandidate("test", "model.pt", "https://example.invalid/model.pt")
+
+            def downloader(*args, **kwargs):
+                return None
+
+            with self.assertRaisesRegex(RuntimeError, "Checkpoint download completed but file was not found"):
+                ensure_checkpoint(candidate, paths, downloader=downloader)
+            self.assertFalse((paths.checkpoints_dir / candidate.filename).exists())
 
     def test_load_checkpoint_state_dict_unwraps_top_level_state_dict(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -169,6 +198,32 @@ class ResourcesTest(unittest.TestCase):
                 prepared = prepare_runtime_resources(config)
             self.assertEqual(prepared.checkpoint_path, checkpoint)
             self.assertIsNone(prepared.checkpoint_candidate)
+
+    def test_prepare_runtime_resources_downloads_registered_checkpoint_with_mocked_model(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fake_module = types.ModuleType("gazelle.model")
+            fake_module.get_gazelle_model = lambda name: (FakeModel(), object())
+            config = SimpleNamespace(
+                model="gazelle_dinov2_vitb14_inout",
+                cache_dir=tmpdir,
+                checkpoint=None,
+                force_download=False,
+            )
+
+            def downloader(url, model_dir, file_name, progress, weights_only):
+                torch.save(valid_state_dict(), Path(model_dir, file_name))
+
+            with patch.dict(sys.modules, {"gazelle.model": fake_module}):
+                with patch("gazelle.runtime.resources.torch.hub.load_state_dict_from_url", side_effect=downloader):
+                    prepared = prepare_runtime_resources(config)
+
+            self.assertIsNotNone(prepared.checkpoint_candidate)
+            self.assertEqual(len(prepared.candidate_results), 1)
+            self.assertEqual(
+                prepared.checkpoint_path,
+                Path(tmpdir) / "checkpoints" / "gazelle_dinov2_vitb14_inout.pt",
+            )
+            self.assertTrue(prepared.checkpoint_path.exists())
 
     def test_resolve_checkpoint_candidate_selects_single_success(self):
         readme = CheckpointCandidate("README", "readme.pt", "https://example.invalid/readme.pt")
