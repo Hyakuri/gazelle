@@ -1,5 +1,6 @@
 import hashlib
 import math
+from dataclasses import dataclass
 from numbers import Real
 from pathlib import Path
 from typing import Tuple
@@ -12,6 +13,14 @@ from gazelle.runtime.geometry import normalized_bbox_to_pixel
 
 
 SUPPORTED_RENDERED_SUFFIXES = (".png", ".jpg", ".jpeg")
+
+
+@dataclass(frozen=True)
+class RenderOptions:
+    heatmap_alpha: float = 0.45
+    draw_head_box: bool = True
+    draw_gaze_peak: bool = True
+    draw_labels: bool = True
 
 
 def _validate_alpha(alpha: float) -> float:
@@ -108,6 +117,7 @@ def draw_prediction(
     draw_head_box: bool,
     draw_gaze_peak: bool,
     draw_labels: bool,
+    font=None,
 ) -> None:
     x_anchor = 4
     y_anchor = 4
@@ -140,7 +150,7 @@ def draw_prediction(
         label = "id={}".format(prediction.person_id)
         if prediction.inout_score is not None:
             label = "{} inout={:.2f}".format(label, float(prediction.inout_score))
-        font = ImageFont.load_default()
+        font = font if font is not None else ImageFont.load_default()
         try:
             left, top, right, bottom = draw_context.textbbox((x_anchor, y_anchor), label, font=font)
         except AttributeError:
@@ -148,6 +158,42 @@ def draw_prediction(
             left, top, right, bottom = x_anchor, y_anchor, x_anchor + width, y_anchor + height
         draw_context.rectangle((left, top, right + 2, bottom + 2), fill=(0, 0, 0))
         draw_context.text((x_anchor + 1, y_anchor + 1), label, fill=color, font=font)
+
+
+class PredictionRenderer:
+    def __init__(self, options: RenderOptions = None):
+        self.options = options or RenderOptions()
+        self.font = ImageFont.load_default()
+
+    def render(self, image, predictions) -> Image.Image:
+        rendered = _image_to_rgb_pil(image).copy()
+        image_width, image_height = rendered.size
+        predictions = tuple(predictions)
+
+        for prediction in predictions:
+            color = stable_color_for_person(prediction.person_id)
+            if prediction.heatmap is not None:
+                overlay = heatmap_to_overlay(
+                    prediction.heatmap,
+                    image_width=image_width,
+                    image_height=image_height,
+                    color=color,
+                    alpha=self.options.heatmap_alpha,
+                )
+                rendered = Image.alpha_composite(rendered.convert("RGBA"), overlay).convert("RGB")
+            draw = ImageDraw.Draw(rendered)
+            draw_prediction(
+                draw,
+                prediction,
+                image_width=image_width,
+                image_height=image_height,
+                color=color,
+                draw_head_box=self.options.draw_head_box,
+                draw_gaze_peak=self.options.draw_gaze_peak,
+                draw_labels=self.options.draw_labels,
+                font=self.font,
+            )
+        return rendered
 
 
 def render_predictions(
@@ -159,33 +205,14 @@ def render_predictions(
     draw_gaze_peak: bool = True,
     draw_labels: bool = True,
 ) -> Image.Image:
-    rendered = _image_to_rgb_pil(image).copy()
-    image_width, image_height = rendered.size
-    predictions = tuple(predictions)
-
-    for prediction in predictions:
-        color = stable_color_for_person(prediction.person_id)
-        if prediction.heatmap is not None:
-            overlay = heatmap_to_overlay(
-                prediction.heatmap,
-                image_width=image_width,
-                image_height=image_height,
-                color=color,
-                alpha=heatmap_alpha,
-            )
-            rendered = Image.alpha_composite(rendered.convert("RGBA"), overlay).convert("RGB")
-        draw = ImageDraw.Draw(rendered)
-        draw_prediction(
-            draw,
-            prediction,
-            image_width=image_width,
-            image_height=image_height,
-            color=color,
+    return PredictionRenderer(
+        RenderOptions(
+            heatmap_alpha=heatmap_alpha,
             draw_head_box=draw_head_box,
             draw_gaze_peak=draw_gaze_peak,
             draw_labels=draw_labels,
         )
-    return rendered
+    ).render(image, predictions)
 
 
 def save_rendered_image(path, image) -> None:

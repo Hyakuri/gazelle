@@ -150,6 +150,8 @@ python main.py `
 
 This command constructs the Gazelle model and DINOv2 backbone. If the selected Gazelle checkpoint or DINOv2 weights are not already cached, it may download them. It writes a per-image output directory such as `outputs/frame_gazelle/` containing `predictions.json` and `run_config.json`. The current image pipeline supports single images only; it does not process video, open a camera, or write video JSONL.
 
+When `--overwrite` is used, the per-image output directory is cleaned before writing new results, so stale heatmaps or rendered images from earlier runs are removed.
+
 Head input sources:
 
 - `--head-source none` creates one single-person fallback head with `bbox=None`.

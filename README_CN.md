@@ -190,6 +190,8 @@ python main.py `
 
 该命令会构建 Gazelle 模型和 DINOv2 backbone。如果所选 Gazelle checkpoint 或 DINOv2 权重尚未缓存，运行时可能访问网络并下载它们。命令会创建类似 `outputs/frame_gazelle/` 的单图输出目录，并写入 `predictions.json` 和 `run_config.json`。当前 image pipeline 只支持单张图片；不支持视频处理、摄像头或视频 JSONL 输出。
 
+使用 `--overwrite` 时，runtime 会在写入新结果前清理对应图片的输出目录，因此旧的 heatmap 或 rendered image 不会残留。
+
 head 输入来源：
 
 - `--head-source none` 会创建一个单人 fallback head，bbox 为 `None`。

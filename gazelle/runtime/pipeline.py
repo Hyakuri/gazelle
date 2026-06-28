@@ -1,5 +1,6 @@
 from dataclasses import asdict, dataclass
 from pathlib import Path
+import shutil
 from typing import Callable, List, Optional, Tuple
 
 from gazelle.runtime.contracts import GazePrediction, HeadObservation
@@ -14,7 +15,7 @@ from gazelle.runtime.outputs import (
     write_predictions_json,
     write_run_config_json,
 )
-from gazelle.runtime.renderer import render_predictions, save_rendered_image
+from gazelle.runtime.renderer import PredictionRenderer, RenderOptions, save_rendered_image
 
 
 @dataclass(frozen=True)
@@ -46,7 +47,39 @@ def build_head_provider_from_config(config):
     raise ValueError("Unknown head source: {}".format(config.head_source))
 
 
-def create_output_dir(input_path, output_dir, overwrite: bool = False) -> Path:
+def _is_dangerous_output_path(output_path: Path) -> bool:
+    return str(output_path) in ("", ".", output_path.anchor)
+
+
+def _safe_clear_output_dir(output_path: Path, output_root: Path) -> None:
+    if _is_dangerous_output_path(output_path):
+        raise ValueError("Refusing to clean unsafe output directory: {}".format(output_path))
+    if not output_path.name.endswith("_gazelle"):
+        raise ValueError("Refusing to clean non-Gazelle output directory: {}".format(output_path))
+
+    output_root_resolved = output_root.resolve(strict=False)
+    output_path_resolved = output_path.resolve(strict=False)
+    if output_path_resolved == output_root_resolved:
+        raise ValueError("Refusing to clean output root directly: {}".format(output_path))
+    try:
+        output_path_resolved.relative_to(output_root_resolved)
+    except ValueError as exc:
+        raise ValueError(
+            "Refusing to clean output directory outside output root: {}".format(output_path)
+        ) from exc
+
+    if output_path.exists() and not output_path.is_dir():
+        raise ValueError("Refusing to overwrite non-directory output path: {}".format(output_path))
+    if output_path.exists():
+        shutil.rmtree(output_path)
+
+
+def create_output_dir(
+    input_path,
+    output_dir,
+    overwrite: bool = False,
+    clean_on_overwrite: bool = True,
+) -> Path:
     input_path = Path(input_path)
     output_root = Path(output_dir)
     output_path = output_root / "{}_gazelle".format(input_path.stem)
@@ -54,7 +87,9 @@ def create_output_dir(input_path, output_dir, overwrite: bool = False) -> Path:
         raise FileExistsError(
             "Output directory already exists: {}. Use --overwrite to reuse it.".format(output_path)
         )
-    output_path.mkdir(parents=True, exist_ok=overwrite)
+    if output_path.exists() and overwrite and clean_on_overwrite:
+        _safe_clear_output_dir(output_path, output_root)
+    output_path.mkdir(parents=True, exist_ok=True)
     return output_path
 
 
@@ -113,14 +148,15 @@ def run_image_pipeline(config, predictor_factory: Optional[Callable[[object], ob
 
     rendered_path = None
     if config.save_rendered:
-        rendered = render_predictions(
-            image,
-            predictions,
-            heatmap_alpha=config.heatmap_alpha,
-            draw_head_box=config.draw_head_box,
-            draw_gaze_peak=config.draw_gaze_peak,
-            draw_labels=config.draw_labels,
+        renderer = PredictionRenderer(
+            RenderOptions(
+                heatmap_alpha=config.heatmap_alpha,
+                draw_head_box=config.draw_head_box,
+                draw_gaze_peak=config.draw_gaze_peak,
+                draw_labels=config.draw_labels,
+            )
         )
+        rendered = renderer.render(image, predictions)
         rendered_path = output_dir / config.rendered_name
         save_rendered_image(rendered_path, rendered)
 

@@ -10,6 +10,7 @@ from gazelle.runtime.config import RuntimeConfig
 from gazelle.runtime.contracts import GazePrediction
 from gazelle.runtime.heads import JsonHeadProvider, NoneHeadProvider, StaticHeadProvider
 from gazelle.runtime.pipeline import (
+    _safe_clear_output_dir,
     build_head_provider_from_config,
     create_output_dir,
     run_image_pipeline,
@@ -123,6 +124,35 @@ class ImagePipelineTest(unittest.TestCase):
             result = create_output_dir("frame.png", output_dir, overwrite=True)
 
             self.assertEqual(result, existing)
+
+    def test_create_output_dir_overwrite_cleans_stale_files(self):
+        with TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir) / "outputs"
+            existing = output_dir / "frame_gazelle"
+            (existing / "heatmaps").mkdir(parents=True)
+            (existing / "predictions.json").write_text("old", encoding="utf-8")
+            (existing / "run_config.json").write_text("old", encoding="utf-8")
+            (existing / "rendered.png").write_text("old", encoding="utf-8")
+            (existing / "heatmaps" / "person_0.pt").write_text("old", encoding="utf-8")
+
+            result = create_output_dir("frame.png", output_dir, overwrite=True)
+
+            self.assertEqual(result, existing)
+            self.assertTrue(existing.exists())
+            self.assertEqual(tuple(existing.iterdir()), ())
+
+    def test_create_output_dir_refuses_to_clean_non_gazelle_directory(self):
+        with TemporaryDirectory() as tmpdir:
+            output_root = Path(tmpdir) / "outputs"
+            unsafe = output_root / "manual"
+            unsafe.mkdir(parents=True)
+            marker = unsafe / "keep.txt"
+            marker.write_text("keep", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "non-Gazelle"):
+                _safe_clear_output_dir(unsafe, output_root)
+
+            self.assertTrue(marker.exists())
 
     def test_run_image_pipeline_none_head_source(self):
         with TemporaryDirectory() as tmpdir:
@@ -281,6 +311,30 @@ class ImagePipelineTest(unittest.TestCase):
             result = run_image_pipeline(config, predictor_factory=lambda config: FakePredictor())
 
             self.assertIsNone(result.rendered_path)
+            self.assertFalse((result.output_dir / "rendered.png").exists())
+
+    def test_run_image_pipeline_overwrite_removes_stale_heatmaps_and_rendered(self):
+        with TemporaryDirectory() as tmpdir:
+            image_path = Path(tmpdir) / "frame.png"
+            write_test_image(image_path)
+            output_dir = Path(tmpdir) / "outputs"
+            existing = output_dir / "frame_gazelle"
+            (existing / "heatmaps").mkdir(parents=True)
+            (existing / "heatmaps" / "person_9.pt").write_text("old", encoding="utf-8")
+            (existing / "rendered.png").write_text("old", encoding="utf-8")
+            config = make_config(
+                input_path=str(image_path),
+                output_dir=str(output_dir),
+                overwrite=True,
+                save_heatmaps=False,
+                save_rendered=False,
+            )
+
+            result = run_image_pipeline(config, predictor_factory=lambda config: FakePredictor())
+
+            self.assertTrue(result.predictions_path.exists())
+            self.assertTrue(result.run_config_path.exists())
+            self.assertFalse((result.output_dir / "heatmaps").exists())
             self.assertFalse((result.output_dir / "rendered.png").exists())
 
     def test_run_image_pipeline_rejects_invalid_rendered_name(self):
