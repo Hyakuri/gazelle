@@ -1,5 +1,8 @@
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional, Tuple, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import torch
 
 
 BBox = Tuple[float, float, float, float]
@@ -20,6 +23,7 @@ class GazePrediction:
 
     person_id: int
     bbox: Optional[BBox]
+    heatmap: Optional["torch.Tensor"] = None
     gaze_peak: Optional[Tuple[float, float]] = None
     heatmap_peak_value: Optional[float] = None
     inout_score: Optional[float] = None

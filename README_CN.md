@@ -176,7 +176,43 @@ python main.py `
 
 runtime 路径中的 checkpoint 校验是严格的：空 state dict、缺失 key、额外 key、tensor shape 不一致、非 tensor 值、checkpoint 顶层结构不兼容都会让准备流程报错停止。
 
-以下 runtime 功能在当前里程碑尚未完成：图片推理、视频流式推理、`none/static/json` head provider、结果渲染、JSON/JSONL 输出，以及可选 raw heatmap 导出。
+### 编程式单帧 Predictor
+
+`GazellePredictor` 为已经准备好的 checkpoint 提供编程式单帧接口：
+
+```python
+from PIL import Image
+
+from gazelle.runtime.contracts import HeadObservation
+from gazelle.runtime.predictor import GazellePredictor
+
+predictor = GazellePredictor.from_checkpoint(
+    model_name="gazelle_dinov2_vitb14_inout",
+    checkpoint_path="models/checkpoints/gazelle_dinov2_vitb14_inout.pt",
+    cache_dir="models",
+    device="auto",
+)
+
+frame = Image.open("path/to/frame.png").convert("RGB")
+predictions = predictor.predict_frame(
+    frame,
+    [
+        HeadObservation(person_id=1, bbox=(0.10, 0.12, 0.22, 0.30)),
+        HeadObservation(person_id=2, bbox=(0.45, 0.10, 0.58, 0.31)),
+    ],
+)
+```
+
+构建 predictor 会加载 Gazelle checkpoint，并通过 PyTorch Hub 构建 DINOv2。请传入与 `--prepare-only` 相同的 `cache_dir`，让 DINOv2 使用已经准备好的 Torch Hub cache；如果该 cache 中没有 DINOv2，这一步可能访问网络。`predict_frame(...)` 接收一帧内存中的 RGB frame，以及按顺序排列的 `HeadObservation` 列表，并按相同 person 顺序返回 `GazePrediction`。每个 prediction 包含 `person_id`、裁剪后的 `bbox`、CPU 上的 `[64, 64]` heatmap tensor、归一化 `gaze_peak`、`heatmap_peak_value`，以及可选 `inout_score`。
+
+runtime 对 head 的处理规则是严格的：
+
+- `heads=[]` 会直接返回空 prediction list，不调用 Gazelle 模型。
+- 单个 `HeadObservation(..., bbox=None)` 会使用 Gazelle 的无 bbox fallback 模式。
+- 多人推理必须为每个 head 提供有效 bbox。
+- bbox 会按有限数值的归一化 `(xmin, ymin, xmax, ymax)` 校验，裁剪到 `[0, 1]`，并拒绝裁剪后为空的 bbox。
+
+以下 runtime 功能在当前里程碑尚未完成：自动 head detection、`none/static/json` head provider、图片文件 pipeline、视频流式推理、视频重合成、结果渲染、JSON/JSONL 输出、ROI / 工序逻辑，以及可选 raw heatmap 导出。
 
 ## 推理流程
 

@@ -136,7 +136,43 @@ For safety, forced downloads are written to a temporary `.downloads` directory u
 
 Checkpoint validation is strict in the runtime path: empty state dicts, missing keys, unexpected keys, shape mismatches, non-tensor values, and incompatible checkpoint structures stop preparation with an error.
 
-The following runtime features are planned but not available yet in this milestone: image inference, streaming video inference, `none/static/json` head providers, rendering, JSON/JSONL output, and optional raw heatmap export.
+### Programmatic Single-Frame Predictor
+
+`GazellePredictor` provides a programmatic single-frame interface for already prepared checkpoints:
+
+```python
+from PIL import Image
+
+from gazelle.runtime.contracts import HeadObservation
+from gazelle.runtime.predictor import GazellePredictor
+
+predictor = GazellePredictor.from_checkpoint(
+    model_name="gazelle_dinov2_vitb14_inout",
+    checkpoint_path="models/checkpoints/gazelle_dinov2_vitb14_inout.pt",
+    cache_dir="models",
+    device="auto",
+)
+
+frame = Image.open("path/to/frame.png").convert("RGB")
+predictions = predictor.predict_frame(
+    frame,
+    [
+        HeadObservation(person_id=1, bbox=(0.10, 0.12, 0.22, 0.30)),
+        HeadObservation(person_id=2, bbox=(0.45, 0.10, 0.58, 0.31)),
+    ],
+)
+```
+
+Constructing the predictor loads the Gazelle checkpoint and constructs DINOv2 through PyTorch Hub. Pass the same `cache_dir` used for `--prepare-only` so DINOv2 uses the prepared Torch Hub cache; if DINOv2 is not cached there, construction may access the network. `predict_frame(...)` accepts one in-memory RGB frame plus an ordered list of `HeadObservation` values and returns `GazePrediction` values in the same person order. Each prediction contains `person_id`, the clipped `bbox`, the `[64, 64]` heatmap tensor on CPU, normalized `gaze_peak`, `heatmap_peak_value`, and optional `inout_score`.
+
+Runtime head behavior is intentionally strict:
+
+- `heads=[]` returns an empty prediction list without calling the Gazelle model.
+- A single `HeadObservation(..., bbox=None)` uses Gazelle's no-bbox fallback mode.
+- Multi-person inference requires a valid bbox for every head.
+- Bboxes are validated as finite normalized `(xmin, ymin, xmax, ymax)` values, clipped to `[0, 1]`, and rejected if clipping leaves an empty box.
+
+The following runtime features are planned but not available yet in this milestone: automatic head detection, `none/static/json` head providers, image file pipeline, streaming video inference, video recomposition, rendering, JSON/JSONL output, ROI/process logic, and optional raw heatmap export.
 
 
 ## Usage
