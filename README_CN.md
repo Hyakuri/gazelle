@@ -110,7 +110,7 @@ model, transform = torch.hub.load("fkryan/gazelle", "gazelle_dinov2_vitl14_inout
 python main.py --help
 ```
 
-当前 runtime 已提供安全的 CLI / 模型注册表检查，以及资源准备：
+当前 runtime 已提供安全的 CLI / 模型注册表检查、资源准备，以及单张图片推理：
 
 ```powershell
 python main.py --list-models
@@ -176,6 +176,60 @@ python main.py `
 
 runtime 路径中的 checkpoint 校验是严格的：空 state dict、缺失 key、额外 key、tensor shape 不一致、非 tensor 值、checkpoint 顶层结构不兼容都会让准备流程报错停止。
 
+### 单张图片推理
+
+runtime 现在可以对一张图片执行 Gazelle 推理，并写出结构化结果：
+
+```powershell
+python main.py `
+  --input samples\frame.jpg `
+  --output-dir outputs `
+  --head-source none `
+  --model gazelle_dinov2_vitb14_inout
+```
+
+该命令会构建 Gazelle 模型和 DINOv2 backbone。如果所选 Gazelle checkpoint 或 DINOv2 权重尚未缓存，运行时可能访问网络并下载它们。命令会创建类似 `outputs/frame_gazelle/` 的单图输出目录，并写入 `predictions.json` 和 `run_config.json`。当前 image pipeline 只支持单张图片；不支持视频处理、摄像头、可视化 overlay、视频 JSONL 输出。
+
+head 输入来源：
+
+- `--head-source none` 会创建一个单人 fallback head，bbox 为 `None`。
+- `--head-source static` 使用命令行传入的一个或多个 bbox：
+
+```powershell
+python main.py `
+  --input samples\frame.jpg `
+  --output-dir outputs `
+  --head-source static `
+  --bbox 0.10 0.12 0.22 0.30 `
+  --bbox-format normalized
+```
+
+`--bbox` 可以重复传入以支持多人。`--bbox-format normalized` 表示 `[0, 1]` 归一化坐标，`--bbox-format pixel` 表示图片像素坐标。`--person-id` 可以重复传入，并且数量必须与 `--bbox` 一致；不传时 person id 默认为 `0, 1, 2, ...`。
+
+- `--head-source json` 从 JSON 中读取单图 head 数据：
+
+```powershell
+python main.py `
+  --input samples\frame.jpg `
+  --output-dir outputs `
+  --head-source json `
+  --head-data samples\frame_heads.json
+```
+
+单图推理会读取 `frame_index=0` 的 head 数据。JSON 使用 runtime head provider 的内部 record 格式，`bbox_format` 可以是 `normalized` 或 `pixel`，`heads` 中包含 `person_id`、`bbox` 和可选 `confidence`。
+
+使用 `--save-heatmaps` 可以保存每个人的 raw heatmap tensor：
+
+```powershell
+python main.py `
+  --input samples\frame.jpg `
+  --output-dir outputs `
+  --head-source none `
+  --save-heatmaps
+```
+
+raw heatmap 会保存在单图输出目录的 `heatmaps/` 下，并在 `predictions.json` 中以路径引用。heatmap 不会直接写入 JSON，`heatmap_peak_value` 也不应被理解为校准后的概率。
+
 ### 编程式单帧 Predictor
 
 `GazellePredictor` 为已经准备好的 checkpoint 提供编程式单帧接口：
@@ -212,9 +266,9 @@ runtime 对 head 的处理规则是严格的：
 - 多人推理必须为每个 head 提供有效 bbox。
 - bbox 会按有限数值的归一化 `(xmin, ymin, xmax, ymax)` 校验，裁剪到 `[0, 1]`，并拒绝裁剪后为空的 bbox。
 
-内部 predictor API 已可用于编程式调用，但图片 / 视频 CLI 集成仍未完成。
+编程式 predictor API 仍然可以直接用于内存中的单帧调用。上面的 CLI image pipeline 是它的第一个用户可见封装；视频 CLI 集成仍未完成。
 
-以下 runtime 功能在当前里程碑尚未完成：自动 head detection、`none/static/json` head provider、图片文件 pipeline、视频流式推理、视频重合成、结果渲染、JSON/JSONL 输出、ROI / 工序逻辑，以及可选 raw heatmap 导出。
+以下 runtime 功能在当前里程碑尚未完成：自动 head detection、视频流式推理、视频重合成、可视化 overlay、视频 JSONL 输出、ROI / 工序逻辑，以及 Multi-Pose 集成。
 
 ## 推理流程
 

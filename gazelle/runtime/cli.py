@@ -35,7 +35,53 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--input",
         default=None,
-        help="Image or video input path. Full inference pipeline will be added in a later milestone.",
+        help="Single image input path for local Gazelle inference.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        default="outputs",
+        help="Output root directory for image inference. A per-image subdirectory is created inside it.",
+    )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Allow reuse of an existing per-image output directory.",
+    )
+    parser.add_argument(
+        "--head-source",
+        choices=("none", "static", "json"),
+        default="none",
+        help="Head input source for single-image inference.",
+    )
+    parser.add_argument(
+        "--bbox",
+        action="append",
+        nargs=4,
+        type=float,
+        metavar=("XMIN", "YMIN", "XMAX", "YMAX"),
+        help="Static head bbox. Can be repeated. Interpreted using --bbox-format.",
+    )
+    parser.add_argument(
+        "--bbox-format",
+        choices=("normalized", "pixel"),
+        default="normalized",
+        help="Coordinate format for --bbox values.",
+    )
+    parser.add_argument(
+        "--person-id",
+        action="append",
+        type=int,
+        help="Optional person id for each --bbox. Can be repeated and must match --bbox count.",
+    )
+    parser.add_argument(
+        "--head-data",
+        default=None,
+        help="JSON or JSONL head data file for --head-source json.",
+    )
+    parser.add_argument(
+        "--save-heatmaps",
+        action="store_true",
+        help="Save raw per-person heatmap tensors alongside predictions.json.",
     )
     parser.add_argument(
         "--device",
@@ -99,6 +145,15 @@ def main(argv: Optional[Sequence[str]] = None, stdout: Optional[TextIO] = None) 
             )
         return 0
 
+    if config.input_path:
+        from gazelle.runtime.pipeline import run_image_pipeline
+
+        result = run_image_pipeline(config)
+        stdout.write("Wrote Gazelle image inference outputs to {}\n".format(result.output_dir))
+        stdout.write("predictions: {}\n".format(result.predictions_path))
+        stdout.write("run_config: {}\n".format(result.run_config_path))
+        return 0
+
     parser = build_parser()
-    parser.error("no runtime action selected yet; use --list-models in this milestone")
+    parser.error("no runtime action selected; use --list-models, --prepare-only, or --input")
     return 2

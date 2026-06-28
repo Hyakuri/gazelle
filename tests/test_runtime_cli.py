@@ -46,6 +46,43 @@ class RuntimeCliTest(unittest.TestCase):
         self.assertIsNone(config.input_path)
         self.assertEqual(config.cache_dir, "models")
 
+    def test_parse_image_static_config(self):
+        config = parse_runtime_config(
+            [
+                "--input",
+                "image.jpg",
+                "--output-dir",
+                "outputs",
+                "--overwrite",
+                "--head-source",
+                "static",
+                "--bbox",
+                "0.1",
+                "0.2",
+                "0.3",
+                "0.4",
+                "--bbox",
+                "0.5",
+                "0.2",
+                "0.7",
+                "0.6",
+                "--bbox-format",
+                "normalized",
+                "--person-id",
+                "3",
+                "--person-id",
+                "4",
+                "--save-heatmaps",
+            ]
+        )
+        self.assertEqual(config.input_path, "image.jpg")
+        self.assertEqual(config.output_dir, "outputs")
+        self.assertTrue(config.overwrite)
+        self.assertEqual(config.head_source, "static")
+        self.assertEqual(config.bboxes, ((0.1, 0.2, 0.3, 0.4), (0.5, 0.2, 0.7, 0.6)))
+        self.assertEqual(config.person_ids, (3, 4))
+        self.assertTrue(config.save_heatmaps)
+
     def test_prepare_only_route_calls_resource_preparation(self):
         prepared = SimpleNamespace(
             model_name="gazelle_dinov2_vitb14_inout",
@@ -61,6 +98,61 @@ class RuntimeCliTest(unittest.TestCase):
         mock_prepare.assert_called_once()
         self.assertIn("Prepared Gazelle resources", stdout.getvalue())
         self.assertIn("checkpoint_source: local", stdout.getvalue())
+
+    def test_image_input_route_calls_pipeline(self):
+        result = SimpleNamespace(
+            output_dir="outputs/frame_gazelle",
+            predictions_path="outputs/frame_gazelle/predictions.json",
+            run_config_path="outputs/frame_gazelle/run_config.json",
+        )
+        with patch("gazelle.runtime.pipeline.run_image_pipeline", return_value=result) as mock_pipeline:
+            stdout = io.StringIO()
+            exit_code = main(
+                [
+                    "--input",
+                    "image.jpg",
+                    "--output-dir",
+                    "outputs",
+                    "--head-source",
+                    "none",
+                ],
+                stdout=stdout,
+            )
+
+        self.assertEqual(exit_code, 0)
+        mock_pipeline.assert_called_once()
+        config = mock_pipeline.call_args.args[0]
+        self.assertEqual(config.input_path, "image.jpg")
+        self.assertEqual(config.output_dir, "outputs")
+        self.assertEqual(config.head_source, "none")
+        self.assertIn("predictions:", stdout.getvalue())
+
+    def test_list_models_does_not_call_pipeline(self):
+        with patch("gazelle.runtime.pipeline.run_image_pipeline") as mock_pipeline:
+            stdout = io.StringIO()
+            exit_code = main(["--list-models", "--input", "image.jpg"], stdout=stdout)
+
+        self.assertEqual(exit_code, 0)
+        mock_pipeline.assert_not_called()
+
+    def test_prepare_only_does_not_call_pipeline(self):
+        prepared = SimpleNamespace(
+            model_name="gazelle_dinov2_vitb14_inout",
+            checkpoint_path="models/checkpoints/example.pt",
+            checkpoint_candidate=None,
+            cache_paths=SimpleNamespace(root_dir="models", torch_hub_dir="models/torch_hub"),
+            candidate_results=(),
+        )
+        with patch("gazelle.runtime.pipeline.run_image_pipeline") as mock_pipeline:
+            with patch("gazelle.runtime.resources.prepare_runtime_resources", return_value=prepared):
+                stdout = io.StringIO()
+                exit_code = main(
+                    ["--prepare-only", "--input", "image.jpg", "--cache-dir", "models"],
+                    stdout=stdout,
+                )
+
+        self.assertEqual(exit_code, 0)
+        mock_pipeline.assert_not_called()
 
     def test_invalid_model_uses_registry_error(self):
         stderr = io.StringIO()

@@ -70,7 +70,7 @@ A unified local runtime is being developed around the original research model. T
 python main.py --help
 ```
 
-The runtime currently exposes safe CLI/model-registry inspection and resource preparation:
+The runtime currently exposes safe CLI/model-registry inspection, resource preparation, and single-image inference:
 
 ```powershell
 python main.py --list-models
@@ -136,6 +136,60 @@ For safety, forced downloads are written to a temporary `.downloads` directory u
 
 Checkpoint validation is strict in the runtime path: empty state dicts, missing keys, unexpected keys, shape mismatches, non-tensor values, and incompatible checkpoint structures stop preparation with an error.
 
+### Single-Image Inference
+
+The runtime can run Gazelle on one image and write structured outputs:
+
+```powershell
+python main.py `
+  --input samples\frame.jpg `
+  --output-dir outputs `
+  --head-source none `
+  --model gazelle_dinov2_vitb14_inout
+```
+
+This command constructs the Gazelle model and DINOv2 backbone. If the selected Gazelle checkpoint or DINOv2 weights are not already cached, it may download them. It writes a per-image output directory such as `outputs/frame_gazelle/` containing `predictions.json` and `run_config.json`. The current image pipeline supports single images only; it does not process video, open a camera, create a rendered overlay, or write video JSONL.
+
+Head input sources:
+
+- `--head-source none` creates one single-person fallback head with `bbox=None`.
+- `--head-source static` uses one or more CLI bboxes:
+
+```powershell
+python main.py `
+  --input samples\frame.jpg `
+  --output-dir outputs `
+  --head-source static `
+  --bbox 0.10 0.12 0.22 0.30 `
+  --bbox-format normalized
+```
+
+`--bbox` can be repeated for multiple people. Use `--bbox-format normalized` for `[0, 1]` coordinates or `--bbox-format pixel` for image pixel coordinates. Optional `--person-id` values can be repeated to match the number of `--bbox` entries; otherwise person ids default to `0, 1, 2, ...`.
+
+- `--head-source json` loads image head data from JSON:
+
+```powershell
+python main.py `
+  --input samples\frame.jpg `
+  --output-dir outputs `
+  --head-source json `
+  --head-data samples\frame_heads.json
+```
+
+For single-image inference, JSON head data is read from `frame_index=0`. The JSON format is the same internal head record format used by the runtime head providers, with `bbox_format` set to `normalized` or `pixel` and `heads` containing `person_id`, `bbox`, and optional `confidence`.
+
+Use `--save-heatmaps` to save raw per-person heatmap tensors:
+
+```powershell
+python main.py `
+  --input samples\frame.jpg `
+  --output-dir outputs `
+  --head-source none `
+  --save-heatmaps
+```
+
+Raw heatmaps are saved under `heatmaps/` in the per-image output directory and referenced from `predictions.json`. Heatmaps are not embedded directly in JSON, and `heatmap_peak_value` should not be treated as a calibrated probability.
+
 ### Programmatic Single-Frame Predictor
 
 `GazellePredictor` provides a programmatic single-frame interface for already prepared checkpoints:
@@ -172,9 +226,9 @@ Runtime head behavior is intentionally strict:
 - Multi-person inference requires a valid bbox for every head.
 - Bboxes are validated as finite normalized `(xmin, ymin, xmax, ymax)` values, clipped to `[0, 1]`, and rejected if clipping leaves an empty box.
 
-The internal predictor API is available for programmatic use but image/video CLI integration is still pending.
+The programmatic predictor API remains available for direct in-memory use. The CLI image pipeline above is the first user-facing wrapper around it; video CLI integration is still pending.
 
-The following runtime features are planned but not available yet in this milestone: automatic head detection, `none/static/json` head providers, image file pipeline, streaming video inference, video recomposition, rendering, JSON/JSONL output, ROI/process logic, and optional raw heatmap export.
+The following runtime features are planned but not available yet in this milestone: automatic head detection, streaming video inference, video recomposition, rendered overlays, video JSONL output, ROI/process logic, and Multi-Pose integration.
 
 
 ## Usage
