@@ -212,6 +212,8 @@ runtime 对 head 的处理规则是严格的：
 - 多人推理必须为每个 head 提供有效 bbox。
 - bbox 会按有限数值的归一化 `(xmin, ymin, xmax, ymax)` 校验，裁剪到 `[0, 1]`，并拒绝裁剪后为空的 bbox。
 
+内部 predictor API 已可用于编程式调用，但图片 / 视频 CLI 集成仍未完成。
+
 以下 runtime 功能在当前里程碑尚未完成：自动 head detection、`none/static/json` head provider、图片文件 pipeline、视频流式推理、视频重合成、结果渲染、JSON/JSONL 输出、ROI / 工序逻辑，以及可选 raw heatmap 导出。
 
 ## 推理流程

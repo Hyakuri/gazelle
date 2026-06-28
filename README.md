@@ -172,6 +172,8 @@ Runtime head behavior is intentionally strict:
 - Multi-person inference requires a valid bbox for every head.
 - Bboxes are validated as finite normalized `(xmin, ymin, xmax, ymax)` values, clipped to `[0, 1]`, and rejected if clipping leaves an empty box.
 
+The internal predictor API is available for programmatic use but image/video CLI integration is still pending.
+
 The following runtime features are planned but not available yet in this milestone: automatic head detection, `none/static/json` head providers, image file pipeline, streaming video inference, video recomposition, rendering, JSON/JSONL output, ROI/process logic, and optional raw heatmap export.
 
 

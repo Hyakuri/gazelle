@@ -1,6 +1,5 @@
-import math
-from numbers import Real
 from pathlib import Path
+from collections.abc import Mapping
 from typing import Iterable, List, Optional, Sequence, Tuple
 
 import torch
@@ -8,6 +7,7 @@ from PIL import Image
 
 from gazelle.runtime.config import validate_device_name
 from gazelle.runtime.contracts import BBox, GazePrediction, HeadObservation
+from gazelle.runtime.geometry import sanitize_head_bbox_for_model
 from gazelle.runtime.model_registry import get_model_spec
 from gazelle.runtime.resources import (
     ensure_cache_dirs,
@@ -17,37 +17,30 @@ from gazelle.runtime.resources import (
 )
 
 
-def _resolve_device(device: str) -> torch.device:
-    validated = validate_device_name(device)
+def resolve_torch_device(device_name: str) -> torch.device:
+    validated = validate_device_name(device_name)
     if validated == "auto":
         return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if validated == "cpu":
+        return torch.device("cpu")
+    if validated == "cuda":
+        if not torch.cuda.is_available():
+            raise ValueError("CUDA device requested but CUDA is not available")
+        return torch.device("cuda")
+    if validated.startswith("cuda:"):
+        if not torch.cuda.is_available():
+            raise ValueError("{} requested but CUDA is not available".format(validated))
+        index = int(validated[len("cuda:") :])
+        device_count = torch.cuda.device_count()
+        if index >= device_count:
+            raise ValueError(
+                "{} requested but only {} CUDA device(s) are available".format(
+                    validated,
+                    device_count,
+                )
+            )
+        return torch.device(validated)
     return torch.device(validated)
-
-
-def _is_valid_number(value: object) -> bool:
-    return isinstance(value, Real) and not isinstance(value, bool) and math.isfinite(float(value))
-
-
-def validate_and_clip_bbox(bbox: BBox, index: Optional[int] = None) -> BBox:
-    if len(bbox) != 4:
-        raise ValueError("Head bbox must contain exactly four values")
-    if not all(_is_valid_number(value) for value in bbox):
-        raise ValueError("Head bbox values must be finite real numbers")
-
-    xmin, ymin, xmax, ymax = (float(value) for value in bbox)
-    if xmin >= xmax or ymin >= ymax:
-        raise ValueError("Head bbox must satisfy xmin < xmax and ymin < ymax")
-
-    clipped = (
-        min(max(xmin, 0.0), 1.0),
-        min(max(ymin, 0.0), 1.0),
-        min(max(xmax, 0.0), 1.0),
-        min(max(ymax, 0.0), 1.0),
-    )
-    if clipped[0] >= clipped[2] or clipped[1] >= clipped[3]:
-        label = " at index {}".format(index) if index is not None else ""
-        raise ValueError("Head bbox{} is outside the frame after clipping".format(label))
-    return clipped
 
 
 def prepare_head_bboxes(heads: Sequence[HeadObservation]) -> Tuple[List[HeadObservation], List[Optional[BBox]]]:
@@ -63,7 +56,10 @@ def prepare_head_bboxes(heads: Sequence[HeadObservation]) -> Tuple[List[HeadObse
             model_bboxes.append(None)
             continue
 
-        clipped_bbox = validate_and_clip_bbox(head.bbox, index=index)
+        try:
+            clipped_bbox = sanitize_head_bbox_for_model(head.bbox)
+        except ValueError as exc:
+            raise ValueError("Invalid head bbox at index {}: {}".format(index, exc)) from exc
         prepared_heads.append(
             HeadObservation(
                 person_id=head.person_id,
@@ -122,6 +118,58 @@ def _heatmap_peak(heatmap: torch.Tensor) -> Tuple[Tuple[float, float], float]:
     return (x_index / float(width), y_index / float(height)), float(heatmap[y_index, x_index].item())
 
 
+def _batch_len(value: object) -> int:
+    try:
+        return len(value)
+    except TypeError:
+        return -1
+
+
+def _extract_gazelle_outputs(output, expected_people: int):
+    if not isinstance(output, Mapping):
+        raise RuntimeError("Gazelle output must be a mapping; got {}".format(type(output).__name__))
+    if "heatmap" not in output:
+        raise RuntimeError("Gazelle output is missing required 'heatmap' key")
+
+    heatmap_batch = output["heatmap"]
+    if not isinstance(heatmap_batch, (list, tuple)):
+        raise RuntimeError("Gazelle heatmap output must be a list/tuple batch")
+    if len(heatmap_batch) != 1:
+        raise RuntimeError(
+            "Gazelle heatmap batch length mismatch: expected 1, got {}".format(len(heatmap_batch))
+        )
+    heatmaps = heatmap_batch[0]
+    actual_people = _batch_len(heatmaps)
+    if actual_people != expected_people:
+        raise RuntimeError(
+            "Gazelle heatmap person count mismatch: expected {}, got {}".format(
+                expected_people,
+                actual_people,
+            )
+        )
+
+    inout_values = None
+    inout_batch = output.get("inout")
+    if inout_batch is not None:
+        if not isinstance(inout_batch, (list, tuple)):
+            raise RuntimeError("Gazelle inout output must be a list/tuple batch or None")
+        if len(inout_batch) != 1:
+            raise RuntimeError(
+                "Gazelle inout batch length mismatch: expected 1, got {}".format(len(inout_batch))
+            )
+        inout_values = inout_batch[0]
+        actual_inout_people = _batch_len(inout_values)
+        if actual_inout_people != expected_people:
+            raise RuntimeError(
+                "Gazelle inout person count mismatch: expected {}, got {}".format(
+                    expected_people,
+                    actual_inout_people,
+                )
+            )
+
+    return heatmaps, inout_values
+
+
 class GazellePredictor:
     """Programmatic single-frame Gazelle runtime wrapper."""
 
@@ -130,7 +178,7 @@ class GazellePredictor:
         self.model_name = model_name
         self.model = model
         self.transform = transform
-        self.device = _resolve_device(device)
+        self.device = resolve_torch_device(device)
         self.model.to(self.device)
         self.model.eval()
 
@@ -142,6 +190,7 @@ class GazellePredictor:
         device: str = "auto",
         cache_dir: Optional[str] = None,
     ) -> "GazellePredictor":
+        get_model_spec(model_name)
         checkpoint_path = Path(checkpoint_path)
         if not checkpoint_path.exists():
             raise FileNotFoundError("Checkpoint does not exist: {}".format(checkpoint_path))
@@ -174,28 +223,10 @@ class GazellePredictor:
             "images": image_tensor.unsqueeze(dim=0).to(self.device),
             "bboxes": [model_bboxes],
         }
-        with torch.no_grad():
+        with torch.inference_mode():
             output = self.model(model_input)
 
-        heatmaps = output["heatmap"][0]
-        if len(heatmaps) != len(prepared_heads):
-            raise RuntimeError(
-                "Gazelle returned {} heatmaps for {} heads".format(
-                    len(heatmaps),
-                    len(prepared_heads),
-                )
-            )
-
-        inout_values = None
-        if output.get("inout") is not None:
-            inout_values = output["inout"][0]
-            if len(inout_values) != len(prepared_heads):
-                raise RuntimeError(
-                    "Gazelle returned {} inout scores for {} heads".format(
-                        len(inout_values),
-                        len(prepared_heads),
-                    )
-                )
+        heatmaps, inout_values = _extract_gazelle_outputs(output, expected_people=len(prepared_heads))
 
         predictions = []
         for index, head in enumerate(prepared_heads):

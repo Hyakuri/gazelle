@@ -9,7 +9,12 @@ import torch
 from PIL import Image
 
 from gazelle.runtime.contracts import HeadObservation
-from gazelle.runtime.predictor import GazellePredictor, prepare_head_bboxes, validate_and_clip_bbox
+from gazelle.runtime.predictor import (
+    GazellePredictor,
+    _extract_gazelle_outputs,
+    prepare_head_bboxes,
+    resolve_torch_device,
+)
 
 
 class RecordingTransform:
@@ -22,8 +27,9 @@ class RecordingTransform:
 
 
 class FakeGazelleModel:
-    def __init__(self, include_inout=True):
+    def __init__(self, include_inout=True, output_override=None):
         self.include_inout = include_inout
+        self.output_override = output_override
         self.calls = []
         self.loaded_state = None
         self.strict_load = None
@@ -58,6 +64,8 @@ class FakeGazelleModel:
 
     def __call__(self, model_input):
         self.calls.append(model_input)
+        if self.output_override is not None:
+            return self.output_override
         people_count = len(model_input["bboxes"][0])
         heatmaps = torch.zeros(people_count, 2, 3)
         for index in range(people_count):
@@ -139,19 +147,6 @@ class GazellePredictorTest(unittest.TestCase):
         self.assertEqual(predictions[1].heatmap_peak_value, 1.5)
         self.assertAlmostEqual(predictions[1].inout_score, 0.1)
 
-    def test_bbox_validation_rejects_invalid_values(self):
-        invalid_bboxes = [
-            (0.5, 0.1, 0.2, 0.4),
-            (0.1, 0.5, 0.4, 0.2),
-            (2.0, 0.1, 3.0, 0.4),
-            (0.0, 0.0, float("nan"), 1.0),
-            (0.0, 0.0, True, 1.0),
-        ]
-        for bbox in invalid_bboxes:
-            with self.subTest(bbox=bbox):
-                with self.assertRaises(ValueError):
-                    validate_and_clip_bbox(bbox)
-
     def test_prepare_head_bboxes_accepts_single_none_bbox(self):
         prepared_heads, model_bboxes = prepare_head_bboxes([HeadObservation(person_id=5, bbox=None)])
 
@@ -182,6 +177,97 @@ class GazellePredictorTest(unittest.TestCase):
             self.assertEqual(fake_model.to_device, "cpu")
             self.assertIn("decoder.weight", fake_model.loaded_state)
             self.assertTrue((Path(tmpdir) / "torch_hub").exists())
+
+    def test_from_checkpoint_rejects_unknown_model_before_model_construction(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            checkpoint = Path(tmpdir) / "model.pt"
+            torch.save({"decoder.weight": torch.ones(1)}, checkpoint)
+            fake_module = types.ModuleType("gazelle.model")
+            fake_module.get_gazelle_model = lambda model_name: (_ for _ in ()).throw(
+                AssertionError("model should not be constructed")
+            )
+
+            with patch.dict(sys.modules, {"gazelle.model": fake_module}):
+                with self.assertRaisesRegex(ValueError, "Unknown Gazelle model"):
+                    GazellePredictor.from_checkpoint("unknown_model", checkpoint, device="cpu")
+
+    def test_resolve_torch_device_auto_uses_cpu_when_cuda_unavailable(self):
+        with patch("gazelle.runtime.predictor.torch.cuda.is_available", return_value=False):
+            self.assertEqual(resolve_torch_device("auto"), torch.device("cpu"))
+
+    def test_resolve_torch_device_auto_uses_cuda_when_available(self):
+        with patch("gazelle.runtime.predictor.torch.cuda.is_available", return_value=True):
+            self.assertEqual(resolve_torch_device("auto"), torch.device("cuda"))
+
+    def test_resolve_torch_device_cpu_always_works(self):
+        with patch("gazelle.runtime.predictor.torch.cuda.is_available", return_value=False):
+            self.assertEqual(resolve_torch_device("cpu"), torch.device("cpu"))
+
+    def test_resolve_torch_device_explicit_cuda_unavailable_raises(self):
+        with patch("gazelle.runtime.predictor.torch.cuda.is_available", return_value=False):
+            with self.assertRaisesRegex(ValueError, "CUDA is not available"):
+                resolve_torch_device("cuda")
+            with self.assertRaisesRegex(ValueError, "CUDA is not available"):
+                resolve_torch_device("cuda:0")
+
+    def test_resolve_torch_device_cuda_index_out_of_range_raises(self):
+        with patch("gazelle.runtime.predictor.torch.cuda.is_available", return_value=True):
+            with patch("gazelle.runtime.predictor.torch.cuda.device_count", return_value=1):
+                with self.assertRaisesRegex(ValueError, "only 1 CUDA device"):
+                    resolve_torch_device("cuda:1")
+
+    def test_resolve_torch_device_cuda_index_available(self):
+        with patch("gazelle.runtime.predictor.torch.cuda.is_available", return_value=True):
+            with patch("gazelle.runtime.predictor.torch.cuda.device_count", return_value=2):
+                self.assertEqual(resolve_torch_device("cuda:1"), torch.device("cuda:1"))
+
+    def test_extract_gazelle_outputs_accepts_valid_output(self):
+        heatmaps, inout = _extract_gazelle_outputs(
+            {"heatmap": [torch.zeros(2, 2, 2)], "inout": [torch.zeros(2)]},
+            expected_people=2,
+        )
+
+        self.assertEqual(tuple(heatmaps.shape), (2, 2, 2))
+        self.assertEqual(tuple(inout.shape), (2,))
+
+    def test_extract_gazelle_outputs_allows_none_inout(self):
+        heatmaps, inout = _extract_gazelle_outputs(
+            {"heatmap": [torch.zeros(1, 2, 2)], "inout": None},
+            expected_people=1,
+        )
+
+        self.assertEqual(tuple(heatmaps.shape), (1, 2, 2))
+        self.assertIsNone(inout)
+
+    def test_extract_gazelle_outputs_rejects_non_mapping(self):
+        with self.assertRaisesRegex(RuntimeError, "mapping"):
+            _extract_gazelle_outputs([], expected_people=1)
+
+    def test_extract_gazelle_outputs_rejects_missing_heatmap(self):
+        with self.assertRaisesRegex(RuntimeError, "heatmap"):
+            _extract_gazelle_outputs({"inout": None}, expected_people=1)
+
+    def test_extract_gazelle_outputs_rejects_heatmap_batch_mismatch(self):
+        with self.assertRaisesRegex(RuntimeError, "heatmap batch length mismatch"):
+            _extract_gazelle_outputs({"heatmap": []}, expected_people=1)
+
+    def test_extract_gazelle_outputs_rejects_heatmap_person_mismatch(self):
+        with self.assertRaisesRegex(RuntimeError, "heatmap person count mismatch"):
+            _extract_gazelle_outputs({"heatmap": [torch.zeros(2, 2, 2)]}, expected_people=1)
+
+    def test_extract_gazelle_outputs_rejects_inout_batch_mismatch(self):
+        with self.assertRaisesRegex(RuntimeError, "inout batch length mismatch"):
+            _extract_gazelle_outputs(
+                {"heatmap": [torch.zeros(1, 2, 2)], "inout": []},
+                expected_people=1,
+            )
+
+    def test_extract_gazelle_outputs_rejects_inout_person_mismatch(self):
+        with self.assertRaisesRegex(RuntimeError, "inout person count mismatch"):
+            _extract_gazelle_outputs(
+                {"heatmap": [torch.zeros(1, 2, 2)], "inout": [torch.zeros(2)]},
+                expected_people=1,
+            )
 
 
 if __name__ == "__main__":
