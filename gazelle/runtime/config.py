@@ -10,6 +10,7 @@ from gazelle.runtime.model_registry import get_model_spec
 
 
 SUPPORTED_RENDERED_SUFFIXES = (".png", ".jpg", ".jpeg")
+SUPPORTED_VIDEO_OUTPUT_SUFFIXES = (".mp4",)
 
 
 def validate_device_name(device: str) -> str:
@@ -57,6 +58,42 @@ def validate_heatmap_alpha(heatmap_alpha) -> float:
     return alpha
 
 
+def validate_optional_positive_float(value, field_name: str):
+    if value is None:
+        return None
+    if not isinstance(value, Real) or isinstance(value, bool) or not math.isfinite(float(value)):
+        raise ValueError("{} must be a finite positive real number".format(field_name))
+    value = float(value)
+    if value <= 0.0:
+        raise ValueError("{} must be greater than 0".format(field_name))
+    return value
+
+
+def validate_optional_positive_int(value, field_name: str):
+    if value is None:
+        return None
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+        raise ValueError("{} must be a positive int".format(field_name))
+    return value
+
+
+def validate_positive_int(value, field_name: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+        raise ValueError("{} must be an int greater than or equal to 1".format(field_name))
+    return value
+
+
+def validate_output_video_name(output_video_name: str) -> str:
+    name = str(output_video_name).strip()
+    if not name:
+        raise ValueError("output_video_name must not be empty")
+    if "/" in name or "\\" in name or Path(name).name != name:
+        raise ValueError("output_video_name must be a file name, not a path")
+    if Path(name).suffix.lower() not in SUPPORTED_VIDEO_OUTPUT_SUFFIXES:
+        raise ValueError("output_video_name must end with .mp4")
+    return name
+
+
 @dataclass(frozen=True)
 class RuntimeConfig:
     """Validated CLI configuration for the Gazelle runtime."""
@@ -79,6 +116,10 @@ class RuntimeConfig:
     draw_head_box: bool = True
     draw_gaze_peak: bool = True
     draw_labels: bool = True
+    output_fps: Optional[float] = None
+    max_frames: Optional[int] = None
+    frame_step: int = 1
+    output_video_name: str = "rendered.mp4"
     device: str = "auto"
     cache_dir: Optional[str] = None
     checkpoint: Optional[str] = None
@@ -89,6 +130,22 @@ class RuntimeConfig:
         object.__setattr__(self, "device", validate_device_name(self.device))
         object.__setattr__(self, "rendered_name", validate_rendered_name(self.rendered_name))
         object.__setattr__(self, "heatmap_alpha", validate_heatmap_alpha(self.heatmap_alpha))
+        object.__setattr__(
+            self,
+            "output_fps",
+            validate_optional_positive_float(self.output_fps, "output_fps"),
+        )
+        object.__setattr__(
+            self,
+            "max_frames",
+            validate_optional_positive_int(self.max_frames, "max_frames"),
+        )
+        object.__setattr__(self, "frame_step", validate_positive_int(self.frame_step, "frame_step"))
+        object.__setattr__(
+            self,
+            "output_video_name",
+            validate_output_video_name(self.output_video_name),
+        )
         return self
 
     @classmethod
@@ -112,6 +169,10 @@ class RuntimeConfig:
             draw_head_box=not args.no_head_box,
             draw_gaze_peak=not args.no_gaze_peak,
             draw_labels=not args.no_labels,
+            output_fps=args.output_fps,
+            max_frames=args.max_frames,
+            frame_step=args.frame_step,
+            output_video_name=args.output_video_name,
             device=args.device,
             cache_dir=args.cache_dir,
             checkpoint=args.checkpoint,

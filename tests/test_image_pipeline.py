@@ -357,7 +357,7 @@ class ImagePipelineTest(unittest.TestCase):
             fake = FakePredictor()
             config = make_config(input_path=str(input_path), output_dir=str(Path(tmpdir) / "outputs"))
 
-            with self.assertRaisesRegex(ValueError, "video pipeline is not implemented"):
+            with self.assertRaisesRegex(ValueError, "Unsupported input path"):
                 run_image_pipeline(config, predictor_factory=lambda config: fake)
 
         self.assertEqual(fake.calls, [])

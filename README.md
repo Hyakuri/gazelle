@@ -70,7 +70,7 @@ A unified local runtime is being developed around the original research model. T
 python main.py --help
 ```
 
-The runtime currently exposes safe CLI/model-registry inspection, resource preparation, and single-image inference:
+The runtime currently exposes safe CLI/model-registry inspection, resource preparation, single-image inference, and offline video inference:
 
 ```powershell
 python main.py --list-models
@@ -148,7 +148,7 @@ python main.py `
   --model gazelle_dinov2_vitb14_inout
 ```
 
-This command constructs the Gazelle model and DINOv2 backbone. If the selected Gazelle checkpoint or DINOv2 weights are not already cached, it may download them. It writes a per-image output directory such as `outputs/frame_gazelle/` containing `predictions.json` and `run_config.json`. The current image pipeline supports single images only; it does not process video, open a camera, or write video JSONL.
+This command constructs the Gazelle model and DINOv2 backbone. If the selected Gazelle checkpoint or DINOv2 weights are not already cached, it may download them. It writes a per-image output directory such as `outputs/frame_gazelle/` containing `predictions.json` and `run_config.json`. Image input does not open a camera or write video JSONL; video input is handled by the video inference path below.
 
 When `--overwrite` is used, the per-image output directory is cleaned before writing new results, so stale heatmaps or rendered images from earlier runs are removed.
 
@@ -204,7 +204,51 @@ python main.py `
   --save-rendered
 ```
 
-By default, image inference writes `predictions.json` and `run_config.json`; rendered output is written only when `--save-rendered` is passed. The default rendered file is `rendered.png`. Use `--rendered-name` to choose a `.png`, `.jpg`, or `.jpeg` file name, and `--heatmap-alpha` to control heatmap transparency. The rendered overlay can include the heatmap, head bbox, gaze peak, person id, and optional `inout_score`; pass `--no-head-box`, `--no-gaze-peak`, or `--no-labels` to disable those drawing components. Rendering does not change `predictions.json`, and `heatmap_peak_value` is not a calibrated probability. The renderer is currently for single images only; video overlay/recomposition is not implemented yet.
+By default, image inference writes `predictions.json` and `run_config.json`; rendered output is written only when `--save-rendered` is passed. The default rendered file is `rendered.png`. Use `--rendered-name` to choose a `.png`, `.jpg`, or `.jpeg` file name, and `--heatmap-alpha` to control heatmap transparency. The rendered overlay can include the heatmap, head bbox, gaze peak, person id, and optional `inout_score`; pass `--no-head-box`, `--no-gaze-peak`, or `--no-labels` to disable those drawing components. Rendering does not change `predictions.json`, and `heatmap_peak_value` is not a calibrated probability.
+
+### Video Inference
+
+The runtime can process a local video file frame by frame in an offline pipeline:
+
+```powershell
+python main.py `
+  --input samples\assembly.mp4 `
+  --output-dir outputs `
+  --head-source none `
+  --save-rendered
+```
+
+This command constructs the Gazelle model and DINOv2 backbone. If the selected Gazelle checkpoint or DINOv2 weights are not already cached, it may download them. It streams frames from the input video, writes a per-video output directory such as `outputs/assembly_gazelle/`, and always writes `predictions.jsonl` and `run_config.json`. This is offline video processing, not real-time webcam processing. Audio is not preserved in rendered videos.
+
+Pass `--save-rendered` to write a rendered `.mp4`; the default video output name is `rendered.mp4`, and `--output-video-name` can choose another `.mp4` file name. The same rendering flags used for images also apply to rendered videos: `--heatmap-alpha`, `--no-head-box`, `--no-gaze-peak`, and `--no-labels`.
+
+Video head input sources use the same `--head-source none`, `--head-source static`, and `--head-source json` options as image inference. JSON head data for video should use one record per `frame_index`, either in JSONL or a JSON list. If a frame is missing from JSON head data, the runtime writes a `predictions.jsonl` row with `status="no_head"` and skips model inference for that frame.
+
+Use JSON head data:
+
+```powershell
+python main.py `
+  --input samples\assembly.mp4 `
+  --output-dir outputs `
+  --head-source json `
+  --head-data samples\assembly_heads.jsonl `
+  --save-rendered
+```
+
+Use a static pixel bbox and process only part of a video:
+
+```powershell
+python main.py `
+  --input samples\assembly.mp4 `
+  --output-dir outputs `
+  --head-source static `
+  --bbox 100 80 220 230 `
+  --bbox-format pixel `
+  --max-frames 100 `
+  --frame-step 2
+```
+
+`--frame-step` runs Gazelle only every N frames. Skipped frames still get `predictions.jsonl` rows with `status="skipped"` and are copied unchanged into the rendered video when rendering is enabled. `--max-frames` limits how many frames are written. `--output-fps` is used only when the source video FPS is invalid; otherwise the source FPS is preserved. `--save-heatmaps` is not supported for video in this milestone and exits with `video heatmap export is not implemented yet`.
 
 ### Programmatic Single-Frame Predictor
 
@@ -242,9 +286,9 @@ Runtime head behavior is intentionally strict:
 - Multi-person inference requires a valid bbox for every head.
 - Bboxes are validated as finite normalized `(xmin, ymin, xmax, ymax)` values, clipped to `[0, 1]`, and rejected if clipping leaves an empty box.
 
-The programmatic predictor API remains available for direct in-memory use. The CLI image pipeline above is the first user-facing wrapper around it; video CLI integration is still pending.
+The programmatic predictor API remains available for direct in-memory use. The CLI image and offline video pipelines above are user-facing wrappers around it.
 
-The following runtime features are planned but not available yet in this milestone: automatic head detection, streaming video inference, video recomposition, video overlays, video JSONL output, ROI/process logic, and Multi-Pose integration.
+The following runtime features are planned but not available yet in this milestone: real-time webcam input, automatic head detection, tracking, ROI/process logic, Multi-Pose integration, audio remuxing, raw video heatmap export, and high-performance asynchronous inference.
 
 
 ## Usage

@@ -110,7 +110,7 @@ model, transform = torch.hub.load("fkryan/gazelle", "gazelle_dinov2_vitl14_inout
 python main.py --help
 ```
 
-当前 runtime 已提供安全的 CLI / 模型注册表检查、资源准备，以及单张图片推理：
+当前 runtime 已提供安全的 CLI / 模型注册表检查、资源准备、单张图片推理，以及离线视频推理：
 
 ```powershell
 python main.py --list-models
@@ -188,7 +188,7 @@ python main.py `
   --model gazelle_dinov2_vitb14_inout
 ```
 
-该命令会构建 Gazelle 模型和 DINOv2 backbone。如果所选 Gazelle checkpoint 或 DINOv2 权重尚未缓存，运行时可能访问网络并下载它们。命令会创建类似 `outputs/frame_gazelle/` 的单图输出目录，并写入 `predictions.json` 和 `run_config.json`。当前 image pipeline 只支持单张图片；不支持视频处理、摄像头或视频 JSONL 输出。
+该命令会构建 Gazelle 模型和 DINOv2 backbone。如果所选 Gazelle checkpoint 或 DINOv2 权重尚未缓存，运行时可能访问网络并下载它们。命令会创建类似 `outputs/frame_gazelle/` 的单图输出目录，并写入 `predictions.json` 和 `run_config.json`。图片输入不会打开摄像头，也不会写入视频 JSONL；视频输入由下方的视频推理路径处理。
 
 使用 `--overwrite` 时，runtime 会在写入新结果前清理对应图片的输出目录，因此旧的 heatmap 或 rendered image 不会残留。
 
@@ -244,7 +244,51 @@ python main.py `
   --save-rendered
 ```
 
-默认情况下，单图推理只写入 `predictions.json` 和 `run_config.json`；只有传入 `--save-rendered` 时才会写可视化图片。默认文件名是 `rendered.png`。可以用 `--rendered-name` 指定 `.png`、`.jpg` 或 `.jpeg` 文件名，用 `--heatmap-alpha` 控制 heatmap 透明度。可视化 overlay 可以包含 heatmap、head bbox、gaze peak、person id 和可选的 `inout_score`；可以用 `--no-head-box`、`--no-gaze-peak` 或 `--no-labels` 关闭对应绘制元素。渲染不会改变 `predictions.json`，`heatmap_peak_value` 也不是校准后的概率。当前 renderer 只支持单张图片；视频 overlay / 重合成尚未实现。
+默认情况下，单图推理只写入 `predictions.json` 和 `run_config.json`；只有传入 `--save-rendered` 时才会写可视化图片。默认文件名是 `rendered.png`。可以用 `--rendered-name` 指定 `.png`、`.jpg` 或 `.jpeg` 文件名，用 `--heatmap-alpha` 控制 heatmap 透明度。可视化 overlay 可以包含 heatmap、head bbox、gaze peak、person id 和可选的 `inout_score`；可以用 `--no-head-box`、`--no-gaze-peak` 或 `--no-labels` 关闭对应绘制元素。渲染不会改变 `predictions.json`，`heatmap_peak_value` 也不是校准后的概率。
+
+### 视频推理
+
+runtime 可以对本地视频文件进行逐帧离线推理：
+
+```powershell
+python main.py `
+  --input samples\assembly.mp4 `
+  --output-dir outputs `
+  --head-source none `
+  --save-rendered
+```
+
+该命令会构建 Gazelle 模型和 DINOv2 backbone。如果所选 Gazelle checkpoint 或 DINOv2 权重尚未缓存，运行时可能访问网络并下载它们。视频会以流式方式逐帧处理，并创建类似 `outputs/assembly_gazelle/` 的视频输出目录，始终写入 `predictions.jsonl` 和 `run_config.json`。这是离线视频处理，不是实时 webcam 模式。渲染视频不会保留音频。
+
+传入 `--save-rendered` 时会写入渲染后的 `.mp4`；默认文件名是 `rendered.mp4`，也可以用 `--output-video-name` 指定另一个 `.mp4` 文件名。图片渲染使用的绘制选项同样适用于视频：`--heatmap-alpha`、`--no-head-box`、`--no-gaze-peak` 和 `--no-labels`。
+
+视频 head 输入复用图片推理的 `--head-source none`、`--head-source static` 和 `--head-source json`。视频 JSON head data 应按 `frame_index` 提供记录，可以使用 JSONL 或 JSON list。如果 JSON head data 缺少某一帧，runtime 会为该帧写入 `status="no_head"` 的 `predictions.jsonl` 行，并跳过该帧的模型推理。
+
+使用 JSON head data：
+
+```powershell
+python main.py `
+  --input samples\assembly.mp4 `
+  --output-dir outputs `
+  --head-source json `
+  --head-data samples\assembly_heads.jsonl `
+  --save-rendered
+```
+
+使用固定 pixel bbox，并只处理视频的一部分：
+
+```powershell
+python main.py `
+  --input samples\assembly.mp4 `
+  --output-dir outputs `
+  --head-source static `
+  --bbox 100 80 220 230 `
+  --bbox-format pixel `
+  --max-frames 100 `
+  --frame-step 2
+```
+
+`--frame-step` 表示每隔 N 帧运行一次 Gazelle。被跳过的帧仍会写入 `status="skipped"` 的 `predictions.jsonl` 行；如果启用了渲染，这些帧会以原帧写入渲染视频。`--max-frames` 限制写出的帧数。`--output-fps` 只在源视频 FPS 无效时作为 fallback；源视频 FPS 有效时会保留源 FPS。当前里程碑不支持视频 `--save-heatmaps`，使用时会报错 `video heatmap export is not implemented yet`。
 
 ### 编程式单帧 Predictor
 
@@ -282,9 +326,9 @@ runtime 对 head 的处理规则是严格的：
 - 多人推理必须为每个 head 提供有效 bbox。
 - bbox 会按有限数值的归一化 `(xmin, ymin, xmax, ymax)` 校验，裁剪到 `[0, 1]`，并拒绝裁剪后为空的 bbox。
 
-编程式 predictor API 仍然可以直接用于内存中的单帧调用。上面的 CLI image pipeline 是它的第一个用户可见封装；视频 CLI 集成仍未完成。
+编程式 predictor API 仍然可以直接用于内存中的单帧调用。上面的 CLI image pipeline 和离线视频 pipeline 都是基于它的用户可见封装。
 
-以下 runtime 功能在当前里程碑尚未完成：自动 head detection、视频流式推理、视频重合成、视频 overlay、视频 JSONL 输出、ROI / 工序逻辑，以及 Multi-Pose 集成。
+以下 runtime 功能在当前里程碑尚未完成：实时 webcam 输入、自动 head detection、tracking、ROI / 工序逻辑、Multi-Pose 集成、音频 remux、视频 raw heatmap 导出，以及高性能异步推理。
 
 ## 推理流程
 

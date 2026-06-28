@@ -1,6 +1,7 @@
 from dataclasses import asdict, dataclass
 from pathlib import Path
 import shutil
+from time import perf_counter
 from typing import Callable, List, Optional, Tuple
 
 from gazelle.runtime.contracts import GazePrediction, HeadObservation
@@ -9,8 +10,15 @@ from gazelle.runtime.heads import (
     StaticHeadProvider,
     load_json_head_provider,
 )
-from gazelle.runtime.media import load_image_rgb
+from gazelle.runtime.media import (
+    VideoFrameReader,
+    VideoFrameWriter,
+    load_image_rgb,
+    resolve_video_fps,
+)
 from gazelle.runtime.outputs import (
+    JsonlWriter,
+    prediction_frame_to_json_dict,
     save_prediction_heatmaps,
     write_predictions_json,
     write_run_config_json,
@@ -27,6 +35,16 @@ class ImagePipelineResult:
     heatmap_paths: Tuple[str, ...]
     heads: Tuple[HeadObservation, ...]
     predictions: Tuple[GazePrediction, ...]
+
+
+@dataclass(frozen=True)
+class VideoPipelineResult:
+    output_dir: Path
+    predictions_jsonl_path: Path
+    run_config_path: Path
+    rendered_video_path: Optional[Path]
+    frames_read: int
+    frames_written: int
 
 
 def build_head_provider_from_config(config):
@@ -124,6 +142,32 @@ def _run_config_payload(config, *, input_path, image_width: int, image_height: i
     return payload
 
 
+def _video_run_config_payload(
+    config,
+    *,
+    input_path,
+    width: int,
+    height: int,
+    source_fps: float,
+    output_fps: Optional[float],
+    frames_read: int,
+    frames_written: int,
+):
+    payload = asdict(config)
+    payload.update(
+        {
+            "input_path": str(input_path),
+            "width": int(width),
+            "height": int(height),
+            "source_fps": float(source_fps),
+            "output_fps": None if output_fps is None else float(output_fps),
+            "frames_read": int(frames_read),
+            "frames_written": int(frames_written),
+        }
+    )
+    return payload
+
+
 def run_image_pipeline(config, predictor_factory: Optional[Callable[[object], object]] = None) -> ImagePipelineResult:
     image, width, height = load_image_rgb(config.input_path)
     output_dir = create_output_dir(config.input_path, config.output_dir, overwrite=config.overwrite)
@@ -190,4 +234,139 @@ def run_image_pipeline(config, predictor_factory: Optional[Callable[[object], ob
         heatmap_paths=tuple(heatmap_paths),
         heads=heads,
         predictions=predictions,
+    )
+
+
+def run_video_pipeline(config, predictor_factory: Optional[Callable[[object], object]] = None) -> VideoPipelineResult:
+    if config.save_heatmaps:
+        raise ValueError("video heatmap export is not implemented yet")
+
+    with VideoFrameReader(config.input_path) as reader:
+        metadata = reader.metadata
+        output_dir = create_output_dir(
+            config.input_path,
+            config.output_dir,
+            overwrite=config.overwrite,
+        )
+        head_provider = build_head_provider_from_config(config)
+        predictor = predictor_factory(config) if predictor_factory is not None else _build_real_predictor(config)
+
+        predictions_jsonl_path = output_dir / "predictions.jsonl"
+        run_config_path = output_dir / "run_config.json"
+        rendered_video_path = None
+        writer = None
+        renderer = None
+        if config.save_rendered:
+            video_fps = resolve_video_fps(metadata.fps, config.output_fps)
+            rendered_video_path = output_dir / config.output_video_name
+            writer = VideoFrameWriter(
+                rendered_video_path,
+                width=metadata.width,
+                height=metadata.height,
+                fps=video_fps,
+            )
+            renderer = PredictionRenderer(
+                RenderOptions(
+                    heatmap_alpha=config.heatmap_alpha,
+                    draw_head_box=config.draw_head_box,
+                    draw_gaze_peak=config.draw_gaze_peak,
+                    draw_labels=config.draw_labels,
+                )
+            )
+
+        frames_read = 0
+        frames_written = 0
+        try:
+            with JsonlWriter(predictions_jsonl_path) as jsonl_writer:
+                frame_iterator = iter(reader)
+                while config.max_frames is None or frames_written < config.max_frames:
+                    try:
+                        frame = next(frame_iterator)
+                    except StopIteration:
+                        break
+                    frames_read += 1
+
+                    if frame.index % config.frame_step != 0:
+                        predictions: Tuple[GazePrediction, ...] = ()
+                        record = prediction_frame_to_json_dict(
+                            frame_index=frame.index,
+                            timestamp_ms=frame.timestamp_ms,
+                            status="skipped",
+                            image_width=metadata.width,
+                            image_height=metadata.height,
+                            predictions=predictions,
+                        )
+                        jsonl_writer.write(record)
+                        if writer is not None:
+                            writer.write(frame.image)
+                        frames_written += 1
+                        continue
+
+                    heads = tuple(
+                        head_provider.get_heads(
+                            frame=frame.image,
+                            frame_index=frame.index,
+                            timestamp_ms=frame.timestamp_ms,
+                            image_width=metadata.width,
+                            image_height=metadata.height,
+                        )
+                    )
+                    if not heads:
+                        predictions = ()
+                        record = prediction_frame_to_json_dict(
+                            frame_index=frame.index,
+                            timestamp_ms=frame.timestamp_ms,
+                            status="no_head",
+                            image_width=metadata.width,
+                            image_height=metadata.height,
+                            predictions=predictions,
+                        )
+                        jsonl_writer.write(record)
+                        if writer is not None:
+                            writer.write(frame.image)
+                        frames_written += 1
+                        continue
+
+                    start_time = perf_counter()
+                    predictions = tuple(predictor.predict_frame(frame.image, heads))
+                    inference_ms = (perf_counter() - start_time) * 1000.0
+                    record = prediction_frame_to_json_dict(
+                        frame_index=frame.index,
+                        timestamp_ms=frame.timestamp_ms,
+                        status="ok",
+                        image_width=metadata.width,
+                        image_height=metadata.height,
+                        predictions=predictions,
+                        inference_ms=inference_ms,
+                    )
+                    jsonl_writer.write(record)
+                    if writer is not None:
+                        rendered = renderer.render(frame.image, predictions)
+                        writer.write(rendered)
+                    frames_written += 1
+        finally:
+            if writer is not None:
+                writer.close()
+
+        write_run_config_json(
+            run_config_path,
+            _video_run_config_payload(
+                config,
+                input_path=config.input_path,
+                width=metadata.width,
+                height=metadata.height,
+                source_fps=metadata.fps,
+                output_fps=resolve_video_fps(metadata.fps, config.output_fps),
+                frames_read=frames_read,
+                frames_written=frames_written,
+            ),
+        )
+
+    return VideoPipelineResult(
+        output_dir=output_dir,
+        predictions_jsonl_path=predictions_jsonl_path,
+        run_config_path=run_config_path,
+        rendered_video_path=rendered_video_path,
+        frames_read=frames_read,
+        frames_written=frames_written,
     )

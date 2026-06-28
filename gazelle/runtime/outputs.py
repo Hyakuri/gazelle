@@ -5,6 +5,9 @@ from typing import List, Optional, Sequence
 import torch
 
 
+VALID_FRAME_STATUSES = ("ok", "no_head", "skipped", "error")
+
+
 def _optional_float(value):
     return None if value is None else float(value)
 
@@ -38,6 +41,66 @@ def prediction_to_json_dict(prediction, *, heatmap_path=None) -> dict:
     if heatmap_path is not None:
         record["heatmap_path"] = str(heatmap_path)
     return record
+
+
+def prediction_frame_to_json_dict(
+    *,
+    frame_index,
+    timestamp_ms,
+    status,
+    image_width,
+    image_height,
+    predictions,
+    inference_ms=None,
+    error=None,
+) -> dict:
+    if status not in VALID_FRAME_STATUSES:
+        raise ValueError("Invalid frame prediction status: {}".format(status))
+
+    record = {
+        "frame_index": int(frame_index),
+        "timestamp_ms": float(timestamp_ms),
+        "status": status,
+        "width": int(image_width),
+        "height": int(image_height),
+        "people": [prediction_to_json_dict(prediction) for prediction in predictions],
+    }
+    if inference_ms is not None:
+        record["inference_ms"] = float(inference_ms)
+    if error is not None:
+        record["error"] = str(error)
+    return record
+
+
+def append_jsonl(path, record) -> None:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(_json_safe(record), ensure_ascii=False) + "\n")
+
+
+class JsonlWriter:
+    def __init__(self, path):
+        self.path = Path(path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._handle = self.path.open("w", encoding="utf-8")
+
+    def write(self, record) -> None:
+        if self._handle is None:
+            raise ValueError("JSONL writer is closed")
+        self._handle.write(json.dumps(_json_safe(record), ensure_ascii=False) + "\n")
+        self._handle.flush()
+
+    def close(self) -> None:
+        if self._handle is not None:
+            self._handle.close()
+            self._handle = None
+
+    def __enter__(self) -> "JsonlWriter":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.close()
 
 
 def write_predictions_json(
