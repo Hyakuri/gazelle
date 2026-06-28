@@ -188,7 +188,7 @@ python main.py `
   --model gazelle_dinov2_vitb14_inout
 ```
 
-该命令会构建 Gazelle 模型和 DINOv2 backbone。如果所选 Gazelle checkpoint 或 DINOv2 权重尚未缓存，运行时可能访问网络并下载它们。命令会创建类似 `outputs/frame_gazelle/` 的单图输出目录，并写入 `predictions.json` 和 `run_config.json`。当前 image pipeline 只支持单张图片；不支持视频处理、摄像头、可视化 overlay、视频 JSONL 输出。
+该命令会构建 Gazelle 模型和 DINOv2 backbone。如果所选 Gazelle checkpoint 或 DINOv2 权重尚未缓存，运行时可能访问网络并下载它们。命令会创建类似 `outputs/frame_gazelle/` 的单图输出目录，并写入 `predictions.json` 和 `run_config.json`。当前 image pipeline 只支持单张图片；不支持视频处理、摄像头或视频 JSONL 输出。
 
 head 输入来源：
 
@@ -230,6 +230,20 @@ python main.py `
 
 raw heatmap 会保存在单图输出目录的 `heatmaps/` 下，并在 `predictions.json` 中以路径引用。heatmap 不会直接写入 JSON，`heatmap_peak_value` 也不应被理解为校准后的概率。
 
+使用 `--save-rendered` 可以保存可视化 overlay 图片：
+
+```powershell
+python main.py `
+  --input samples\frame.jpg `
+  --output-dir outputs `
+  --head-source static `
+  --bbox 0.10 0.12 0.22 0.30 `
+  --bbox-format normalized `
+  --save-rendered
+```
+
+默认情况下，单图推理只写入 `predictions.json` 和 `run_config.json`；只有传入 `--save-rendered` 时才会写可视化图片。默认文件名是 `rendered.png`。可以用 `--rendered-name` 指定 `.png`、`.jpg` 或 `.jpeg` 文件名，用 `--heatmap-alpha` 控制 heatmap 透明度。可视化 overlay 可以包含 heatmap、head bbox、gaze peak、person id 和可选的 `inout_score`；可以用 `--no-head-box`、`--no-gaze-peak` 或 `--no-labels` 关闭对应绘制元素。渲染不会改变 `predictions.json`，`heatmap_peak_value` 也不是校准后的概率。当前 renderer 只支持单张图片；视频 overlay / 重合成尚未实现。
+
 ### 编程式单帧 Predictor
 
 `GazellePredictor` 为已经准备好的 checkpoint 提供编程式单帧接口：
@@ -268,7 +282,7 @@ runtime 对 head 的处理规则是严格的：
 
 编程式 predictor API 仍然可以直接用于内存中的单帧调用。上面的 CLI image pipeline 是它的第一个用户可见封装；视频 CLI 集成仍未完成。
 
-以下 runtime 功能在当前里程碑尚未完成：自动 head detection、视频流式推理、视频重合成、可视化 overlay、视频 JSONL 输出、ROI / 工序逻辑，以及 Multi-Pose 集成。
+以下 runtime 功能在当前里程碑尚未完成：自动 head detection、视频流式推理、视频重合成、视频 overlay、视频 JSONL 输出、ROI / 工序逻辑，以及 Multi-Pose 集成。
 
 ## 推理流程
 

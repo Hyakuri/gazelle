@@ -73,6 +73,14 @@ class RuntimeCliTest(unittest.TestCase):
                 "--person-id",
                 "4",
                 "--save-heatmaps",
+                "--save-rendered",
+                "--rendered-name",
+                "rendered.jpg",
+                "--heatmap-alpha",
+                "0.25",
+                "--no-head-box",
+                "--no-gaze-peak",
+                "--no-labels",
             ]
         )
         self.assertEqual(config.input_path, "image.jpg")
@@ -82,6 +90,35 @@ class RuntimeCliTest(unittest.TestCase):
         self.assertEqual(config.bboxes, ((0.1, 0.2, 0.3, 0.4), (0.5, 0.2, 0.7, 0.6)))
         self.assertEqual(config.person_ids, (3, 4))
         self.assertTrue(config.save_heatmaps)
+        self.assertTrue(config.save_rendered)
+        self.assertEqual(config.rendered_name, "rendered.jpg")
+        self.assertEqual(config.heatmap_alpha, 0.25)
+        self.assertFalse(config.draw_head_box)
+        self.assertFalse(config.draw_gaze_peak)
+        self.assertFalse(config.draw_labels)
+
+    def test_parse_image_render_config(self):
+        config = parse_runtime_config(
+            [
+                "--input",
+                "image.jpg",
+                "--save-rendered",
+                "--rendered-name",
+                "rendered.jpg",
+                "--heatmap-alpha",
+                "0.25",
+                "--no-head-box",
+                "--no-gaze-peak",
+                "--no-labels",
+            ]
+        )
+
+        self.assertTrue(config.save_rendered)
+        self.assertEqual(config.rendered_name, "rendered.jpg")
+        self.assertEqual(config.heatmap_alpha, 0.25)
+        self.assertFalse(config.draw_head_box)
+        self.assertFalse(config.draw_gaze_peak)
+        self.assertFalse(config.draw_labels)
 
     def test_prepare_only_route_calls_resource_preparation(self):
         prepared = SimpleNamespace(
@@ -104,6 +141,7 @@ class RuntimeCliTest(unittest.TestCase):
             output_dir="outputs/frame_gazelle",
             predictions_path="outputs/frame_gazelle/predictions.json",
             run_config_path="outputs/frame_gazelle/run_config.json",
+            rendered_path=None,
         )
         with patch("gazelle.runtime.pipeline.run_image_pipeline", return_value=result) as mock_pipeline:
             stdout = io.StringIO()
@@ -126,6 +164,20 @@ class RuntimeCliTest(unittest.TestCase):
         self.assertEqual(config.output_dir, "outputs")
         self.assertEqual(config.head_source, "none")
         self.assertIn("predictions:", stdout.getvalue())
+
+    def test_image_input_route_prints_rendered_path_when_present(self):
+        result = SimpleNamespace(
+            output_dir="outputs/frame_gazelle",
+            predictions_path="outputs/frame_gazelle/predictions.json",
+            run_config_path="outputs/frame_gazelle/run_config.json",
+            rendered_path="outputs/frame_gazelle/rendered.png",
+        )
+        with patch("gazelle.runtime.pipeline.run_image_pipeline", return_value=result):
+            stdout = io.StringIO()
+            exit_code = main(["--input", "image.jpg", "--save-rendered"], stdout=stdout)
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("rendered: outputs/frame_gazelle/rendered.png", stdout.getvalue())
 
     def test_list_models_does_not_call_pipeline(self):
         with patch("gazelle.runtime.pipeline.run_image_pipeline") as mock_pipeline:

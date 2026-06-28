@@ -14,6 +14,7 @@ from gazelle.runtime.outputs import (
     write_predictions_json,
     write_run_config_json,
 )
+from gazelle.runtime.renderer import render_predictions, save_rendered_image
 
 
 @dataclass(frozen=True)
@@ -21,6 +22,7 @@ class ImagePipelineResult:
     output_dir: Path
     predictions_path: Path
     run_config_path: Path
+    rendered_path: Optional[Path]
     heatmap_paths: Tuple[str, ...]
     heads: Tuple[HeadObservation, ...]
     predictions: Tuple[GazePrediction, ...]
@@ -109,6 +111,19 @@ def run_image_pipeline(config, predictor_factory: Optional[Callable[[object], ob
     if config.save_heatmaps:
         heatmap_paths = save_prediction_heatmaps(output_dir / "heatmaps", predictions)
 
+    rendered_path = None
+    if config.save_rendered:
+        rendered = render_predictions(
+            image,
+            predictions,
+            heatmap_alpha=config.heatmap_alpha,
+            draw_head_box=config.draw_head_box,
+            draw_gaze_peak=config.draw_gaze_peak,
+            draw_labels=config.draw_labels,
+        )
+        rendered_path = output_dir / config.rendered_name
+        save_rendered_image(rendered_path, rendered)
+
     predictions_path = output_dir / "predictions.json"
     run_config_path = output_dir / "run_config.json"
     write_predictions_json(
@@ -135,6 +150,7 @@ def run_image_pipeline(config, predictor_factory: Optional[Callable[[object], ob
         output_dir=output_dir,
         predictions_path=predictions_path,
         run_config_path=run_config_path,
+        rendered_path=rendered_path,
         heatmap_paths=tuple(heatmap_paths),
         heads=heads,
         predictions=predictions,

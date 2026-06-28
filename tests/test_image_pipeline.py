@@ -245,6 +245,23 @@ class ImagePipelineTest(unittest.TestCase):
             self.assertEqual(result.heatmap_paths, ("heatmaps/person_0.pt",))
             self.assertTrue((result.output_dir / "heatmaps" / "person_0.pt").exists())
 
+    def test_run_image_pipeline_saves_rendered_when_enabled(self):
+        with TemporaryDirectory() as tmpdir:
+            image_path = Path(tmpdir) / "frame.png"
+            write_test_image(image_path)
+            config = make_config(
+                input_path=str(image_path),
+                output_dir=str(Path(tmpdir) / "outputs"),
+                save_rendered=True,
+            )
+
+            result = run_image_pipeline(config, predictor_factory=lambda config: FakePredictor())
+
+            self.assertIsNotNone(result.rendered_path)
+            self.assertTrue(result.rendered_path.exists())
+            with Image.open(result.rendered_path) as image:
+                self.assertEqual(image.size, (10, 8))
+
     def test_run_image_pipeline_does_not_save_heatmaps_by_default(self):
         with TemporaryDirectory() as tmpdir:
             image_path = Path(tmpdir) / "frame.png"
@@ -254,6 +271,30 @@ class ImagePipelineTest(unittest.TestCase):
             result = run_image_pipeline(config, predictor_factory=lambda config: FakePredictor())
             self.assertEqual(result.heatmap_paths, ())
             self.assertFalse((result.output_dir / "heatmaps").exists())
+
+    def test_run_image_pipeline_does_not_save_rendered_by_default(self):
+        with TemporaryDirectory() as tmpdir:
+            image_path = Path(tmpdir) / "frame.png"
+            write_test_image(image_path)
+            config = make_config(input_path=str(image_path), output_dir=str(Path(tmpdir) / "outputs"))
+
+            result = run_image_pipeline(config, predictor_factory=lambda config: FakePredictor())
+
+            self.assertIsNone(result.rendered_path)
+            self.assertFalse((result.output_dir / "rendered.png").exists())
+
+    def test_run_image_pipeline_rejects_invalid_rendered_name(self):
+        invalid_names = ("../bad.png", "subdir/rendered.png", "rendered.txt", "")
+        for rendered_name in invalid_names:
+            with self.subTest(rendered_name=rendered_name):
+                with self.assertRaises(ValueError):
+                    make_config(rendered_name=rendered_name)
+
+    def test_run_image_pipeline_rejects_invalid_heatmap_alpha(self):
+        for alpha in (-0.1, 1.1):
+            with self.subTest(alpha=alpha):
+                with self.assertRaises(ValueError):
+                    make_config(heatmap_alpha=alpha)
 
     def test_run_image_pipeline_rejects_unsupported_input(self):
         with TemporaryDirectory() as tmpdir:

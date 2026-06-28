@@ -148,7 +148,7 @@ python main.py `
   --model gazelle_dinov2_vitb14_inout
 ```
 
-This command constructs the Gazelle model and DINOv2 backbone. If the selected Gazelle checkpoint or DINOv2 weights are not already cached, it may download them. It writes a per-image output directory such as `outputs/frame_gazelle/` containing `predictions.json` and `run_config.json`. The current image pipeline supports single images only; it does not process video, open a camera, create a rendered overlay, or write video JSONL.
+This command constructs the Gazelle model and DINOv2 backbone. If the selected Gazelle checkpoint or DINOv2 weights are not already cached, it may download them. It writes a per-image output directory such as `outputs/frame_gazelle/` containing `predictions.json` and `run_config.json`. The current image pipeline supports single images only; it does not process video, open a camera, or write video JSONL.
 
 Head input sources:
 
@@ -190,6 +190,20 @@ python main.py `
 
 Raw heatmaps are saved under `heatmaps/` in the per-image output directory and referenced from `predictions.json`. Heatmaps are not embedded directly in JSON, and `heatmap_peak_value` should not be treated as a calibrated probability.
 
+Use `--save-rendered` to save a visual overlay image:
+
+```powershell
+python main.py `
+  --input samples\frame.jpg `
+  --output-dir outputs `
+  --head-source static `
+  --bbox 0.10 0.12 0.22 0.30 `
+  --bbox-format normalized `
+  --save-rendered
+```
+
+By default, image inference writes `predictions.json` and `run_config.json`; rendered output is written only when `--save-rendered` is passed. The default rendered file is `rendered.png`. Use `--rendered-name` to choose a `.png`, `.jpg`, or `.jpeg` file name, and `--heatmap-alpha` to control heatmap transparency. The rendered overlay can include the heatmap, head bbox, gaze peak, person id, and optional `inout_score`; pass `--no-head-box`, `--no-gaze-peak`, or `--no-labels` to disable those drawing components. Rendering does not change `predictions.json`, and `heatmap_peak_value` is not a calibrated probability. The renderer is currently for single images only; video overlay/recomposition is not implemented yet.
+
 ### Programmatic Single-Frame Predictor
 
 `GazellePredictor` provides a programmatic single-frame interface for already prepared checkpoints:
@@ -228,7 +242,7 @@ Runtime head behavior is intentionally strict:
 
 The programmatic predictor API remains available for direct in-memory use. The CLI image pipeline above is the first user-facing wrapper around it; video CLI integration is still pending.
 
-The following runtime features are planned but not available yet in this milestone: automatic head detection, streaming video inference, video recomposition, rendered overlays, video JSONL output, ROI/process logic, and Multi-Pose integration.
+The following runtime features are planned but not available yet in this milestone: automatic head detection, streaming video inference, video recomposition, video overlays, video JSONL output, ROI/process logic, and Multi-Pose integration.
 
 
 ## Usage

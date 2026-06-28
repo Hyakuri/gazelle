@@ -84,6 +84,37 @@ def build_parser() -> argparse.ArgumentParser:
         help="Save raw per-person heatmap tensors alongside predictions.json.",
     )
     parser.add_argument(
+        "--save-rendered",
+        action="store_true",
+        help="Save a rendered visual overlay image for single-image inference.",
+    )
+    parser.add_argument(
+        "--rendered-name",
+        default="rendered.png",
+        help="Rendered image file name written inside the per-image output directory.",
+    )
+    parser.add_argument(
+        "--heatmap-alpha",
+        type=float,
+        default=0.45,
+        help="Rendered heatmap overlay alpha in [0, 1].",
+    )
+    parser.add_argument(
+        "--no-head-box",
+        action="store_true",
+        help="Do not draw head bounding boxes in rendered image output.",
+    )
+    parser.add_argument(
+        "--no-gaze-peak",
+        action="store_true",
+        help="Do not draw gaze peak markers in rendered image output.",
+    )
+    parser.add_argument(
+        "--no-labels",
+        action="store_true",
+        help="Do not draw person labels in rendered image output.",
+    )
+    parser.add_argument(
         "--device",
         default="auto",
         help="Runtime device: auto, cpu, cuda, or cuda:<index>.",
@@ -152,6 +183,8 @@ def main(argv: Optional[Sequence[str]] = None, stdout: Optional[TextIO] = None) 
         stdout.write("Wrote Gazelle image inference outputs to {}\n".format(result.output_dir))
         stdout.write("predictions: {}\n".format(result.predictions_path))
         stdout.write("run_config: {}\n".format(result.run_config_path))
+        if result.rendered_path is not None:
+            stdout.write("rendered: {}\n".format(result.rendered_path))
         return 0
 
     parser = build_parser()
