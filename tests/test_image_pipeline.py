@@ -1,7 +1,9 @@
 import json
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from types import SimpleNamespace
 
 import torch
 from PIL import Image
@@ -10,6 +12,8 @@ from gazelle.runtime.config import RuntimeConfig
 from gazelle.runtime.contracts import GazePrediction
 from gazelle.runtime.heads import JsonHeadProvider, NoneHeadProvider, StaticHeadProvider
 from gazelle.runtime.pipeline import (
+    _safe_clear_output_dir,
+    _build_real_predictor,
     build_head_provider_from_config,
     create_output_dir,
     run_image_pipeline,
@@ -123,6 +127,35 @@ class ImagePipelineTest(unittest.TestCase):
             result = create_output_dir("frame.png", output_dir, overwrite=True)
 
             self.assertEqual(result, existing)
+
+    def test_create_output_dir_overwrite_cleans_stale_files(self):
+        with TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir) / "outputs"
+            existing = output_dir / "frame_gazelle"
+            (existing / "heatmaps").mkdir(parents=True)
+            (existing / "predictions.json").write_text("old", encoding="utf-8")
+            (existing / "run_config.json").write_text("old", encoding="utf-8")
+            (existing / "rendered.png").write_text("old", encoding="utf-8")
+            (existing / "heatmaps" / "person_0.pt").write_text("old", encoding="utf-8")
+
+            result = create_output_dir("frame.png", output_dir, overwrite=True)
+
+            self.assertEqual(result, existing)
+            self.assertTrue(existing.exists())
+            self.assertEqual(tuple(existing.iterdir()), ())
+
+    def test_create_output_dir_refuses_to_clean_non_gazelle_directory(self):
+        with TemporaryDirectory() as tmpdir:
+            output_root = Path(tmpdir) / "outputs"
+            unsafe = output_root / "manual"
+            unsafe.mkdir(parents=True)
+            marker = unsafe / "keep.txt"
+            marker.write_text("keep", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "non-Gazelle"):
+                _safe_clear_output_dir(unsafe, output_root)
+
+            self.assertTrue(marker.exists())
 
     def test_run_image_pipeline_none_head_source(self):
         with TemporaryDirectory() as tmpdir:
@@ -283,6 +316,30 @@ class ImagePipelineTest(unittest.TestCase):
             self.assertIsNone(result.rendered_path)
             self.assertFalse((result.output_dir / "rendered.png").exists())
 
+    def test_run_image_pipeline_overwrite_removes_stale_heatmaps_and_rendered(self):
+        with TemporaryDirectory() as tmpdir:
+            image_path = Path(tmpdir) / "frame.png"
+            write_test_image(image_path)
+            output_dir = Path(tmpdir) / "outputs"
+            existing = output_dir / "frame_gazelle"
+            (existing / "heatmaps").mkdir(parents=True)
+            (existing / "heatmaps" / "person_9.pt").write_text("old", encoding="utf-8")
+            (existing / "rendered.png").write_text("old", encoding="utf-8")
+            config = make_config(
+                input_path=str(image_path),
+                output_dir=str(output_dir),
+                overwrite=True,
+                save_heatmaps=False,
+                save_rendered=False,
+            )
+
+            result = run_image_pipeline(config, predictor_factory=lambda config: FakePredictor())
+
+            self.assertTrue(result.predictions_path.exists())
+            self.assertTrue(result.run_config_path.exists())
+            self.assertFalse((result.output_dir / "heatmaps").exists())
+            self.assertFalse((result.output_dir / "rendered.png").exists())
+
     def test_run_image_pipeline_rejects_invalid_rendered_name(self):
         invalid_names = ("../bad.png", "subdir/rendered.png", "rendered.txt", "")
         for rendered_name in invalid_names:
@@ -303,10 +360,46 @@ class ImagePipelineTest(unittest.TestCase):
             fake = FakePredictor()
             config = make_config(input_path=str(input_path), output_dir=str(Path(tmpdir) / "outputs"))
 
-            with self.assertRaisesRegex(ValueError, "video pipeline is not implemented"):
+            with self.assertRaisesRegex(ValueError, "Unsupported input path"):
                 run_image_pipeline(config, predictor_factory=lambda config: fake)
 
         self.assertEqual(fake.calls, [])
+
+    def test_build_real_predictor_disables_xformers_during_cpu_prepare(self):
+        with TemporaryDirectory() as tmpdir:
+            observed = []
+            config = make_config(cache_dir=tmpdir, device="cpu")
+            prepared = SimpleNamespace(checkpoint_path=Path(tmpdir) / "model.pt")
+
+            def fake_prepare_runtime_resources(config):
+                observed.append(("prepare", os.environ.get("XFORMERS_DISABLED")))
+                return prepared
+
+            def fake_from_checkpoint(model_name, checkpoint_path, device, cache_dir):
+                observed.append(("from_checkpoint", os.environ.get("XFORMERS_DISABLED"), device))
+                return "predictor"
+
+            with unittest.mock.patch.dict(os.environ, {}, clear=True):
+                with unittest.mock.patch(
+                    "gazelle.runtime.resources.prepare_runtime_resources",
+                    side_effect=fake_prepare_runtime_resources,
+                ):
+                    with unittest.mock.patch(
+                        "gazelle.runtime.predictor.GazellePredictor.from_checkpoint",
+                        side_effect=fake_from_checkpoint,
+                    ):
+                        predictor = _build_real_predictor(config)
+
+                self.assertIsNone(os.environ.get("XFORMERS_DISABLED"))
+
+        self.assertEqual(predictor, "predictor")
+        self.assertEqual(
+            observed,
+            [
+                ("prepare", "1"),
+                ("from_checkpoint", "1", "cpu"),
+            ],
+        )
 
 
 if __name__ == "__main__":

@@ -8,6 +8,8 @@ from PIL import Image
 
 from gazelle.runtime.contracts import GazePrediction
 from gazelle.runtime.renderer import (
+    PredictionRenderer,
+    RenderOptions,
     heatmap_to_overlay,
     render_predictions,
     save_rendered_image,
@@ -38,6 +40,14 @@ def make_prediction(
 
 
 class RendererTest(unittest.TestCase):
+    def test_render_options_defaults(self):
+        options = RenderOptions()
+
+        self.assertEqual(options.heatmap_alpha, 0.45)
+        self.assertTrue(options.draw_head_box)
+        self.assertTrue(options.draw_gaze_peak)
+        self.assertTrue(options.draw_labels)
+
     def test_stable_color_is_repeatable(self):
         self.assertEqual(stable_color_for_person(7), stable_color_for_person(7))
 
@@ -83,6 +93,44 @@ class RendererTest(unittest.TestCase):
 
         self.assertEqual(rendered.mode, "RGB")
         self.assertEqual(rendered.size, image.size)
+
+    def test_prediction_renderer_can_be_reused(self):
+        renderer = PredictionRenderer(RenderOptions(heatmap_alpha=0.25))
+        first = Image.new("RGB", (12, 10), color=(20, 20, 20))
+        second = Image.new("RGB", (14, 8), color=(30, 30, 30))
+        first_before = first.tobytes()
+        second_before = second.tobytes()
+
+        first_rendered = renderer.render(first, [make_prediction(person_id=1)])
+        second_rendered = renderer.render(second, [make_prediction(person_id=2)])
+
+        self.assertEqual(first_rendered.size, first.size)
+        self.assertEqual(second_rendered.size, second.size)
+        self.assertEqual(first.tobytes(), first_before)
+        self.assertEqual(second.tobytes(), second_before)
+
+    def test_render_predictions_preserves_function_api(self):
+        image = Image.new("RGB", (12, 10), color=(20, 20, 20))
+        rendered = render_predictions(
+            image,
+            [make_prediction()],
+            heatmap_alpha=0.25,
+            draw_head_box=False,
+            draw_gaze_peak=False,
+            draw_labels=False,
+        )
+
+        self.assertEqual(rendered.mode, "RGB")
+        self.assertEqual(rendered.size, image.size)
+
+    def test_prediction_renderer_uses_cached_font_indirectly(self):
+        renderer = PredictionRenderer()
+        image = Image.new("RGB", (12, 10), color=(20, 20, 20))
+
+        rendered = renderer.render(image, [make_prediction(heatmap=None)])
+
+        self.assertEqual(rendered.mode, "RGB")
+        self.assertNotEqual(rendered.tobytes(), image.tobytes())
 
     def test_render_predictions_does_not_mutate_original_image(self):
         image = Image.new("RGB", (12, 10), color=(20, 20, 20))

@@ -7,6 +7,9 @@ import torch
 
 from gazelle.runtime.contracts import GazePrediction, HeadObservation
 from gazelle.runtime.outputs import (
+    JsonlWriter,
+    append_jsonl,
+    prediction_frame_to_json_dict,
     prediction_to_json_dict,
     save_prediction_heatmaps,
     write_predictions_json,
@@ -35,6 +38,103 @@ class OutputsTest(unittest.TestCase):
         self.assertEqual(record["heatmap_peak_value"], 0.9)
         self.assertEqual(record["inout_score"], 0.88)
         self.assertEqual(record["heatmap_path"], "heatmaps/person_1.pt")
+
+    def test_prediction_frame_to_json_dict_ok(self):
+        record = prediction_frame_to_json_dict(
+            frame_index=12,
+            timestamp_ms=400.0,
+            status="ok",
+            image_width=640,
+            image_height=480,
+            predictions=(make_prediction(person_id=3),),
+            inference_ms=34.2,
+        )
+
+        self.assertEqual(record["frame_index"], 12)
+        self.assertEqual(record["timestamp_ms"], 400.0)
+        self.assertEqual(record["status"], "ok")
+        self.assertEqual(record["width"], 640)
+        self.assertEqual(record["height"], 480)
+        self.assertEqual(record["inference_ms"], 34.2)
+        self.assertEqual(record["people"][0]["person_id"], 3)
+        self.assertNotIn("heatmap_path", record["people"][0])
+
+    def test_prediction_frame_to_json_dict_no_head(self):
+        record = prediction_frame_to_json_dict(
+            frame_index=1,
+            timestamp_ms=33.3,
+            status="no_head",
+            image_width=10,
+            image_height=8,
+            predictions=(),
+        )
+
+        self.assertEqual(record["status"], "no_head")
+        self.assertEqual(record["people"], [])
+        self.assertNotIn("inference_ms", record)
+
+    def test_prediction_frame_to_json_dict_skipped(self):
+        record = prediction_frame_to_json_dict(
+            frame_index=2,
+            timestamp_ms=66.6,
+            status="skipped",
+            image_width=10,
+            image_height=8,
+            predictions=(),
+        )
+
+        self.assertEqual(record["status"], "skipped")
+        self.assertEqual(record["people"], [])
+
+    def test_append_jsonl_writes_one_line(self):
+        with TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "predictions.jsonl"
+            append_jsonl(output_path, {"frame_index": 0, "status": "ok"})
+            lines = output_path.read_text(encoding="utf-8").splitlines()
+
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(json.loads(lines[0])["status"], "ok")
+
+    def test_jsonl_writer_context_manager(self):
+        with TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "predictions.jsonl"
+            with JsonlWriter(output_path) as writer:
+                writer.write({"frame_index": 0, "status": "ok"})
+                writer.write({"frame_index": 1, "status": "skipped"})
+            lines = output_path.read_text(encoding="utf-8").splitlines()
+
+        self.assertEqual([json.loads(line)["status"] for line in lines], ["ok", "skipped"])
+
+    def test_jsonl_people_records_reuse_prediction_schema(self):
+        record = prediction_frame_to_json_dict(
+            frame_index=0,
+            timestamp_ms=0.0,
+            status="ok",
+            image_width=10,
+            image_height=8,
+            predictions=(make_prediction(person_id=5, bbox=None, inout_score=None),),
+        )
+        person = record["people"][0]
+
+        self.assertEqual(person["person_id"], 5)
+        self.assertIsNone(person["bbox_normalized"])
+        self.assertIsNone(person["inout_score"])
+
+    def test_prediction_frame_to_json_dict_serializes_error(self):
+        record = prediction_frame_to_json_dict(
+            frame_index=0,
+            timestamp_ms=0.0,
+            status="error",
+            image_width=10,
+            image_height=8,
+            predictions=(),
+            inference_ms=12.5,
+            error="failed",
+        )
+
+        self.assertEqual(record["status"], "error")
+        self.assertEqual(record["inference_ms"], 12.5)
+        self.assertEqual(record["error"], "failed")
 
     def test_write_predictions_json(self):
         with TemporaryDirectory() as tmpdir:

@@ -1,3 +1,4 @@
+import os
 import sys
 import tempfile
 import types
@@ -177,6 +178,33 @@ class GazellePredictorTest(unittest.TestCase):
             self.assertEqual(fake_model.to_device, "cpu")
             self.assertIn("decoder.weight", fake_model.loaded_state)
             self.assertTrue((Path(tmpdir) / "torch_hub").exists())
+
+    def test_from_checkpoint_disables_xformers_during_cpu_model_construction(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            checkpoint = Path(tmpdir) / "model.pt"
+            torch.save({"decoder.weight": torch.ones(1)}, checkpoint)
+            fake_model = FakeGazelleModel()
+            fake_transform = RecordingTransform()
+            observed_xformers_disabled = []
+            fake_module = types.ModuleType("gazelle.model")
+
+            def fake_get_gazelle_model(model_name):
+                observed_xformers_disabled.append(os.environ.get("XFORMERS_DISABLED"))
+                return fake_model, fake_transform
+
+            fake_module.get_gazelle_model = fake_get_gazelle_model
+
+            with patch.dict(os.environ, {}, clear=True):
+                with patch.dict(sys.modules, {"gazelle.model": fake_module}):
+                    GazellePredictor.from_checkpoint(
+                        "gazelle_dinov2_vitb14_inout",
+                        checkpoint,
+                        device="cpu",
+                        cache_dir=tmpdir,
+                    )
+                self.assertIsNone(os.environ.get("XFORMERS_DISABLED"))
+
+            self.assertEqual(observed_xformers_disabled, ["1"])
 
     def test_from_checkpoint_rejects_unknown_model_before_model_construction(self):
         with tempfile.TemporaryDirectory() as tmpdir:

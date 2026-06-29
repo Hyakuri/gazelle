@@ -7,6 +7,7 @@ from PIL import Image
 
 from gazelle.runtime.config import validate_device_name
 from gazelle.runtime.contracts import BBox, GazePrediction, HeadObservation
+from gazelle.runtime.environment import temporarily_disable_xformers_for_cpu_device
 from gazelle.runtime.geometry import sanitize_head_bbox_for_model
 from gazelle.runtime.model_registry import get_model_spec
 from gazelle.runtime.resources import (
@@ -198,13 +199,15 @@ class GazellePredictor:
         cache_paths = resolve_cache_paths(cache_dir)
         ensure_cache_dirs(cache_paths)
         torch.hub.set_dir(str(cache_paths.torch_hub_dir))
+        resolved_device = resolve_torch_device(device)
 
-        from gazelle.model import get_gazelle_model
+        with temporarily_disable_xformers_for_cpu_device(resolved_device):
+            from gazelle.model import get_gazelle_model
 
-        model, transform = get_gazelle_model(model_name)
+            model, transform = get_gazelle_model(model_name)
         state_dict, _ = load_checkpoint_state_dict(checkpoint_path)
         load_strict_gazelle_checkpoint(model, state_dict)
-        return cls(model_name=model_name, model=model, transform=transform, device=device)
+        return cls(model_name=model_name, model=model, transform=transform, device=str(resolved_device))
 
     def predict_frame(self, frame, heads: Iterable[HeadObservation]) -> List[GazePrediction]:
         heads = tuple(heads)

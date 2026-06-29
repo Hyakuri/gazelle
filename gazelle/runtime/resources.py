@@ -7,6 +7,7 @@ from typing import Callable, Dict, Mapping, Optional, Tuple
 
 import torch
 
+from gazelle.runtime.environment import temporarily_disable_xformers
 from gazelle.runtime.model_registry import CheckpointCandidate, ModelSpec, get_model_spec
 
 
@@ -309,9 +310,10 @@ def prepare_runtime_resources(config) -> PreparedResources:
     ensure_cache_dirs(paths)
     torch.hub.set_dir(str(paths.torch_hub_dir))
 
-    from gazelle.model import get_gazelle_model
+    with temporarily_disable_xformers():
+        from gazelle.model import get_gazelle_model
 
-    model, _ = get_gazelle_model(spec.name)
+        model, _ = get_gazelle_model(spec.name)
 
     if checkpoint_path is not None:
         state_dict, _ = load_checkpoint_state_dict(checkpoint_path)

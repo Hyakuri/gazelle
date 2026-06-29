@@ -35,23 +35,23 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--input",
         default=None,
-        help="Single image input path for local Gazelle inference.",
+        help="Image or video input path for local Gazelle inference.",
     )
     parser.add_argument(
         "--output-dir",
         default="outputs",
-        help="Output root directory for image inference. A per-image subdirectory is created inside it.",
+        help="Output root directory. A per-input subdirectory is created inside it.",
     )
     parser.add_argument(
         "--overwrite",
         action="store_true",
-        help="Allow reuse of an existing per-image output directory.",
+        help="Allow reuse of an existing per-input output directory.",
     )
     parser.add_argument(
         "--head-source",
         choices=("none", "static", "json"),
         default="none",
-        help="Head input source for single-image inference.",
+        help="Head input source for image or video inference.",
     )
     parser.add_argument(
         "--bbox",
@@ -81,17 +81,40 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--save-heatmaps",
         action="store_true",
-        help="Save raw per-person heatmap tensors alongside predictions.json.",
+        help="Save raw per-person heatmap tensors for image inference. Not supported for video.",
     )
     parser.add_argument(
         "--save-rendered",
         action="store_true",
-        help="Save a rendered visual overlay image for single-image inference.",
+        help="Save a rendered visual overlay image or video.",
     )
     parser.add_argument(
         "--rendered-name",
         default="rendered.png",
         help="Rendered image file name written inside the per-image output directory.",
+    )
+    parser.add_argument(
+        "--output-video-name",
+        default="rendered.mp4",
+        help="Rendered video file name written inside the per-video output directory.",
+    )
+    parser.add_argument(
+        "--output-fps",
+        type=float,
+        default=None,
+        help="Fallback output FPS for video rendering when the source FPS is invalid.",
+    )
+    parser.add_argument(
+        "--max-frames",
+        type=int,
+        default=None,
+        help="Optional maximum number of video frames to process and write.",
+    )
+    parser.add_argument(
+        "--frame-step",
+        type=int,
+        default=1,
+        help="Run video inference every N frames; skipped frames are still written to JSONL.",
     )
     parser.add_argument(
         "--heatmap-alpha",
@@ -102,17 +125,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--no-head-box",
         action="store_true",
-        help="Do not draw head bounding boxes in rendered image output.",
+        help="Do not draw head bounding boxes in rendered output.",
     )
     parser.add_argument(
         "--no-gaze-peak",
         action="store_true",
-        help="Do not draw gaze peak markers in rendered image output.",
+        help="Do not draw gaze peak markers in rendered output.",
     )
     parser.add_argument(
         "--no-labels",
         action="store_true",
-        help="Do not draw person labels in rendered image output.",
+        help="Do not draw person labels in rendered output.",
     )
     parser.add_argument(
         "--device",
@@ -177,14 +200,28 @@ def main(argv: Optional[Sequence[str]] = None, stdout: Optional[TextIO] = None) 
         return 0
 
     if config.input_path:
-        from gazelle.runtime.pipeline import run_image_pipeline
+        from gazelle.runtime.media import detect_media_type
+        from gazelle.runtime.pipeline import run_image_pipeline, run_video_pipeline
 
-        result = run_image_pipeline(config)
-        stdout.write("Wrote Gazelle image inference outputs to {}\n".format(result.output_dir))
-        stdout.write("predictions: {}\n".format(result.predictions_path))
-        stdout.write("run_config: {}\n".format(result.run_config_path))
-        if result.rendered_path is not None:
-            stdout.write("rendered: {}\n".format(result.rendered_path))
+        media_type = detect_media_type(config.input_path)
+        if media_type == "image":
+            result = run_image_pipeline(config)
+            stdout.write("Wrote Gazelle image inference outputs to {}\n".format(result.output_dir))
+            stdout.write("predictions: {}\n".format(result.predictions_path))
+            stdout.write("run_config: {}\n".format(result.run_config_path))
+            if result.rendered_path is not None:
+                stdout.write("rendered: {}\n".format(result.rendered_path))
+        elif media_type == "video":
+            result = run_video_pipeline(config)
+            stdout.write("Wrote Gazelle video inference outputs to {}\n".format(result.output_dir))
+            stdout.write("predictions_jsonl: {}\n".format(result.predictions_jsonl_path))
+            stdout.write("run_config: {}\n".format(result.run_config_path))
+            if result.rendered_video_path is not None:
+                stdout.write("rendered_video: {}\n".format(result.rendered_video_path))
+            stdout.write("frames_read: {}\n".format(result.frames_read))
+            stdout.write("frames_written: {}\n".format(result.frames_written))
+        else:
+            raise ValueError("Unsupported media type: {}".format(media_type))
         return 0
 
     parser = build_parser()

@@ -24,16 +24,32 @@ When adding user-facing features, scripts, CLI arguments, environment requiremen
 
 ## Installation
 
-Clone this repo, then create the virtual environment.
-```
-conda env create -f environment.yml
-conda activate gazelle
+The current runtime work in this fork is validated against the existing local Conda environment named `Gazelle`. Prefer that environment when developing or running the staged CLI:
+
+```powershell
+conda activate Gazelle
 pip install -e .
 ```
-If your system supports it, consider installing [xformers](https://github.com/facebookresearch/xformers) to speed up attention computation.
+
+The repository `environment.yml` is aligned to the locally verified runtime environment: Python 3.11, PyTorch 2.6.0 + CUDA 12.6 wheels, TorchVision 0.21.0 + CUDA 12.6, TorchAudio 2.6.0 + CUDA 12.6, OpenCV 4.11.0, and xFormers 0.0.29. The original upstream Gazelle environment file is no longer the primary baseline for this fork's runtime pipeline. If you already have a working `Gazelle` environment, activate it instead of downgrading packages to match older upstream settings.
+
+On a fresh machine, `environment.yml` documents the expected package set:
+
+```powershell
+conda env create -f environment.yml
+conda activate Gazelle
+pip install -e .
 ```
-pip3 install -U xformers --index-url https://download.pytorch.org/whl/cu118
+
+After activating `Gazelle`, these commands validate the CLI and prepare the default local model cache:
+
+```powershell
+python main.py --help
+python main.py --list-models
+python main.py --prepare-only --model gazelle_dinov2_vitb14_inout --cache-dir models
 ```
+
+`--help` and `--list-models` do not download or run inference. `--prepare-only` may download the Gazelle checkpoint and DINOv2 resources on the first run; later runs reuse `models/checkpoints` and `models/torch_hub` when those files are already cached.
 
 ## Pretrained Models
 
@@ -70,7 +86,7 @@ A unified local runtime is being developed around the original research model. T
 python main.py --help
 ```
 
-The runtime currently exposes safe CLI/model-registry inspection, resource preparation, and single-image inference:
+The runtime currently exposes safe CLI/model-registry inspection, resource preparation, single-image inference, and offline video inference:
 
 ```powershell
 python main.py --list-models
@@ -148,7 +164,9 @@ python main.py `
   --model gazelle_dinov2_vitb14_inout
 ```
 
-This command constructs the Gazelle model and DINOv2 backbone. If the selected Gazelle checkpoint or DINOv2 weights are not already cached, it may download them. It writes a per-image output directory such as `outputs/frame_gazelle/` containing `predictions.json` and `run_config.json`. The current image pipeline supports single images only; it does not process video, open a camera, or write video JSONL.
+This command constructs the Gazelle model and DINOv2 backbone. If the selected Gazelle checkpoint or DINOv2 weights are not already cached, it may download them. It writes a per-image output directory such as `outputs/frame_gazelle/` containing `predictions.json` and `run_config.json`. Image input does not open a camera or write video JSONL; video input is handled by the video inference path below.
+
+When `--overwrite` is used, the per-image output directory is cleaned before writing new results, so stale heatmaps or rendered images from earlier runs are removed.
 
 Head input sources:
 
@@ -202,7 +220,89 @@ python main.py `
   --save-rendered
 ```
 
-By default, image inference writes `predictions.json` and `run_config.json`; rendered output is written only when `--save-rendered` is passed. The default rendered file is `rendered.png`. Use `--rendered-name` to choose a `.png`, `.jpg`, or `.jpeg` file name, and `--heatmap-alpha` to control heatmap transparency. The rendered overlay can include the heatmap, head bbox, gaze peak, person id, and optional `inout_score`; pass `--no-head-box`, `--no-gaze-peak`, or `--no-labels` to disable those drawing components. Rendering does not change `predictions.json`, and `heatmap_peak_value` is not a calibrated probability. The renderer is currently for single images only; video overlay/recomposition is not implemented yet.
+By default, image inference writes `predictions.json` and `run_config.json`; rendered output is written only when `--save-rendered` is passed. The default rendered file is `rendered.png`. Use `--rendered-name` to choose a `.png`, `.jpg`, or `.jpeg` file name, and `--heatmap-alpha` to control heatmap transparency. The rendered overlay can include the heatmap, head bbox, gaze peak, person id, and optional `inout_score`; pass `--no-head-box`, `--no-gaze-peak`, or `--no-labels` to disable those drawing components. Rendering does not change `predictions.json`, and `heatmap_peak_value` is not a calibrated probability.
+
+### Video Inference
+
+The runtime can process a local video file frame by frame in an offline pipeline:
+
+```powershell
+python main.py `
+  --input samples\assembly.mp4 `
+  --output-dir outputs `
+  --head-source none `
+  --save-rendered
+```
+
+This command constructs the Gazelle model and DINOv2 backbone. If the selected Gazelle checkpoint or DINOv2 weights are not already cached, it may download them. It streams frames from the input video, writes a per-video output directory such as `outputs/assembly_gazelle/`, and always writes `predictions.jsonl` and `run_config.json`. This is offline video processing, not real-time webcam processing. Audio is not preserved in rendered videos.
+
+Pass `--save-rendered` to write a rendered `.mp4`; the default video output name is `rendered.mp4`, and `--output-video-name` can choose another `.mp4` file name. The same rendering flags used for images also apply to rendered videos: `--heatmap-alpha`, `--no-head-box`, `--no-gaze-peak`, and `--no-labels`.
+
+Video head input sources use the same `--head-source none`, `--head-source static`, and `--head-source json` options as image inference. JSON head data for video should use one record per `frame_index`, either in JSONL or a JSON list. If a frame is missing from JSON head data, the runtime writes a `predictions.jsonl` row with `status="no_head"` and skips model inference for that frame.
+
+Use JSON head data:
+
+```powershell
+python main.py `
+  --input samples\assembly.mp4 `
+  --output-dir outputs `
+  --head-source json `
+  --head-data samples\assembly_heads.jsonl `
+  --save-rendered
+```
+
+Use a static pixel bbox and process only part of a video:
+
+```powershell
+python main.py `
+  --input samples\assembly.mp4 `
+  --output-dir outputs `
+  --head-source static `
+  --bbox 100 80 220 230 `
+  --bbox-format pixel `
+  --max-frames 100 `
+  --frame-step 2
+```
+
+`--frame-step` runs Gazelle only every N frames. Skipped frames still get `predictions.jsonl` rows with `status="skipped"` and are copied unchanged into the rendered video when rendering is enabled. `--max-frames` limits how many frames are written. `--output-fps` is used only when the source video FPS is invalid; otherwise the source FPS is preserved. `--save-heatmaps` is not supported for video in this milestone and exits with `video heatmap export is not implemented yet`.
+
+### Real Smoke Tests
+
+The image and video smoke tests should be run inside the existing local Conda environment:
+
+```powershell
+conda activate Gazelle
+```
+
+Single-image smoke test:
+
+```powershell
+python main.py `
+  --input samples\frame.jpg `
+  --output-dir outputs `
+  --head-source none `
+  --model gazelle_dinov2_vitb14_inout `
+  --cache-dir models `
+  --save-rendered `
+  --save-heatmaps `
+  --overwrite
+```
+
+Short video smoke test:
+
+```powershell
+python main.py `
+  --input samples\assembly.mp4 `
+  --output-dir outputs `
+  --head-source none `
+  --max-frames 5 `
+  --save-rendered `
+  --model gazelle_dinov2_vitb14_inout `
+  --cache-dir models `
+  --overwrite
+```
+
+These commands construct the real Gazelle predictor and DINOv2 backbone, load the Gazelle checkpoint, run inference, and write output directories. If `models/checkpoints` or `models/torch_hub` are empty, the first run may download the Gazelle checkpoint, DINOv2 PyTorch Hub repository, and DINOv2 weights. Re-running the same commands should reuse the cache. CPU smoke tests are supported with `--device cpu`; when constructing DINOv2 on CPU, the runtime temporarily disables xFormers so a CUDA-only xFormers wheel does not force an unsupported CPU attention kernel.
 
 ### Programmatic Single-Frame Predictor
 
@@ -240,9 +340,9 @@ Runtime head behavior is intentionally strict:
 - Multi-person inference requires a valid bbox for every head.
 - Bboxes are validated as finite normalized `(xmin, ymin, xmax, ymax)` values, clipped to `[0, 1]`, and rejected if clipping leaves an empty box.
 
-The programmatic predictor API remains available for direct in-memory use. The CLI image pipeline above is the first user-facing wrapper around it; video CLI integration is still pending.
+The programmatic predictor API remains available for direct in-memory use. The CLI image and offline video pipelines above are user-facing wrappers around it.
 
-The following runtime features are planned but not available yet in this milestone: automatic head detection, streaming video inference, video recomposition, video overlays, video JSONL output, ROI/process logic, and Multi-Pose integration.
+The following runtime features are planned but not available yet in this milestone: real-time webcam input, automatic head detection, tracking, ROI/process logic, Multi-Pose integration, audio remuxing, raw video heatmap export, and high-performance asynchronous inference.
 
 
 ## Usage
