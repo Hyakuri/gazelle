@@ -24,16 +24,32 @@ When adding user-facing features, scripts, CLI arguments, environment requiremen
 
 ## Installation
 
-Clone this repo, then create the virtual environment.
-```
-conda env create -f environment.yml
-conda activate gazelle
+The current runtime work in this fork is validated against the existing local Conda environment named `Gazelle`. Prefer that environment when developing or running the staged CLI:
+
+```powershell
+conda activate Gazelle
 pip install -e .
 ```
-If your system supports it, consider installing [xformers](https://github.com/facebookresearch/xformers) to speed up attention computation.
+
+The repository `environment.yml` is aligned to the locally verified runtime environment: Python 3.11, PyTorch 2.6.0 + CUDA 12.6 wheels, TorchVision 0.21.0 + CUDA 12.6, TorchAudio 2.6.0 + CUDA 12.6, OpenCV 4.11.0, and xFormers 0.0.29. The original upstream Gazelle environment file is no longer the primary baseline for this fork's runtime pipeline. If you already have a working `Gazelle` environment, activate it instead of downgrading packages to match older upstream settings.
+
+On a fresh machine, `environment.yml` documents the expected package set:
+
+```powershell
+conda env create -f environment.yml
+conda activate Gazelle
+pip install -e .
 ```
-pip3 install -U xformers --index-url https://download.pytorch.org/whl/cu118
+
+After activating `Gazelle`, these commands validate the CLI and prepare the default local model cache:
+
+```powershell
+python main.py --help
+python main.py --list-models
+python main.py --prepare-only --model gazelle_dinov2_vitb14_inout --cache-dir models
 ```
+
+`--help` and `--list-models` do not download or run inference. `--prepare-only` may download the Gazelle checkpoint and DINOv2 resources on the first run; later runs reuse `models/checkpoints` and `models/torch_hub` when those files are already cached.
 
 ## Pretrained Models
 
@@ -249,6 +265,44 @@ python main.py `
 ```
 
 `--frame-step` runs Gazelle only every N frames. Skipped frames still get `predictions.jsonl` rows with `status="skipped"` and are copied unchanged into the rendered video when rendering is enabled. `--max-frames` limits how many frames are written. `--output-fps` is used only when the source video FPS is invalid; otherwise the source FPS is preserved. `--save-heatmaps` is not supported for video in this milestone and exits with `video heatmap export is not implemented yet`.
+
+### Real Smoke Tests
+
+The image and video smoke tests should be run inside the existing local Conda environment:
+
+```powershell
+conda activate Gazelle
+```
+
+Single-image smoke test:
+
+```powershell
+python main.py `
+  --input samples\frame.jpg `
+  --output-dir outputs `
+  --head-source none `
+  --model gazelle_dinov2_vitb14_inout `
+  --cache-dir models `
+  --save-rendered `
+  --save-heatmaps `
+  --overwrite
+```
+
+Short video smoke test:
+
+```powershell
+python main.py `
+  --input samples\assembly.mp4 `
+  --output-dir outputs `
+  --head-source none `
+  --max-frames 5 `
+  --save-rendered `
+  --model gazelle_dinov2_vitb14_inout `
+  --cache-dir models `
+  --overwrite
+```
+
+These commands construct the real Gazelle predictor and DINOv2 backbone, load the Gazelle checkpoint, run inference, and write output directories. If `models/checkpoints` or `models/torch_hub` are empty, the first run may download the Gazelle checkpoint, DINOv2 PyTorch Hub repository, and DINOv2 weights. Re-running the same commands should reuse the cache. CPU smoke tests are supported with `--device cpu`; when constructing DINOv2 on CPU, the runtime temporarily disables xFormers so a CUDA-only xFormers wheel does not force an unsupported CPU attention kernel.
 
 ### Programmatic Single-Frame Predictor
 

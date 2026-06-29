@@ -30,47 +30,32 @@
 
 ## 安装方式
 
-官方环境文件是 `environment.yml`：
-
-```powershell
-conda env create -f environment.yml
-conda activate gazelle
-pip install -e .
-```
-
-如果系统支持，也可以安装 `xformers` 来加速 attention 计算：
-
-```powershell
-pip install -U xformers --index-url https://download.pytorch.org/whl/cu118
-```
-
-### Windows / CUDA 推荐环境
-
-如果是在本项目和 Multi-Pose 联合开发的 Windows 机器上调试，可以使用单独的 `Gazelle` 环境，避免修改 Multi-Pose 的运行环境：
+当前 fork 的 runtime pipeline 以本地已经验证过的 Conda 环境 `Gazelle` 为推荐环境。开发或运行当前分阶段 CLI 时，优先激活这个环境：
 
 ```powershell
 conda activate Gazelle
+pip install -e .
 ```
 
-如果不执行 `pip install -e .`，也可以直接通过 `PYTHONPATH` 使用当前仓库源码：
+仓库中的 `environment.yml` 已对齐本地验证环境：Python 3.11、PyTorch 2.6.0 + CUDA 12.6 wheels、TorchVision 0.21.0 + CUDA 12.6、TorchAudio 2.6.0 + CUDA 12.6、OpenCV 4.11.0，以及 xFormers 0.0.29。原始 upstream Gazelle 的旧环境配置不再作为本 fork 当前 runtime pipeline 的主要依据。如果你已经有可运行的本地 `Gazelle` 环境，请优先激活它，不要为了匹配旧 upstream 设置而降级当前环境。
+
+如果是在一台全新机器上配置，`environment.yml` 记录了当前预期的包版本：
 
 ```powershell
-$env:PYTHONPATH = Get-Location
-python -c "from gazelle.model import get_gazelle_model; print('gazelle import ok')"
+conda env create -f environment.yml
+conda activate Gazelle
+pip install -e .
 ```
 
-这种方式适合在源码仍频繁调整时使用。它不会在仓库里生成 `egg-info`，也不会修改其他项目环境。
-
-### 首次运行前检查
-
-建议先运行不下载模型权重的检查命令：
+激活 `Gazelle` 后，建议先运行以下命令验证 CLI，并准备默认本地模型缓存：
 
 ```powershell
-python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
-python -c "from gazelle.model import get_gazelle_model; print('gazelle import ok')"
+python main.py --help
+python main.py --list-models
+python main.py --prepare-only --model gazelle_dinov2_vitb14_inout --cache-dir models
 ```
 
-注意：只要实际调用 `get_gazelle_model(...)` 构建模型，代码会通过 `torch.hub.load('facebookresearch/dinov2', ...)` 加载 DINOv2 backbone。如果本地没有缓存，这一步可能访问网络并下载 DINOv2 权重。
+`--help` 和 `--list-models` 不会下载模型，也不会运行推理。`--prepare-only` 首次运行时可能下载 Gazelle checkpoint、DINOv2 PyTorch Hub 仓库和 DINOv2 权重；再次运行相同命令时应复用 `models/checkpoints` 和 `models/torch_hub` 中已有的缓存。
 
 ## 预训练模型
 
@@ -289,6 +274,44 @@ python main.py `
 ```
 
 `--frame-step` 表示每隔 N 帧运行一次 Gazelle。被跳过的帧仍会写入 `status="skipped"` 的 `predictions.jsonl` 行；如果启用了渲染，这些帧会以原帧写入渲染视频。`--max-frames` 限制写出的帧数。`--output-fps` 只在源视频 FPS 无效时作为 fallback；源视频 FPS 有效时会保留源 FPS。当前里程碑不支持视频 `--save-heatmaps`，使用时会报错 `video heatmap export is not implemented yet`。
+
+### 真实 smoke test
+
+真实图片 / 视频 smoke test 应在现有本地 Conda 环境 `Gazelle` 中运行：
+
+```powershell
+conda activate Gazelle
+```
+
+单图 smoke test：
+
+```powershell
+python main.py `
+  --input samples\frame.jpg `
+  --output-dir outputs `
+  --head-source none `
+  --model gazelle_dinov2_vitb14_inout `
+  --cache-dir models `
+  --save-rendered `
+  --save-heatmaps `
+  --overwrite
+```
+
+短视频 smoke test：
+
+```powershell
+python main.py `
+  --input samples\assembly.mp4 `
+  --output-dir outputs `
+  --head-source none `
+  --max-frames 5 `
+  --save-rendered `
+  --model gazelle_dinov2_vitb14_inout `
+  --cache-dir models `
+  --overwrite
+```
+
+这些命令会构建真实 Gazelle predictor 和 DINOv2 backbone，加载 Gazelle checkpoint，执行推理，并写出输出目录。如果 `models/checkpoints` 或 `models/torch_hub` 为空，首次运行可能下载 Gazelle checkpoint、DINOv2 PyTorch Hub 仓库和 DINOv2 权重；再次运行相同命令时应复用缓存。CPU smoke test 可以使用 `--device cpu`；在 CPU 上构建 DINOv2 时，runtime 会临时关闭 xFormers，避免本地 CUDA-only xFormers wheel 强制使用不支持的 CPU attention kernel。
 
 ### 编程式单帧 Predictor
 

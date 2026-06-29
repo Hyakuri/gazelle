@@ -1,7 +1,9 @@
 import json
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from types import SimpleNamespace
 
 import torch
 from PIL import Image
@@ -11,6 +13,7 @@ from gazelle.runtime.contracts import GazePrediction
 from gazelle.runtime.heads import JsonHeadProvider, NoneHeadProvider, StaticHeadProvider
 from gazelle.runtime.pipeline import (
     _safe_clear_output_dir,
+    _build_real_predictor,
     build_head_provider_from_config,
     create_output_dir,
     run_image_pipeline,
@@ -361,6 +364,42 @@ class ImagePipelineTest(unittest.TestCase):
                 run_image_pipeline(config, predictor_factory=lambda config: fake)
 
         self.assertEqual(fake.calls, [])
+
+    def test_build_real_predictor_disables_xformers_during_cpu_prepare(self):
+        with TemporaryDirectory() as tmpdir:
+            observed = []
+            config = make_config(cache_dir=tmpdir, device="cpu")
+            prepared = SimpleNamespace(checkpoint_path=Path(tmpdir) / "model.pt")
+
+            def fake_prepare_runtime_resources(config):
+                observed.append(("prepare", os.environ.get("XFORMERS_DISABLED")))
+                return prepared
+
+            def fake_from_checkpoint(model_name, checkpoint_path, device, cache_dir):
+                observed.append(("from_checkpoint", os.environ.get("XFORMERS_DISABLED"), device))
+                return "predictor"
+
+            with unittest.mock.patch.dict(os.environ, {}, clear=True):
+                with unittest.mock.patch(
+                    "gazelle.runtime.resources.prepare_runtime_resources",
+                    side_effect=fake_prepare_runtime_resources,
+                ):
+                    with unittest.mock.patch(
+                        "gazelle.runtime.predictor.GazellePredictor.from_checkpoint",
+                        side_effect=fake_from_checkpoint,
+                    ):
+                        predictor = _build_real_predictor(config)
+
+                self.assertIsNone(os.environ.get("XFORMERS_DISABLED"))
+
+        self.assertEqual(predictor, "predictor")
+        self.assertEqual(
+            observed,
+            [
+                ("prepare", "1"),
+                ("from_checkpoint", "1", "cpu"),
+            ],
+        )
 
 
 if __name__ == "__main__":

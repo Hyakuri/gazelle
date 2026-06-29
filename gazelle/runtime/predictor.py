@@ -1,5 +1,7 @@
+from contextlib import contextmanager
 from pathlib import Path
 from collections.abc import Mapping
+import os
 from typing import Iterable, List, Optional, Sequence, Tuple
 
 import torch
@@ -41,6 +43,23 @@ def resolve_torch_device(device_name: str) -> torch.device:
             )
         return torch.device(validated)
     return torch.device(validated)
+
+
+@contextmanager
+def _disable_xformers_for_cpu_device(device: torch.device):
+    if device.type != "cpu":
+        yield
+        return
+
+    previous = os.environ.get("XFORMERS_DISABLED")
+    os.environ["XFORMERS_DISABLED"] = "1"
+    try:
+        yield
+    finally:
+        if previous is None:
+            os.environ.pop("XFORMERS_DISABLED", None)
+        else:
+            os.environ["XFORMERS_DISABLED"] = previous
 
 
 def prepare_head_bboxes(heads: Sequence[HeadObservation]) -> Tuple[List[HeadObservation], List[Optional[BBox]]]:
@@ -198,13 +217,15 @@ class GazellePredictor:
         cache_paths = resolve_cache_paths(cache_dir)
         ensure_cache_dirs(cache_paths)
         torch.hub.set_dir(str(cache_paths.torch_hub_dir))
+        resolved_device = resolve_torch_device(device)
 
-        from gazelle.model import get_gazelle_model
+        with _disable_xformers_for_cpu_device(resolved_device):
+            from gazelle.model import get_gazelle_model
 
-        model, transform = get_gazelle_model(model_name)
+            model, transform = get_gazelle_model(model_name)
         state_dict, _ = load_checkpoint_state_dict(checkpoint_path)
         load_strict_gazelle_checkpoint(model, state_dict)
-        return cls(model_name=model_name, model=model, transform=transform, device=device)
+        return cls(model_name=model_name, model=model, transform=transform, device=str(resolved_device))
 
     def predict_frame(self, frame, heads: Iterable[HeadObservation]) -> List[GazePrediction]:
         heads = tuple(heads)

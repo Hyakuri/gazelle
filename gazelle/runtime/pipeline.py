@@ -112,22 +112,28 @@ def create_output_dir(
 
 
 def _build_real_predictor(config):
-    from gazelle.runtime.predictor import GazellePredictor
+    from gazelle.runtime.predictor import (
+        GazellePredictor,
+        _disable_xformers_for_cpu_device,
+        resolve_torch_device,
+    )
     from gazelle.runtime.resources import prepare_runtime_resources
 
-    if config.checkpoint:
-        checkpoint_path = config.checkpoint
-    else:
-        prepared = prepare_runtime_resources(config)
-        checkpoint_path = prepared.checkpoint_path
+    resolved_device = resolve_torch_device(config.device)
+    with _disable_xformers_for_cpu_device(resolved_device):
+        if config.checkpoint:
+            checkpoint_path = config.checkpoint
+        else:
+            prepared = prepare_runtime_resources(config)
+            checkpoint_path = prepared.checkpoint_path
 
-    # TODO: avoid double model construction by sharing prepared model in a future optimization.
-    return GazellePredictor.from_checkpoint(
-        config.model,
-        checkpoint_path,
-        device=config.device,
-        cache_dir=config.cache_dir,
-    )
+        # TODO: avoid double model construction by sharing prepared model in a future optimization.
+        return GazellePredictor.from_checkpoint(
+            config.model,
+            checkpoint_path,
+            device=str(resolved_device),
+            cache_dir=config.cache_dir,
+        )
 
 
 def _run_config_payload(config, *, input_path, image_width: int, image_height: int):
