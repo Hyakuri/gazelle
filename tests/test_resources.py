@@ -1,3 +1,4 @@
+import os
 import sys
 import tempfile
 import types
@@ -198,6 +199,32 @@ class ResourcesTest(unittest.TestCase):
                 prepared = prepare_runtime_resources(config)
             self.assertEqual(prepared.checkpoint_path, checkpoint)
             self.assertIsNone(prepared.checkpoint_candidate)
+
+    def test_prepare_runtime_resources_disables_xformers_during_model_construction(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            checkpoint = Path(tmpdir) / "user.pt"
+            torch.save(valid_state_dict(), checkpoint)
+            observed_xformers_disabled = []
+            fake_module = types.ModuleType("gazelle.model")
+
+            def fake_get_gazelle_model(name):
+                observed_xformers_disabled.append(os.environ.get("XFORMERS_DISABLED"))
+                return FakeModel(), object()
+
+            fake_module.get_gazelle_model = fake_get_gazelle_model
+            config = SimpleNamespace(
+                model="gazelle_dinov2_vitb14_inout",
+                cache_dir=tmpdir,
+                checkpoint=str(checkpoint),
+                force_download=False,
+            )
+
+            with patch.dict(os.environ, {}, clear=True):
+                with patch.dict(sys.modules, {"gazelle.model": fake_module}):
+                    prepare_runtime_resources(config)
+                self.assertIsNone(os.environ.get("XFORMERS_DISABLED"))
+
+            self.assertEqual(observed_xformers_disabled, ["1"])
 
     def test_prepare_runtime_resources_downloads_registered_checkpoint_with_mocked_model(self):
         with tempfile.TemporaryDirectory() as tmpdir:

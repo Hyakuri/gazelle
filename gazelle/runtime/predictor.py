@@ -1,7 +1,5 @@
-from contextlib import contextmanager
 from pathlib import Path
 from collections.abc import Mapping
-import os
 from typing import Iterable, List, Optional, Sequence, Tuple
 
 import torch
@@ -9,6 +7,7 @@ from PIL import Image
 
 from gazelle.runtime.config import validate_device_name
 from gazelle.runtime.contracts import BBox, GazePrediction, HeadObservation
+from gazelle.runtime.environment import temporarily_disable_xformers_for_cpu_device
 from gazelle.runtime.geometry import sanitize_head_bbox_for_model
 from gazelle.runtime.model_registry import get_model_spec
 from gazelle.runtime.resources import (
@@ -43,23 +42,6 @@ def resolve_torch_device(device_name: str) -> torch.device:
             )
         return torch.device(validated)
     return torch.device(validated)
-
-
-@contextmanager
-def _disable_xformers_for_cpu_device(device: torch.device):
-    if device.type != "cpu":
-        yield
-        return
-
-    previous = os.environ.get("XFORMERS_DISABLED")
-    os.environ["XFORMERS_DISABLED"] = "1"
-    try:
-        yield
-    finally:
-        if previous is None:
-            os.environ.pop("XFORMERS_DISABLED", None)
-        else:
-            os.environ["XFORMERS_DISABLED"] = previous
 
 
 def prepare_head_bboxes(heads: Sequence[HeadObservation]) -> Tuple[List[HeadObservation], List[Optional[BBox]]]:
@@ -219,7 +201,7 @@ class GazellePredictor:
         torch.hub.set_dir(str(cache_paths.torch_hub_dir))
         resolved_device = resolve_torch_device(device)
 
-        with _disable_xformers_for_cpu_device(resolved_device):
+        with temporarily_disable_xformers_for_cpu_device(resolved_device):
             from gazelle.model import get_gazelle_model
 
             model, transform = get_gazelle_model(model_name)

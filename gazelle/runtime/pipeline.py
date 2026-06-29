@@ -112,15 +112,12 @@ def create_output_dir(
 
 
 def _build_real_predictor(config):
-    from gazelle.runtime.predictor import (
-        GazellePredictor,
-        _disable_xformers_for_cpu_device,
-        resolve_torch_device,
-    )
+    from gazelle.runtime.environment import temporarily_disable_xformers_for_cpu_device
+    from gazelle.runtime.predictor import GazellePredictor, resolve_torch_device
     from gazelle.runtime.resources import prepare_runtime_resources
 
     resolved_device = resolve_torch_device(config.device)
-    with _disable_xformers_for_cpu_device(resolved_device):
+    with temporarily_disable_xformers_for_cpu_device(resolved_device):
         if config.checkpoint:
             checkpoint_path = config.checkpoint
         else:
