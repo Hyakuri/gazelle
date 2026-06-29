@@ -155,6 +155,7 @@ def _render_options_from_config(config) -> RenderOptions:
         draw_heatmap_contour=config.draw_heatmap_contour,
         draw_labels=config.draw_labels,
         heatmap_contour_quantile=config.heatmap_contour_quantile,
+        heatmap_contour_width=config.heatmap_contour_width,
     )
 
 

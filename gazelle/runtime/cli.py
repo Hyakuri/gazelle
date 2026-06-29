@@ -128,9 +128,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="Do not draw heatmap overlays in rendered output.",
     )
     parser.add_argument(
-        "--no-head-box",
+        "--head-box",
         action="store_true",
-        help="Do not draw head bounding boxes in rendered output.",
+        help="Draw head bounding boxes in rendered output when bboxes are available.",
     )
     parser.add_argument(
         "--no-gaze-peak",
@@ -152,6 +152,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=0.90,
         help="Heatmap quantile threshold for --draw-heatmap-contour in [0, 1].",
+    )
+    parser.add_argument(
+        "--heatmap-contour-width",
+        type=int,
+        default=None,
+        help="Heatmap contour line width in rendered output.",
     )
     parser.add_argument(
         "--no-labels",

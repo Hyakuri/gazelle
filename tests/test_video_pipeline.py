@@ -192,8 +192,32 @@ class VideoPipelineTest(unittest.TestCase):
                 bboxes=((0.1, 0.2, 0.4, 0.6),),
                 save_rendered=True,
                 draw_heatmap=False,
+                draw_head_box=True,
                 draw_gaze_arrow=False,
                 draw_heatmap_contour=True,
+                heatmap_contour_width=3,
+                draw_labels=False,
+            )
+
+            result = run_video_pipeline(config, predictor_factory=lambda config: FakePredictor())
+
+            self.assertIsNotNone(result.rendered_video_path)
+            self.assertTrue(result.rendered_video_path.exists())
+
+    def test_run_video_pipeline_head_box_flag_parsed_and_runs(self):
+        with TemporaryDirectory() as tmpdir:
+            video_path = Path(tmpdir) / "clip.mp4"
+            write_tiny_video(video_path, frame_count=1)
+            config = make_config(
+                input_path=str(video_path),
+                output_dir=str(Path(tmpdir) / "outputs"),
+                head_source="static",
+                bboxes=((0.1, 0.2, 0.4, 0.6),),
+                save_rendered=True,
+                draw_head_box=True,
+                draw_heatmap=False,
+                draw_gaze_arrow=False,
+                draw_gaze_peak=False,
                 draw_labels=False,
             )
 

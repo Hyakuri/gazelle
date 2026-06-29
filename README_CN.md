@@ -205,6 +205,8 @@ python main.py `
 
 单图推理会读取 `frame_index=0` 的 head 数据。JSON 使用 runtime head provider 的内部 record 格式，`bbox_format` 可以是 `normalized` 或 `pixel`，`heads` 中包含 `person_id`、`bbox` 和可选 `confidence`。
 
+`--head-source none` 不提供 bbox。因此渲染时无法绘制 head bbox，也无法计算从 head center 到 gaze peak 的箭头。如果需要 bbox / arrow，请使用 `--head-source static` 或 `--head-source json` 并提供 bbox。
+
 使用 `--save-heatmaps` 可以保存每个人的 raw heatmap tensor：
 
 ```powershell
@@ -229,7 +231,7 @@ python main.py `
   --save-rendered
 ```
 
-默认情况下，单图推理只写入 `predictions.json` 和 `run_config.json`；只有传入 `--save-rendered` 时才会写可视化图片。默认文件名是 `rendered.png`。可以用 `--rendered-name` 指定 `.png`、`.jpg` 或 `.jpeg` 文件名，用 `--heatmap-alpha` 控制 heatmap 透明度。可视化 overlay 可以包含 heatmap、head bbox、从 head bbox 中心指向 gaze peak 的箭头、gaze target peak 位置的红色 X、稳定的 per-person 颜色，以及包含 `person_id`、可选 `inout_score` 和 `heatmap_peak_value` 的 label。可以用 `--no-heatmap`、`--no-head-box`、`--no-gaze-arrow`、`--no-gaze-peak` 或 `--no-labels` 关闭对应绘制元素。可以用 `--draw-heatmap-contour` 绘制 heatmap 高响应区域轮廓，并用 `--heatmap-contour-quantile` 设置阈值。渲染不会改变 `predictions.json`，`heatmap_peak_value` 也不是校准后的概率。
+默认情况下，单图推理只写入 `predictions.json` 和 `run_config.json`；只有传入 `--save-rendered` 时才会写可视化图片。默认文件名是 `rendered.png`。可以用 `--rendered-name` 指定 `.png`、`.jpg` 或 `.jpeg` 文件名，用 `--heatmap-alpha` 控制 heatmap 透明度。可视化 overlay 可以包含 heatmap、需要显式开启的 head bbox、在存在 bbox 时从 head bbox 中心指向 gaze peak 的箭头、gaze target peak 位置的红色 X、稳定的 per-person 颜色，以及包含 `person_id`、可选 `inout_score` 和 `heatmap_peak_value` 的 label。head bbox 默认不绘制；如果 bbox 可用并希望显示它，请传入 `--head-box`。可以用 `--no-heatmap`、`--no-gaze-arrow`、`--no-gaze-peak` 或 `--no-labels` 关闭对应绘制元素。可以用 `--draw-heatmap-contour` 绘制 heatmap 高响应区域轮廓，用 `--heatmap-contour-quantile` 设置阈值，并用 `--heatmap-contour-width` 设置轮廓线宽。渲染不会改变 `predictions.json`，`heatmap_peak_value` 也不是校准后的概率。
 
 gaze arrow 只是从 head bbox 中心到预测 gaze peak 的可视化，不是 face keypoint、eye keypoint、head pose，也不是真实眼睛方向向量。gaze peak 会画成红色 X；heatmap 和可选 contour 用于展示 gaze target 的高响应区域。
 
@@ -243,6 +245,7 @@ python main.py `
   --bbox 100 80 220 230 `
   --bbox-format pixel `
   --save-rendered `
+  --head-box `
   --no-heatmap `
   --overwrite
 ```
@@ -257,7 +260,6 @@ python main.py `
   --bbox 100 80 220 230 `
   --bbox-format pixel `
   --save-rendered `
-  --no-head-box `
   --no-gaze-arrow `
   --no-gaze-peak `
   --no-labels `
@@ -278,7 +280,21 @@ python main.py `
 
 该命令会构建 Gazelle 模型和 DINOv2 backbone。如果所选 Gazelle checkpoint 或 DINOv2 权重尚未缓存，运行时可能访问网络并下载它们。视频会以流式方式逐帧处理，并创建类似 `outputs/assembly_gazelle/` 的视频输出目录，始终写入 `predictions.jsonl` 和 `run_config.json`。这是离线视频处理，不是实时 webcam 模式。渲染视频不会保留音频。
 
-传入 `--save-rendered` 时会写入渲染后的 `.mp4`；默认文件名是 `rendered.mp4`，也可以用 `--output-video-name` 指定另一个 `.mp4` 文件名。图片渲染使用的绘制选项同样适用于视频：`--heatmap-alpha`、`--no-heatmap`、`--no-head-box`、`--no-gaze-arrow`、`--no-gaze-peak`、`--draw-heatmap-contour`、`--heatmap-contour-quantile` 和 `--no-labels`。
+传入 `--save-rendered` 时会写入渲染后的 `.mp4`；默认文件名是 `rendered.mp4`，也可以用 `--output-video-name` 指定另一个 `.mp4` 文件名。图片渲染使用的绘制选项同样适用于视频：`--heatmap-alpha`、`--head-box`、`--no-heatmap`、`--no-gaze-arrow`、`--no-gaze-peak`、`--draw-heatmap-contour`、`--heatmap-contour-quantile`、`--heatmap-contour-width` 和 `--no-labels`。
+
+`--head-source none` 可以显示 heatmap、contour 和红色 X gaze peak，但因为没有 bbox，不能显示 bbox 或 arrow。如果需要 bbox 和 arrow，请使用 `--head-source static` 或 `--head-source json` 提供 bbox，并传入 `--head-box`。
+
+在 `none` 模式下渲染 heatmap、contour 和红色 X；此模式下不应期待 bbox 或 arrow：
+
+```powershell
+python main.py `
+  --input samples\assembly.mp4 `
+  --output-dir outputs `
+  --head-source none `
+  --save-rendered `
+  --draw-heatmap-contour `
+  --overwrite
+```
 
 视频 head 输入复用图片推理的 `--head-source none`、`--head-source static` 和 `--head-source json`。视频 JSON head data 应按 `frame_index` 提供记录，可以使用 JSONL 或 JSON list。如果 JSON head data 缺少某一帧，runtime 会为该帧写入 `status="no_head"` 的 `predictions.jsonl` 行，并跳过该帧的模型推理。
 
@@ -316,8 +332,10 @@ python main.py `
   --bbox 100 80 220 230 `
   --bbox-format pixel `
   --save-rendered `
+  --head-box `
   --draw-heatmap-contour `
   --heatmap-contour-quantile 0.90 `
+  --heatmap-contour-width 3 `
   --overwrite
 ```
 

@@ -20,12 +20,13 @@ PEAK_MARKER_COLOR = (255, 0, 0)
 class RenderOptions:
     heatmap_alpha: float = 0.45
     draw_heatmap: bool = True
-    draw_head_box: bool = True
+    draw_head_box: bool = False
     draw_gaze_peak: bool = True
     draw_gaze_arrow: bool = True
     draw_heatmap_contour: bool = False
     draw_labels: bool = True
     heatmap_contour_quantile: float = 0.90
+    heatmap_contour_width: Optional[int] = None
     arrow_width: Optional[int] = None
     peak_marker_size: Optional[int] = None
 
@@ -101,6 +102,12 @@ def _validate_quantile(quantile: float) -> float:
     return quantile
 
 
+def _validate_positive_int(value: int, field_name: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+        raise ValueError("{} must be an int greater than or equal to 1".format(field_name))
+    return value
+
+
 def _auto_line_width(image_width: int, image_height: int) -> int:
     return max(1, min(int(image_width), int(image_height)) // 160)
 
@@ -160,8 +167,21 @@ def heatmap_to_topk_mask(heatmap, *, quantile: float) -> np.ndarray:
     if not finite_mask.any():
         return np.zeros(array.shape, dtype=bool)
     finite_values = array[finite_mask]
+    if float(finite_values.max()) == float(finite_values.min()):
+        return np.zeros(array.shape, dtype=bool)
     threshold = float(np.quantile(finite_values, quantile))
     return np.logical_and(finite_mask, array >= threshold)
+
+
+def _mask_boundary(mask: np.ndarray) -> np.ndarray:
+    padded = np.pad(mask, 1, mode="constant", constant_values=False)
+    center = padded[1:-1, 1:-1]
+    up = padded[:-2, 1:-1]
+    down = padded[2:, 1:-1]
+    left = padded[1:-1, :-2]
+    right = padded[1:-1, 2:]
+    eroded = center & up & down & left & right
+    return center & ~eroded
 
 
 def heatmap_mask_to_contour_overlay(
@@ -171,6 +191,7 @@ def heatmap_mask_to_contour_overlay(
     color,
     width: int,
 ) -> Image.Image:
+    width = _validate_positive_int(width, "width")
     mask_array = np.asarray(mask, dtype=bool)
     if mask_array.ndim != 2:
         raise ValueError("mask must be a 2D array")
@@ -179,17 +200,12 @@ def heatmap_mask_to_contour_overlay(
     mask_image = Image.fromarray(mask_array.astype("uint8") * 255, mode="L")
     mask_image = mask_image.resize((int(image_width), int(image_height)), resample=Image.NEAREST)
     resized = np.asarray(mask_image, dtype=np.uint8) > 0
-    boundary = np.zeros_like(resized, dtype=bool)
-    boundary[:-1, :] |= resized[:-1, :] != resized[1:, :]
-    boundary[1:, :] |= resized[1:, :] != resized[:-1, :]
-    boundary[:, :-1] |= resized[:, :-1] != resized[:, 1:]
-    boundary[:, 1:] |= resized[:, 1:] != resized[:, :-1]
-    boundary &= resized
+    boundary = _mask_boundary(resized)
 
     overlay = Image.new("RGBA", (int(image_width), int(image_height)), (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
     ys, xs = np.nonzero(boundary)
-    radius = max(0, int(width) // 2)
+    radius = max(0, int(width - 1) // 2)
     for x, y in zip(xs, ys):
         if radius:
             draw.rectangle((x - radius, y - radius, x + radius, y + radius), fill=tuple(color) + (255,))
@@ -258,6 +274,19 @@ def build_prediction_label(prediction) -> str:
     return label
 
 
+def _label_anchor_for_prediction(prediction, image_width: int, image_height: int) -> Tuple[int, int]:
+    if prediction.bbox is None:
+        return 4, 4
+    xmin, ymin, _, _ = normalized_bbox_to_pixel(
+        prediction.bbox,
+        image_width=image_width,
+        image_height=image_height,
+    )
+    xmin = _clamp(xmin, 0.0, float(image_width - 1))
+    ymin = _clamp(ymin, 0.0, float(image_height - 1))
+    return int(xmin), max(0, int(ymin) - 12)
+
+
 def draw_prediction(
     draw_context,
     prediction,
@@ -267,8 +296,7 @@ def draw_prediction(
     options: RenderOptions,
     font=None,
 ) -> None:
-    x_anchor = 4
-    y_anchor = 4
+    x_anchor, y_anchor = _label_anchor_for_prediction(prediction, image_width, image_height)
     line_width = _auto_line_width(image_width, image_height)
     arrow_width = options.arrow_width or line_width
     peak_marker_size = options.peak_marker_size or _auto_peak_marker_size(image_width, image_height)
@@ -284,8 +312,6 @@ def draw_prediction(
         xmax = _clamp(xmax, 0.0, float(image_width - 1))
         ymax = _clamp(ymax, 0.0, float(image_height - 1))
         draw_context.rectangle((xmin, ymin, xmax, ymax), outline=color, width=line_width)
-        x_anchor = int(xmin)
-        y_anchor = max(0, int(ymin) - 12)
 
     if options.draw_gaze_arrow:
         draw_gaze_arrow(
@@ -352,7 +378,8 @@ class PredictionRenderer:
                     image_width=image_width,
                     image_height=image_height,
                     color=color,
-                    width=_auto_line_width(image_width, image_height),
+                    width=self.options.heatmap_contour_width
+                    or max(2, _auto_line_width(image_width, image_height)),
                 )
                 rendered = Image.alpha_composite(rendered.convert("RGBA"), contour_overlay).convert("RGB")
             draw = ImageDraw.Draw(rendered)
@@ -374,12 +401,13 @@ def render_predictions(
     *,
     heatmap_alpha: float = 0.45,
     draw_heatmap: bool = True,
-    draw_head_box: bool = True,
+    draw_head_box: bool = False,
     draw_gaze_peak: bool = True,
     draw_gaze_arrow: bool = True,
     draw_heatmap_contour: bool = False,
     draw_labels: bool = True,
     heatmap_contour_quantile: float = 0.90,
+    heatmap_contour_width: Optional[int] = None,
 ) -> Image.Image:
     return PredictionRenderer(
         RenderOptions(
@@ -391,6 +419,7 @@ def render_predictions(
             draw_heatmap_contour=draw_heatmap_contour,
             draw_labels=draw_labels,
             heatmap_contour_quantile=heatmap_contour_quantile,
+            heatmap_contour_width=heatmap_contour_width,
         )
     ).render(image, predictions)
 
