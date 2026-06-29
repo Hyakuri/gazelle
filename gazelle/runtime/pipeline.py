@@ -145,6 +145,19 @@ def _run_config_payload(config, *, input_path, image_width: int, image_height: i
     return payload
 
 
+def _render_options_from_config(config) -> RenderOptions:
+    return RenderOptions(
+        heatmap_alpha=config.heatmap_alpha,
+        draw_heatmap=config.draw_heatmap,
+        draw_head_box=config.draw_head_box,
+        draw_gaze_peak=config.draw_gaze_peak,
+        draw_gaze_arrow=config.draw_gaze_arrow,
+        draw_heatmap_contour=config.draw_heatmap_contour,
+        draw_labels=config.draw_labels,
+        heatmap_contour_quantile=config.heatmap_contour_quantile,
+    )
+
+
 def _video_run_config_payload(
     config,
     *,
@@ -195,14 +208,7 @@ def run_image_pipeline(config, predictor_factory: Optional[Callable[[object], ob
 
     rendered_path = None
     if config.save_rendered:
-        renderer = PredictionRenderer(
-            RenderOptions(
-                heatmap_alpha=config.heatmap_alpha,
-                draw_head_box=config.draw_head_box,
-                draw_gaze_peak=config.draw_gaze_peak,
-                draw_labels=config.draw_labels,
-            )
-        )
+        renderer = PredictionRenderer(_render_options_from_config(config))
         rendered = renderer.render(image, predictions)
         rendered_path = output_dir / config.rendered_name
         save_rendered_image(rendered_path, rendered)
@@ -269,12 +275,7 @@ def run_video_pipeline(config, predictor_factory: Optional[Callable[[object], ob
                 fps=video_fps,
             )
             renderer = PredictionRenderer(
-                RenderOptions(
-                    heatmap_alpha=config.heatmap_alpha,
-                    draw_head_box=config.draw_head_box,
-                    draw_gaze_peak=config.draw_gaze_peak,
-                    draw_labels=config.draw_labels,
-                )
+                _render_options_from_config(config)
             )
 
         frames_read = 0

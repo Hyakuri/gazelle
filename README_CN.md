@@ -229,7 +229,40 @@ python main.py `
   --save-rendered
 ```
 
-默认情况下，单图推理只写入 `predictions.json` 和 `run_config.json`；只有传入 `--save-rendered` 时才会写可视化图片。默认文件名是 `rendered.png`。可以用 `--rendered-name` 指定 `.png`、`.jpg` 或 `.jpeg` 文件名，用 `--heatmap-alpha` 控制 heatmap 透明度。可视化 overlay 可以包含 heatmap、head bbox、gaze peak、person id 和可选的 `inout_score`；可以用 `--no-head-box`、`--no-gaze-peak` 或 `--no-labels` 关闭对应绘制元素。渲染不会改变 `predictions.json`，`heatmap_peak_value` 也不是校准后的概率。
+默认情况下，单图推理只写入 `predictions.json` 和 `run_config.json`；只有传入 `--save-rendered` 时才会写可视化图片。默认文件名是 `rendered.png`。可以用 `--rendered-name` 指定 `.png`、`.jpg` 或 `.jpeg` 文件名，用 `--heatmap-alpha` 控制 heatmap 透明度。可视化 overlay 可以包含 heatmap、head bbox、从 head bbox 中心指向 gaze peak 的箭头、gaze target peak 位置的红色 X、稳定的 per-person 颜色，以及包含 `person_id`、可选 `inout_score` 和 `heatmap_peak_value` 的 label。可以用 `--no-heatmap`、`--no-head-box`、`--no-gaze-arrow`、`--no-gaze-peak` 或 `--no-labels` 关闭对应绘制元素。可以用 `--draw-heatmap-contour` 绘制 heatmap 高响应区域轮廓，并用 `--heatmap-contour-quantile` 设置阈值。渲染不会改变 `predictions.json`，`heatmap_peak_value` 也不是校准后的概率。
+
+gaze arrow 只是从 head bbox 中心到预测 gaze peak 的可视化，不是 face keypoint、eye keypoint、head pose，也不是真实眼睛方向向量。gaze peak 会画成红色 X；heatmap 和可选 contour 用于展示 gaze target 的高响应区域。
+
+只显示 bbox、arrow、红色 X 和 label，不显示 heatmap：
+
+```powershell
+python main.py `
+  --input samples\frame.jpg `
+  --output-dir outputs `
+  --head-source static `
+  --bbox 100 80 220 230 `
+  --bbox-format pixel `
+  --save-rendered `
+  --no-heatmap `
+  --overwrite
+```
+
+只显示 heatmap，不显示 bbox / arrow / peak / label：
+
+```powershell
+python main.py `
+  --input samples\frame.jpg `
+  --output-dir outputs `
+  --head-source static `
+  --bbox 100 80 220 230 `
+  --bbox-format pixel `
+  --save-rendered `
+  --no-head-box `
+  --no-gaze-arrow `
+  --no-gaze-peak `
+  --no-labels `
+  --overwrite
+```
 
 ### 视频推理
 
@@ -245,7 +278,7 @@ python main.py `
 
 该命令会构建 Gazelle 模型和 DINOv2 backbone。如果所选 Gazelle checkpoint 或 DINOv2 权重尚未缓存，运行时可能访问网络并下载它们。视频会以流式方式逐帧处理，并创建类似 `outputs/assembly_gazelle/` 的视频输出目录，始终写入 `predictions.jsonl` 和 `run_config.json`。这是离线视频处理，不是实时 webcam 模式。渲染视频不会保留音频。
 
-传入 `--save-rendered` 时会写入渲染后的 `.mp4`；默认文件名是 `rendered.mp4`，也可以用 `--output-video-name` 指定另一个 `.mp4` 文件名。图片渲染使用的绘制选项同样适用于视频：`--heatmap-alpha`、`--no-head-box`、`--no-gaze-peak` 和 `--no-labels`。
+传入 `--save-rendered` 时会写入渲染后的 `.mp4`；默认文件名是 `rendered.mp4`，也可以用 `--output-video-name` 指定另一个 `.mp4` 文件名。图片渲染使用的绘制选项同样适用于视频：`--heatmap-alpha`、`--no-heatmap`、`--no-head-box`、`--no-gaze-arrow`、`--no-gaze-peak`、`--draw-heatmap-contour`、`--heatmap-contour-quantile` 和 `--no-labels`。
 
 视频 head 输入复用图片推理的 `--head-source none`、`--head-source static` 和 `--head-source json`。视频 JSON head data 应按 `frame_index` 提供记录，可以使用 JSONL 或 JSON list。如果 JSON head data 缺少某一帧，runtime 会为该帧写入 `status="no_head"` 的 `predictions.jsonl` 行，并跳过该帧的模型推理。
 
@@ -271,6 +304,21 @@ python main.py `
   --bbox-format pixel `
   --max-frames 100 `
   --frame-step 2
+```
+
+渲染视频并显示 heatmap 高响应区域轮廓：
+
+```powershell
+python main.py `
+  --input samples\assembly.mp4 `
+  --output-dir outputs `
+  --head-source static `
+  --bbox 100 80 220 230 `
+  --bbox-format pixel `
+  --save-rendered `
+  --draw-heatmap-contour `
+  --heatmap-contour-quantile 0.90 `
+  --overwrite
 ```
 
 `--frame-step` 表示每隔 N 帧运行一次 Gazelle。被跳过的帧仍会写入 `status="skipped"` 的 `predictions.jsonl` 行；如果启用了渲染，这些帧会以原帧写入渲染视频。`--max-frames` 限制写出的帧数。`--output-fps` 只在源视频 FPS 无效时作为 fallback；源视频 FPS 有效时会保留源 FPS。当前里程碑不支持视频 `--save-heatmaps`，使用时会报错 `video heatmap export is not implemented yet`。

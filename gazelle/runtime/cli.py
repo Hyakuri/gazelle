@@ -123,6 +123,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Rendered heatmap overlay alpha in [0, 1].",
     )
     parser.add_argument(
+        "--no-heatmap",
+        action="store_true",
+        help="Do not draw heatmap overlays in rendered output.",
+    )
+    parser.add_argument(
         "--no-head-box",
         action="store_true",
         help="Do not draw head bounding boxes in rendered output.",
@@ -131,6 +136,22 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-gaze-peak",
         action="store_true",
         help="Do not draw gaze peak markers in rendered output.",
+    )
+    parser.add_argument(
+        "--no-gaze-arrow",
+        action="store_true",
+        help="Do not draw head-center to gaze-peak arrows in rendered output.",
+    )
+    parser.add_argument(
+        "--draw-heatmap-contour",
+        action="store_true",
+        help="Draw a contour around high-response heatmap regions in rendered output.",
+    )
+    parser.add_argument(
+        "--heatmap-contour-quantile",
+        type=float,
+        default=0.90,
+        help="Heatmap quantile threshold for --draw-heatmap-contour in [0, 1].",
     )
     parser.add_argument(
         "--no-labels",

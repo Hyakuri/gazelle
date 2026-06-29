@@ -295,6 +295,28 @@ class ImagePipelineTest(unittest.TestCase):
             with Image.open(result.rendered_path) as image:
                 self.assertEqual(image.size, (10, 8))
 
+    def test_run_image_pipeline_passes_enhanced_render_options(self):
+        with TemporaryDirectory() as tmpdir:
+            image_path = Path(tmpdir) / "frame.png"
+            write_test_image(image_path)
+            config = make_config(
+                input_path=str(image_path),
+                output_dir=str(Path(tmpdir) / "outputs"),
+                head_source="static",
+                bboxes=((0.1, 0.2, 0.4, 0.6),),
+                save_rendered=True,
+                draw_heatmap=False,
+                draw_head_box=True,
+                draw_gaze_arrow=False,
+                draw_gaze_peak=False,
+                draw_labels=False,
+            )
+
+            result = run_image_pipeline(config, predictor_factory=lambda config: FakePredictor())
+
+            self.assertIsNotNone(result.rendered_path)
+            self.assertTrue(result.rendered_path.exists())
+
     def test_run_image_pipeline_does_not_save_heatmaps_by_default(self):
         with TemporaryDirectory() as tmpdir:
             image_path = Path(tmpdir) / "frame.png"

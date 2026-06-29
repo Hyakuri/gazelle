@@ -58,6 +58,19 @@ def validate_heatmap_alpha(heatmap_alpha) -> float:
     return alpha
 
 
+def validate_heatmap_contour_quantile(heatmap_contour_quantile) -> float:
+    if (
+        not isinstance(heatmap_contour_quantile, Real)
+        or isinstance(heatmap_contour_quantile, bool)
+        or not math.isfinite(float(heatmap_contour_quantile))
+    ):
+        raise ValueError("heatmap_contour_quantile must be a finite real number")
+    quantile = float(heatmap_contour_quantile)
+    if quantile < 0.0 or quantile > 1.0:
+        raise ValueError("heatmap_contour_quantile must be between 0.0 and 1.0")
+    return quantile
+
+
 def validate_optional_positive_float(value, field_name: str):
     if value is None:
         return None
@@ -113,9 +126,13 @@ class RuntimeConfig:
     save_rendered: bool = False
     rendered_name: str = "rendered.png"
     heatmap_alpha: float = 0.45
+    draw_heatmap: bool = True
     draw_head_box: bool = True
     draw_gaze_peak: bool = True
+    draw_gaze_arrow: bool = True
+    draw_heatmap_contour: bool = False
     draw_labels: bool = True
+    heatmap_contour_quantile: float = 0.90
     output_fps: Optional[float] = None
     max_frames: Optional[int] = None
     frame_step: int = 1
@@ -130,6 +147,11 @@ class RuntimeConfig:
         object.__setattr__(self, "device", validate_device_name(self.device))
         object.__setattr__(self, "rendered_name", validate_rendered_name(self.rendered_name))
         object.__setattr__(self, "heatmap_alpha", validate_heatmap_alpha(self.heatmap_alpha))
+        object.__setattr__(
+            self,
+            "heatmap_contour_quantile",
+            validate_heatmap_contour_quantile(self.heatmap_contour_quantile),
+        )
         object.__setattr__(
             self,
             "output_fps",
@@ -166,9 +188,13 @@ class RuntimeConfig:
             save_rendered=args.save_rendered,
             rendered_name=args.rendered_name,
             heatmap_alpha=args.heatmap_alpha,
+            draw_heatmap=not args.no_heatmap,
             draw_head_box=not args.no_head_box,
             draw_gaze_peak=not args.no_gaze_peak,
+            draw_gaze_arrow=not args.no_gaze_arrow,
+            draw_heatmap_contour=args.draw_heatmap_contour,
             draw_labels=not args.no_labels,
+            heatmap_contour_quantile=args.heatmap_contour_quantile,
             output_fps=args.output_fps,
             max_frames=args.max_frames,
             frame_step=args.frame_step,

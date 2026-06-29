@@ -220,7 +220,40 @@ python main.py `
   --save-rendered
 ```
 
-By default, image inference writes `predictions.json` and `run_config.json`; rendered output is written only when `--save-rendered` is passed. The default rendered file is `rendered.png`. Use `--rendered-name` to choose a `.png`, `.jpg`, or `.jpeg` file name, and `--heatmap-alpha` to control heatmap transparency. The rendered overlay can include the heatmap, head bbox, gaze peak, person id, and optional `inout_score`; pass `--no-head-box`, `--no-gaze-peak`, or `--no-labels` to disable those drawing components. Rendering does not change `predictions.json`, and `heatmap_peak_value` is not a calibrated probability.
+By default, image inference writes `predictions.json` and `run_config.json`; rendered output is written only when `--save-rendered` is passed. The default rendered file is `rendered.png`. Use `--rendered-name` to choose a `.png`, `.jpg`, or `.jpeg` file name, and `--heatmap-alpha` to control heatmap transparency. The rendered overlay can include the heatmap, head bbox, a head-center-to-gaze-peak arrow, a red X at the gaze target peak, stable per-person colors, and labels with `person_id`, optional `inout_score`, and `heatmap_peak_value`. Pass `--no-heatmap`, `--no-head-box`, `--no-gaze-arrow`, `--no-gaze-peak`, or `--no-labels` to disable those drawing components. Pass `--draw-heatmap-contour` to draw a top-response heatmap contour, and use `--heatmap-contour-quantile` to set its threshold. Rendering does not change `predictions.json`, and `heatmap_peak_value` is not a calibrated probability.
+
+The gaze arrow is a visualization from the head bbox center to the predicted gaze peak. It is not a face keypoint, eye keypoint, head pose estimate, or true eye vector. The gaze peak is drawn as a red X; the heatmap and optional contour visualize high-response gaze target regions.
+
+Render bbox, arrow, red X, and labels without heatmap:
+
+```powershell
+python main.py `
+  --input samples\frame.jpg `
+  --output-dir outputs `
+  --head-source static `
+  --bbox 100 80 220 230 `
+  --bbox-format pixel `
+  --save-rendered `
+  --no-heatmap `
+  --overwrite
+```
+
+Render heatmap only:
+
+```powershell
+python main.py `
+  --input samples\frame.jpg `
+  --output-dir outputs `
+  --head-source static `
+  --bbox 100 80 220 230 `
+  --bbox-format pixel `
+  --save-rendered `
+  --no-head-box `
+  --no-gaze-arrow `
+  --no-gaze-peak `
+  --no-labels `
+  --overwrite
+```
 
 ### Video Inference
 
@@ -236,7 +269,7 @@ python main.py `
 
 This command constructs the Gazelle model and DINOv2 backbone. If the selected Gazelle checkpoint or DINOv2 weights are not already cached, it may download them. It streams frames from the input video, writes a per-video output directory such as `outputs/assembly_gazelle/`, and always writes `predictions.jsonl` and `run_config.json`. This is offline video processing, not real-time webcam processing. Audio is not preserved in rendered videos.
 
-Pass `--save-rendered` to write a rendered `.mp4`; the default video output name is `rendered.mp4`, and `--output-video-name` can choose another `.mp4` file name. The same rendering flags used for images also apply to rendered videos: `--heatmap-alpha`, `--no-head-box`, `--no-gaze-peak`, and `--no-labels`.
+Pass `--save-rendered` to write a rendered `.mp4`; the default video output name is `rendered.mp4`, and `--output-video-name` can choose another `.mp4` file name. The same rendering flags used for images also apply to rendered videos: `--heatmap-alpha`, `--no-heatmap`, `--no-head-box`, `--no-gaze-arrow`, `--no-gaze-peak`, `--draw-heatmap-contour`, `--heatmap-contour-quantile`, and `--no-labels`.
 
 Video head input sources use the same `--head-source none`, `--head-source static`, and `--head-source json` options as image inference. JSON head data for video should use one record per `frame_index`, either in JSONL or a JSON list. If a frame is missing from JSON head data, the runtime writes a `predictions.jsonl` row with `status="no_head"` and skips model inference for that frame.
 
@@ -262,6 +295,21 @@ python main.py `
   --bbox-format pixel `
   --max-frames 100 `
   --frame-step 2
+```
+
+Render video with a top-response heatmap contour:
+
+```powershell
+python main.py `
+  --input samples\assembly.mp4 `
+  --output-dir outputs `
+  --head-source static `
+  --bbox 100 80 220 230 `
+  --bbox-format pixel `
+  --save-rendered `
+  --draw-heatmap-contour `
+  --heatmap-contour-quantile 0.90 `
+  --overwrite
 ```
 
 `--frame-step` runs Gazelle only every N frames. Skipped frames still get `predictions.jsonl` rows with `status="skipped"` and are copied unchanged into the rendered video when rendering is enabled. `--max-frames` limits how many frames are written. `--output-fps` is used only when the source video FPS is invalid; otherwise the source FPS is preserved. `--save-heatmaps` is not supported for video in this milestone and exits with `video heatmap export is not implemented yet`.
