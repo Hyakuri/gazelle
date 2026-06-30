@@ -78,7 +78,6 @@ class RuntimeCliTest(unittest.TestCase):
                 "rendered.jpg",
                 "--heatmap-alpha",
                 "0.25",
-                "--no-head-box",
                 "--no-gaze-peak",
                 "--no-labels",
             ]
@@ -93,8 +92,11 @@ class RuntimeCliTest(unittest.TestCase):
         self.assertTrue(config.save_rendered)
         self.assertEqual(config.rendered_name, "rendered.jpg")
         self.assertEqual(config.heatmap_alpha, 0.25)
+        self.assertTrue(config.draw_heatmap)
         self.assertFalse(config.draw_head_box)
         self.assertFalse(config.draw_gaze_peak)
+        self.assertTrue(config.draw_gaze_arrow)
+        self.assertFalse(config.draw_heatmap_contour)
         self.assertFalse(config.draw_labels)
 
     def test_parse_image_render_config(self):
@@ -107,7 +109,7 @@ class RuntimeCliTest(unittest.TestCase):
                 "rendered.jpg",
                 "--heatmap-alpha",
                 "0.25",
-                "--no-head-box",
+                "--head-box",
                 "--no-gaze-peak",
                 "--no-labels",
             ]
@@ -116,9 +118,44 @@ class RuntimeCliTest(unittest.TestCase):
         self.assertTrue(config.save_rendered)
         self.assertEqual(config.rendered_name, "rendered.jpg")
         self.assertEqual(config.heatmap_alpha, 0.25)
-        self.assertFalse(config.draw_head_box)
+        self.assertTrue(config.draw_head_box)
         self.assertFalse(config.draw_gaze_peak)
         self.assertFalse(config.draw_labels)
+
+    def test_head_box_default_disabled(self):
+        config = parse_runtime_config(["--input", "image.jpg", "--save-rendered"])
+
+        self.assertFalse(config.draw_head_box)
+
+    def test_parse_head_box_enabled(self):
+        config = parse_runtime_config(["--input", "image.jpg", "--save-rendered", "--head-box"])
+
+        self.assertTrue(config.draw_head_box)
+
+    def test_parse_enhanced_render_config(self):
+        config = parse_runtime_config(
+            [
+                "--input",
+                "image.jpg",
+                "--save-rendered",
+                "--head-box",
+                "--no-heatmap",
+                "--no-gaze-arrow",
+                "--draw-heatmap-contour",
+                "--heatmap-contour-quantile",
+                "0.85",
+                "--heatmap-contour-width",
+                "3",
+            ]
+        )
+
+        self.assertTrue(config.save_rendered)
+        self.assertTrue(config.draw_head_box)
+        self.assertFalse(config.draw_heatmap)
+        self.assertFalse(config.draw_gaze_arrow)
+        self.assertTrue(config.draw_heatmap_contour)
+        self.assertEqual(config.heatmap_contour_quantile, 0.85)
+        self.assertEqual(config.heatmap_contour_width, 3)
 
     def test_parse_video_config(self):
         config = parse_runtime_config(
@@ -352,11 +389,49 @@ class RuntimeCliTest(unittest.TestCase):
                 self.assertEqual(cm.exception.code, 2)
                 self.assertIn("output_video_name", stderr.getvalue())
 
+    def test_invalid_heatmap_contour_quantile_rejected(self):
+        invalid_quantiles = ("-0.1", "1.1", "nan")
+        for quantile in invalid_quantiles:
+            with self.subTest(quantile=quantile):
+                stderr = io.StringIO()
+                with redirect_stderr(stderr), self.assertRaises(SystemExit) as cm:
+                    parse_runtime_config(["--input", "image.jpg", "--heatmap-contour-quantile", quantile])
+                self.assertEqual(cm.exception.code, 2)
+                self.assertIn("heatmap_contour_quantile", stderr.getvalue())
+
+    def test_parse_heatmap_contour_width(self):
+        config = parse_runtime_config(
+            ["--input", "image.jpg", "--draw-heatmap-contour", "--heatmap-contour-width", "4"]
+        )
+
+        self.assertEqual(config.heatmap_contour_width, 4)
+
+    def test_invalid_heatmap_contour_width_rejected(self):
+        for width in ("0", "-1"):
+            with self.subTest(width=width):
+                stderr = io.StringIO()
+                with redirect_stderr(stderr), self.assertRaises(SystemExit) as cm:
+                    parse_runtime_config(["--input", "image.jpg", "--heatmap-contour-width", width])
+                self.assertEqual(cm.exception.code, 2)
+                self.assertIn("heatmap_contour_width", stderr.getvalue())
+        with self.assertRaises(ValueError):
+            RuntimeConfig(heatmap_contour_width=True).validate()
+
+    def test_no_head_box_argument_is_removed(self):
+        stderr = io.StringIO()
+        with redirect_stderr(stderr), self.assertRaises(SystemExit) as cm:
+            parse_runtime_config(["--input", "image.jpg", "--no-head-box"])
+
+        self.assertEqual(cm.exception.code, 2)
+        self.assertIn("unrecognized arguments", stderr.getvalue())
+
     def test_video_numeric_config_rejects_bool_values(self):
         for kwargs in (
             {"output_fps": True},
             {"max_frames": True},
             {"frame_step": True},
+            {"heatmap_contour_quantile": True},
+            {"heatmap_contour_width": True},
         ):
             with self.subTest(kwargs=kwargs):
                 with self.assertRaises(ValueError):

@@ -295,6 +295,66 @@ class ImagePipelineTest(unittest.TestCase):
             with Image.open(result.rendered_path) as image:
                 self.assertEqual(image.size, (10, 8))
 
+    def test_run_image_pipeline_passes_enhanced_render_options(self):
+        with TemporaryDirectory() as tmpdir:
+            image_path = Path(tmpdir) / "frame.png"
+            write_test_image(image_path)
+            config = make_config(
+                input_path=str(image_path),
+                output_dir=str(Path(tmpdir) / "outputs"),
+                head_source="static",
+                bboxes=((0.1, 0.2, 0.4, 0.6),),
+                save_rendered=True,
+                draw_heatmap=False,
+                draw_head_box=True,
+                draw_gaze_arrow=False,
+                draw_gaze_peak=False,
+                draw_labels=False,
+            )
+
+            result = run_image_pipeline(config, predictor_factory=lambda config: FakePredictor())
+
+            self.assertIsNotNone(result.rendered_path)
+            self.assertTrue(result.rendered_path.exists())
+
+    def test_run_image_pipeline_head_box_flag_controls_rendering(self):
+        with TemporaryDirectory() as tmpdir:
+            image_path = Path(tmpdir) / "frame.png"
+            write_test_image(image_path)
+            common = {
+                "input_path": str(image_path),
+                "head_source": "static",
+                "bboxes": ((0.1, 0.2, 0.4, 0.6),),
+                "save_rendered": True,
+                "draw_heatmap": False,
+                "draw_gaze_arrow": False,
+                "draw_gaze_peak": False,
+                "draw_labels": False,
+            }
+            no_box_config = make_config(
+                output_dir=str(Path(tmpdir) / "outputs_no_box"),
+                draw_head_box=False,
+                **common,
+            )
+            box_config = make_config(
+                output_dir=str(Path(tmpdir) / "outputs_box"),
+                draw_head_box=True,
+                **common,
+            )
+
+            no_box_result = run_image_pipeline(no_box_config, predictor_factory=lambda config: FakePredictor())
+            box_result = run_image_pipeline(box_config, predictor_factory=lambda config: FakePredictor())
+
+            with Image.open(image_path) as original:
+                original_bytes = original.convert("RGB").tobytes()
+            with Image.open(no_box_result.rendered_path) as no_box:
+                no_box_bytes = no_box.convert("RGB").tobytes()
+            with Image.open(box_result.rendered_path) as box:
+                box_bytes = box.convert("RGB").tobytes()
+
+        self.assertEqual(no_box_bytes, original_bytes)
+        self.assertNotEqual(box_bytes, original_bytes)
+
     def test_run_image_pipeline_does_not_save_heatmaps_by_default(self):
         with TemporaryDirectory() as tmpdir:
             image_path = Path(tmpdir) / "frame.png"
