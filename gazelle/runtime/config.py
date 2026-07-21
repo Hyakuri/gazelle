@@ -11,6 +11,7 @@ from gazelle.runtime.model_registry import get_model_spec
 
 SUPPORTED_RENDERED_SUFFIXES = (".png", ".jpg", ".jpeg")
 SUPPORTED_VIDEO_OUTPUT_SUFFIXES = (".mp4",)
+SUPPORTED_POSE_MODELS = ("lite", "full", "heavy")
 
 
 def validate_device_name(device: str) -> str:
@@ -96,6 +97,27 @@ def validate_positive_int(value, field_name: str) -> int:
     return value
 
 
+def validate_max_heads(max_heads) -> int:
+    if not isinstance(max_heads, int) or isinstance(max_heads, bool) or not 1 <= max_heads <= 10:
+        raise ValueError("max_heads must be an int between 1 and 10")
+    return max_heads
+
+
+def validate_pose_model(pose_model: str) -> str:
+    if pose_model not in SUPPORTED_POSE_MODELS:
+        raise ValueError("pose_model must be one of: {}".format(", ".join(SUPPORTED_POSE_MODELS)))
+    return pose_model
+
+
+def validate_positive_finite_float(value, field_name: str = "value") -> float:
+    if not isinstance(value, Real) or isinstance(value, bool) or not math.isfinite(float(value)):
+        raise ValueError("{} must be a finite positive real number".format(field_name))
+    value = float(value)
+    if value <= 0.0:
+        raise ValueError("{} must be greater than 0".format(field_name))
+    return value
+
+
 def validate_output_video_name(output_video_name: str) -> str:
     name = str(output_video_name).strip()
     if not name:
@@ -118,6 +140,10 @@ class RuntimeConfig:
     output_dir: str = "outputs"
     overwrite: bool = False
     head_source: str = "none"
+    max_heads: int = 1
+    pose_model: str = "full"
+    head_track_max_gap_ms: float = 500.0
+    save_face_landmarks: bool = False
     bboxes: Tuple[BBox, ...] = ()
     bbox_format: str = "normalized"
     person_ids: Optional[Tuple[int, ...]] = None
@@ -146,6 +172,13 @@ class RuntimeConfig:
     def validate(self) -> "RuntimeConfig":
         get_model_spec(self.model)
         object.__setattr__(self, "device", validate_device_name(self.device))
+        object.__setattr__(self, "max_heads", validate_max_heads(self.max_heads))
+        object.__setattr__(self, "pose_model", validate_pose_model(self.pose_model))
+        object.__setattr__(
+            self,
+            "head_track_max_gap_ms",
+            validate_positive_finite_float(self.head_track_max_gap_ms, "head_track_max_gap_ms"),
+        )
         object.__setattr__(self, "rendered_name", validate_rendered_name(self.rendered_name))
         object.__setattr__(self, "heatmap_alpha", validate_heatmap_alpha(self.heatmap_alpha))
         object.__setattr__(
@@ -186,6 +219,10 @@ class RuntimeConfig:
             output_dir=args.output_dir,
             overwrite=args.overwrite,
             head_source=args.head_source,
+            max_heads=args.max_heads,
+            pose_model=args.pose_model,
+            head_track_max_gap_ms=args.head_track_max_gap_ms,
+            save_face_landmarks=args.save_face_landmarks,
             bboxes=tuple(tuple(bbox) for bbox in (args.bbox or ())),
             bbox_format=args.bbox_format,
             person_ids=None if args.person_id is None else tuple(args.person_id),

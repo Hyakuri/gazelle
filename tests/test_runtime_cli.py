@@ -6,7 +6,13 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from gazelle.runtime.cli import build_parser, main, parse_runtime_config
-from gazelle.runtime.config import RuntimeConfig, validate_device_name
+from gazelle.runtime.config import (
+    RuntimeConfig,
+    validate_device_name,
+    validate_max_heads,
+    validate_pose_model,
+    validate_positive_finite_float,
+)
 
 
 class RuntimeCliTest(unittest.TestCase):
@@ -39,6 +45,51 @@ class RuntimeCliTest(unittest.TestCase):
         config = parse_runtime_config(["--list-models"])
         self.assertTrue(config.list_models)
         self.assertEqual(config.model, "gazelle_dinov2_vitb14_inout")
+
+    def test_parse_mediapipe_head_config(self):
+        config = parse_runtime_config(
+            [
+                "--input",
+                "worker.mp4",
+                "--head-source",
+                "mediapipe",
+                "--max-heads",
+                "3",
+                "--pose-model",
+                "lite",
+                "--head-track-max-gap-ms",
+                "750",
+                "--save-face-landmarks",
+            ]
+        )
+
+        self.assertEqual(config.head_source, "mediapipe")
+        self.assertEqual(config.max_heads, 3)
+        self.assertEqual(config.pose_model, "lite")
+        self.assertEqual(config.head_track_max_gap_ms, 750.0)
+        self.assertTrue(config.save_face_landmarks)
+
+    def test_mediapipe_head_config_defaults(self):
+        config = parse_runtime_config(["--input", "worker.mp4"])
+
+        self.assertEqual(config.max_heads, 1)
+        self.assertEqual(config.pose_model, "full")
+        self.assertEqual(config.head_track_max_gap_ms, 500.0)
+        self.assertFalse(config.save_face_landmarks)
+
+    def test_mediapipe_runtime_config_validators_reject_invalid_values(self):
+        for max_heads in (0, 11, True):
+            with self.subTest(max_heads=max_heads):
+                with self.assertRaises(ValueError):
+                    validate_max_heads(max_heads)
+
+        with self.assertRaises(ValueError):
+            validate_pose_model("medium")
+
+        for gap_ms in (0, -1, float("nan"), float("inf"), True):
+            with self.subTest(gap_ms=gap_ms):
+                with self.assertRaises(ValueError):
+                    validate_positive_finite_float(gap_ms, "head_track_max_gap_ms")
 
     def test_prepare_only_config_does_not_require_input(self):
         config = parse_runtime_config(["--prepare-only", "--cache-dir", "models"])

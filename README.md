@@ -194,6 +194,12 @@ python main.py `
   --head-data samples\frame_heads.json
 ```
 
+### MediaPipe Runtime Configuration (Staged)
+
+The CLI also accepts `--head-source mediapipe` and validates MediaPipe runtime settings: `--max-heads` accepts `1` through `10` (default `1`), `--pose-model` accepts `lite`, `full`, or `heavy` (default `full`), `--head-track-max-gap-ms` accepts a finite value greater than `0` in milliseconds (default `500.0`), and `--save-face-landmarks` enables face-landmark output configuration (default off).
+
+This milestone only accepts and validates this configuration. The MediaPipe provider is staged and is not runnable until its later integration task; MediaPipe dependencies and task models are not installed, downloaded, or used here.
+
 For single-image inference, JSON head data is read from `frame_index=0`. The JSON format is the same internal head record format used by the runtime head providers, with `bbox_format` set to `normalized` or `pixel` and `heads` containing `person_id`, `bbox`, and optional `confidence`.
 
 `--head-source none` does not provide a bbox. Rendered head boxes and head-center-to-gaze-peak arrows require a bbox, so they cannot be drawn in `none` mode. Use `--head-source static` or `--head-source json` with bbox data when bbox-dependent overlays are needed.

@@ -203,6 +203,12 @@ python main.py `
   --head-data samples\frame_heads.json
 ```
 
+### MediaPipe 运行时配置（暂存）
+
+CLI 还接受 `--head-source mediapipe`，并校验 MediaPipe 运行时设置：`--max-heads` 接受 `1` 到 `10`（默认 `1`）；`--pose-model` 接受 `lite`、`full` 或 `heavy`（默认 `full`）；`--head-track-max-gap-ms` 接受大于 `0` 的有限毫秒值（默认 `500.0`）；`--save-face-landmarks` 启用人脸关键点输出配置（默认关闭）。
+
+此里程碑仅接受并校验这些配置。MediaPipe provider 仍处于暂存阶段，在后续集成任务完成前不可运行；这里不会安装、下载或使用 MediaPipe 依赖和任务模型。
+
 单图推理会读取 `frame_index=0` 的 head 数据。JSON 使用 runtime head provider 的内部 record 格式，`bbox_format` 可以是 `normalized` 或 `pixel`，`heads` 中包含 `person_id`、`bbox` 和可选 `confidence`。
 
 `--head-source none` 不提供 bbox。因此渲染时无法绘制 head bbox，也无法计算从 head center 到 gaze peak 的箭头。如果需要 bbox / arrow，请使用 `--head-source static` 或 `--head-source json` 并提供 bbox。

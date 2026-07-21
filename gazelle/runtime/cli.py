@@ -49,10 +49,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--head-source",
-        choices=("none", "static", "json"),
+        choices=("none", "static", "json", "mediapipe"),
         default="none",
         help="Head input source for image or video inference.",
     )
+    parser.add_argument("--max-heads", type=int, default=1)
+    parser.add_argument("--pose-model", choices=("lite", "full", "heavy"), default="full")
+    parser.add_argument("--head-track-max-gap-ms", type=float, default=500.0)
+    parser.add_argument("--save-face-landmarks", action="store_true")
     parser.add_argument(
         "--bbox",
         action="append",
