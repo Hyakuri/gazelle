@@ -11,7 +11,10 @@ from gazelle.runtime.heads import (
     load_json_head_provider,
 )
 from gazelle.runtime.perception.contracts import HeadFrameResult
-from gazelle.runtime.perception.outputs import write_head_observations_json
+from gazelle.runtime.perception.outputs import (
+    head_frame_to_json_dict,
+    write_head_observations_json,
+)
 from gazelle.runtime.media import (
     VideoFrameReader,
     VideoFrameWriter,
@@ -45,6 +48,7 @@ class ImagePipelineResult:
 class VideoPipelineResult:
     output_dir: Path
     predictions_jsonl_path: Path
+    head_observations_jsonl_path: Path
     run_config_path: Path
     rendered_video_path: Optional[Path]
     frames_read: int
@@ -211,9 +215,9 @@ def _attach_cleanup_context(primary_error, resource_name: str, cleanup_error) ->
         add_note("{} cleanup also failed: {!r}".format(resource_name, cleanup_error))
 
 
-def _close_video_resources(writer, head_provider, primary_error) -> None:
+def _close_video_resources(resources, primary_error) -> None:
     first_cleanup_error = None
-    for resource_name, resource in (("writer", writer), ("provider", head_provider)):
+    for resource_name, resource in resources:
         if resource is None:
             continue
         close = getattr(resource, "close", None)
@@ -315,7 +319,14 @@ def run_video_pipeline(config, predictor_factory: Optional[Callable[[object], ob
     if config.save_heatmaps:
         raise ValueError("video heatmap export is not implemented yet")
 
-    with VideoFrameReader(config.input_path) as reader:
+    reader = None
+    head_provider = None
+    writer = None
+    head_jsonl_writer = None
+    gaze_jsonl_writer = None
+    primary_error = None
+    try:
+        reader = VideoFrameReader(config.input_path)
         metadata = reader.metadata
         output_dir = create_output_dir(
             config.input_path,
@@ -328,105 +339,92 @@ def run_video_pipeline(config, predictor_factory: Optional[Callable[[object], ob
             media_type="video",
             source_fps=video_fps,
         )
-        writer = None
-        primary_error = None
-        try:
-            predictor = (
-                predictor_factory(config)
-                if predictor_factory is not None
-                else _build_real_predictor(config)
+        predictor = None
+
+        predictions_jsonl_path = output_dir / "predictions.jsonl"
+        head_observations_jsonl_path = output_dir / "head_observations.jsonl"
+        run_config_path = output_dir / "run_config.json"
+        rendered_video_path = None
+        renderer = None
+        if config.save_rendered:
+            rendered_video_path = output_dir / config.output_video_name
+            writer = VideoFrameWriter(
+                rendered_video_path,
+                width=metadata.width,
+                height=metadata.height,
+                fps=video_fps,
+            )
+            renderer = PredictionRenderer(_render_options_from_config(config))
+
+        head_jsonl_writer = JsonlWriter(head_observations_jsonl_path)
+        gaze_jsonl_writer = JsonlWriter(predictions_jsonl_path)
+        frames_read = 0
+        frames_written = 0
+        frame_iterator = iter(reader)
+        while config.max_frames is None or frames_written < config.max_frames:
+            try:
+                frame = next(frame_iterator)
+            except StopIteration:
+                break
+            frames_read += 1
+
+            head_result = head_provider.get_frame_result(
+                frame.image,
+                frame.index,
+                frame.timestamp_ms,
+                metadata.width,
+                metadata.height,
+            )
+            head_jsonl_writer.write(
+                head_frame_to_json_dict(
+                    frame_index=frame.index,
+                    timestamp_ms=frame.timestamp_ms,
+                    image_width=metadata.width,
+                    image_height=metadata.height,
+                    provider=config.head_source,
+                    result=head_result,
+                    save_face_landmarks=config.save_face_landmarks,
+                )
             )
 
-            predictions_jsonl_path = output_dir / "predictions.jsonl"
-            run_config_path = output_dir / "run_config.json"
-            rendered_video_path = None
-            renderer = None
-            if config.save_rendered:
-                rendered_video_path = output_dir / config.output_video_name
-                writer = VideoFrameWriter(
-                    rendered_video_path,
-                    width=metadata.width,
-                    height=metadata.height,
-                    fps=video_fps,
-                )
-                renderer = PredictionRenderer(
-                    _render_options_from_config(config)
-                )
-
-            frames_read = 0
-            frames_written = 0
-            with JsonlWriter(predictions_jsonl_path) as jsonl_writer:
-                frame_iterator = iter(reader)
-                while config.max_frames is None or frames_written < config.max_frames:
-                    try:
-                        frame = next(frame_iterator)
-                    except StopIteration:
-                        break
-                    frames_read += 1
-
-                    if frame.index % config.frame_step != 0:
-                        predictions: Tuple[GazePrediction, ...] = ()
-                        record = prediction_frame_to_json_dict(
-                            frame_index=frame.index,
-                            timestamp_ms=frame.timestamp_ms,
-                            status="skipped",
-                            image_width=metadata.width,
-                            image_height=metadata.height,
-                            predictions=predictions,
-                        )
-                        jsonl_writer.write(record)
-                        if writer is not None:
-                            writer.write(frame.image)
-                        frames_written += 1
-                        continue
-
-                    heads = tuple(
-                        head_provider.get_heads(
-                            frame=frame.image,
-                            frame_index=frame.index,
-                            timestamp_ms=frame.timestamp_ms,
-                            image_width=metadata.width,
-                            image_height=metadata.height,
-                        )
+            inference_ms = None
+            if frame.index % config.frame_step != 0:
+                status = "skipped"
+                predictions: Tuple[GazePrediction, ...] = ()
+            elif not head_result.heads:
+                status = "no_head"
+                predictions = ()
+            else:
+                if predictor is None:
+                    predictor = (
+                        predictor_factory(config)
+                        if predictor_factory is not None
+                        else _build_real_predictor(config)
                     )
-                    if not heads:
-                        predictions = ()
-                        record = prediction_frame_to_json_dict(
-                            frame_index=frame.index,
-                            timestamp_ms=frame.timestamp_ms,
-                            status="no_head",
-                            image_width=metadata.width,
-                            image_height=metadata.height,
-                            predictions=predictions,
-                        )
-                        jsonl_writer.write(record)
-                        if writer is not None:
-                            writer.write(frame.image)
-                        frames_written += 1
-                        continue
+                start_time = perf_counter()
+                predictions = tuple(predictor.predict_frame(frame.image, head_result.heads))
+                inference_ms = (perf_counter() - start_time) * 1000.0
+                status = "ok"
 
-                    start_time = perf_counter()
-                    predictions = tuple(predictor.predict_frame(frame.image, heads))
-                    inference_ms = (perf_counter() - start_time) * 1000.0
-                    record = prediction_frame_to_json_dict(
-                        frame_index=frame.index,
-                        timestamp_ms=frame.timestamp_ms,
-                        status="ok",
-                        image_width=metadata.width,
-                        image_height=metadata.height,
-                        predictions=predictions,
-                        inference_ms=inference_ms,
-                    )
-                    jsonl_writer.write(record)
-                    if writer is not None:
-                        rendered = renderer.render(frame.image, predictions)
-                        writer.write(rendered)
-                    frames_written += 1
-        except BaseException as exc:
-            primary_error = exc
-            raise
-        finally:
-            _close_video_resources(writer, head_provider, primary_error)
+            gaze_jsonl_writer.write(
+                prediction_frame_to_json_dict(
+                    frame_index=frame.index,
+                    timestamp_ms=frame.timestamp_ms,
+                    status=status,
+                    image_width=metadata.width,
+                    image_height=metadata.height,
+                    predictions=predictions,
+                    inference_ms=inference_ms,
+                )
+            )
+            if writer is not None:
+                output_frame = (
+                    renderer.render(frame.image, predictions)
+                    if status == "ok"
+                    else frame.image
+                )
+                writer.write(output_frame)
+            frames_written += 1
 
         write_run_config_json(
             run_config_path,
@@ -441,10 +439,25 @@ def run_video_pipeline(config, predictor_factory: Optional[Callable[[object], ob
                 frames_written=frames_written,
             ),
         )
+    except BaseException as exc:
+        primary_error = exc
+        raise
+    finally:
+        _close_video_resources(
+            (
+                ("gaze JSONL writer", gaze_jsonl_writer),
+                ("head observation JSONL writer", head_jsonl_writer),
+                ("video writer", writer),
+                ("provider", head_provider),
+                ("reader", reader),
+            ),
+            primary_error,
+        )
 
     return VideoPipelineResult(
         output_dir=output_dir,
         predictions_jsonl_path=predictions_jsonl_path,
+        head_observations_jsonl_path=head_observations_jsonl_path,
         run_config_path=run_config_path,
         rendered_video_path=rendered_video_path,
         frames_read=frames_read,

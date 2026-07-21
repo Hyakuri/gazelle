@@ -257,6 +257,9 @@ def main(argv: Optional[Sequence[str]] = None, stdout: Optional[TextIO] = None) 
             result = run_video_pipeline(config)
             stdout.write("Wrote Gazelle video inference outputs to {}\n".format(result.output_dir))
             stdout.write("predictions_jsonl: {}\n".format(result.predictions_jsonl_path))
+            stdout.write(
+                "head_observations_jsonl: {}\n".format(result.head_observations_jsonl_path)
+            )
             stdout.write("run_config: {}\n".format(result.run_config_path))
             if result.rendered_video_path is not None:
                 stdout.write("rendered_video: {}\n".format(result.rendered_video_path))

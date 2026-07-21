@@ -331,6 +331,7 @@ class RuntimeCliTest(unittest.TestCase):
         result = SimpleNamespace(
             output_dir="outputs/clip_gazelle",
             predictions_jsonl_path="outputs/clip_gazelle/predictions.jsonl",
+            head_observations_jsonl_path="outputs/clip_gazelle/head_observations.jsonl",
             run_config_path="outputs/clip_gazelle/run_config.json",
             rendered_video_path=None,
             frames_read=2,
@@ -359,10 +360,32 @@ class RuntimeCliTest(unittest.TestCase):
         self.assertIn("predictions_jsonl:", stdout.getvalue())
         self.assertIn("frames_written: 2", stdout.getvalue())
 
+    def test_cli_prints_head_observations_jsonl(self):
+        result = SimpleNamespace(
+            output_dir="outputs/clip_gazelle",
+            predictions_jsonl_path="outputs/clip_gazelle/predictions.jsonl",
+            head_observations_jsonl_path="outputs/clip_gazelle/head_observations.jsonl",
+            run_config_path="outputs/clip_gazelle/run_config.json",
+            rendered_video_path=None,
+            frames_read=1,
+            frames_written=1,
+        )
+        with patch("gazelle.runtime.media.detect_media_type", return_value="video"):
+            with patch("gazelle.runtime.pipeline.run_video_pipeline", return_value=result):
+                stdout = io.StringIO()
+                exit_code = main(["--input", "clip.mp4"], stdout=stdout)
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn(
+            "head_observations_jsonl: outputs/clip_gazelle/head_observations.jsonl",
+            stdout.getvalue(),
+        )
+
     def test_video_input_route_prints_rendered_video_path_when_present(self):
         result = SimpleNamespace(
             output_dir="outputs/clip_gazelle",
             predictions_jsonl_path="outputs/clip_gazelle/predictions.jsonl",
+            head_observations_jsonl_path="outputs/clip_gazelle/head_observations.jsonl",
             run_config_path="outputs/clip_gazelle/run_config.json",
             rendered_video_path="outputs/clip_gazelle/rendered.mp4",
             frames_read=1,

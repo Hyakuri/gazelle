@@ -214,17 +214,17 @@ Default unit tests use fake downloaders and do not access the network. The pinne
 
 `--head-source mediapipe` is now wired into the runtime head-provider factory. The provider composes prepared resources, the MediaPipe backend, head/pose fusion, video ByteTrack tracking, and the 500 ms short-occlusion bridge. Image IDs are deterministic and start at zero; video IDs come from ByteTrack. Gazelle receives normalized, non-`None` MediaPipe head bboxes.
 
-This remains a staged integration: dependency/environment declaration and video observation scheduling are deferred. The final recommended end-to-end setup is not complete, and this documentation does not claim real MediaPipe, tracker, or Gazelle validation.
+This remains a staged integration: dependency/environment declaration is deferred. The final recommended end-to-end setup is not complete, and this documentation does not claim real MediaPipe, tracker, or Gazelle validation.
 
 ### Independent Head Observation Schema
 
-`gazelle.runtime.perception.outputs` provides `head_frame_to_json_dict(...)` for one independent provider result. The current image pipeline uses `write_head_observations_json(output_path, **frame_kwargs)` to create parent directories and write exactly one indented JSON document with a trailing newline. Video observation JSONL is prospective: Task 10 will pass each `head_frame_to_json_dict(...)` record to the existing `JsonlWriter.write(...)` for one compact row per frame, but the current video CLI does not write this artifact. The record has exactly `frame_index`, `timestamp_ms`, `status`, `width`, `height`, `provider`, `timings_ms`, and `people` fields. `status` is `"ok"` when the result has heads and `"no_head"` otherwise. `timings_ms` retains provider timing names and finite millisecond values.
+`gazelle.runtime.perception.outputs` provides `head_frame_to_json_dict(...)` for one independent provider result. The image pipeline uses `write_head_observations_json(output_path, **frame_kwargs)` to create parent directories and write exactly one indented JSON document with a trailing newline. The video pipeline writes every serialized provider result as one compact `head_observations.jsonl` row. The record has exactly `frame_index`, `timestamp_ms`, `status`, `width`, `height`, `provider`, `timings_ms`, and `people` fields. `status` is `"ok"` when the result has heads and `"no_head"` otherwise. `timings_ms` retains provider timing names and finite millisecond values.
 
 Each person has `person_id`, `head_bbox_normalized`, and `confidence`. Head boxes are normalized to `[0, 1]` and retain the runtime bbox tuple ordering. Rich MediaPipe perceptions additionally include applicable face bbox, `state`, `view_state`, `observed`, `tracking`, face keypoints, pose-head landmarks, facial transformation matrix, and yaw/pitch/roll head-pose evidence. Rich perceptions must match `result.heads` one-for-one in the same order for person ID, head bbox, and optional confidence. Integer fields accept only integral numeric values and are emitted as JSON integers; booleans and perception enums require their exact contract types. All numeric output must be finite, and tensors are never embedded.
 
-Every image run writes this independent record to `head_observations.json` before gaze scheduling, regardless of `--head-source`. The file includes the selected provider, provider timing fields, normalized head boxes, and `status="no_head"` when there are no heads. In that `no_head` case the pipeline skips Gazelle predictor construction, writes empty existing prediction outputs and run configuration, and completes normally. Video observation scheduling remains deferred.
+Every image run writes this independent record to `head_observations.json` before gaze scheduling, regardless of `--head-source`. Every video frame writes its independent observation row before its gaze row. These outputs include the selected provider, provider timing fields, normalized head boxes, and `status="no_head"` when there are no heads. A video `tracked_only` perception remains usable for Gazelle when it carries a head bbox.
 
-For privacy and output size, all 478 face landmarks are omitted by default. Pass `--save-face-landmarks` to include them in `head_observations.json`.
+For privacy and output size, all 478 face landmarks are omitted by default. Pass `--save-face-landmarks` to include them in image `head_observations.json` or video `head_observations.jsonl`; this can substantially increase output size and retain more biometric detail.
 
 For single-image inference, JSON head data is read from `frame_index=0`. The JSON format is the same internal head record format used by the runtime head providers, with `bbox_format` set to `normalized` or `pixel` and `heads` containing `person_id`, `bbox`, and optional `confidence`.
 
@@ -301,7 +301,7 @@ python main.py `
   --save-rendered
 ```
 
-This command constructs the Gazelle model and DINOv2 backbone. If the selected Gazelle checkpoint or DINOv2 weights are not already cached, it may download them. It streams frames from the input video, writes a per-video output directory such as `outputs/assembly_gazelle/`, and always writes `predictions.jsonl` and `run_config.json`. This is offline video processing, not real-time webcam processing. Audio is not preserved in rendered videos.
+This command streams frames from the input video and writes a per-video output directory such as `outputs/assembly_gazelle/`. It always writes `head_observations.jsonl`, `predictions.jsonl`, and `run_config.json`, with exactly one observation row and one gaze row per written frame. Gazelle and its DINOv2 backbone are constructed lazily on the first non-skipped frame that has at least one usable head, then reused; an all-skipped or all-`no_head` run does not construct them. If their weights are not already cached, that first prediction may download them. This is offline video processing, not real-time webcam processing. Audio is not preserved in rendered videos.
 
 Pass `--save-rendered` to write a rendered `.mp4`; the default video output name is `rendered.mp4`, and `--output-video-name` can choose another `.mp4` file name. The same rendering flags used for images also apply to rendered videos: `--heatmap-alpha`, `--head-box`, `--no-heatmap`, `--no-gaze-arrow`, `--no-gaze-peak`, `--draw-heatmap-contour`, `--heatmap-contour-quantile`, `--heatmap-contour-width`, and `--no-labels`.
 
@@ -319,7 +319,7 @@ python main.py `
   --overwrite
 ```
 
-Video head input sources use the same `--head-source none`, `--head-source static`, and `--head-source json` options as image inference. JSON head data for video should use one record per `frame_index`, either in JSONL or a JSON list. If a frame is missing from JSON head data, the runtime writes a `predictions.jsonl` row with `status="no_head"` and skips model inference for that frame.
+Video head input sources use the same `--head-source none`, `--head-source static`, and `--head-source json` options as image inference, plus `--head-source mediapipe` for per-frame perception and tracking. JSON head data for video should use one record per `frame_index`, either in JSONL or a JSON list. If a frame is missing from JSON head data, its observation row uses `status="no_head"`; on a Gazelle-selected frame the gaze row is also `no_head`, while `frame_step` still takes precedence and writes `skipped`. Gazelle is not called and the original frame is written unchanged in either case. MediaPipe head boxes, including usable `tracked_only` boxes during a short occlusion, are normalized `(xmin, ymin, xmax, ymax)` values in `[0, 1]`.
 
 Use JSON head data:
 
@@ -362,7 +362,7 @@ python main.py `
   --overwrite
 ```
 
-`--frame-step` runs Gazelle only every N frames. Skipped frames still get `predictions.jsonl` rows with `status="skipped"` and are copied unchanged into the rendered video when rendering is enabled. `--max-frames` limits how many frames are written. `--output-fps` is used only when the source video FPS is invalid; otherwise the source FPS is preserved. `--save-heatmaps` is not supported for video in this milestone and exits with `video heatmap export is not implemented yet`.
+Perception and tracking run exactly once on every decoded and written frame. `--frame-step` gates only Gazelle: skipped frames still get their normal `head_observations.jsonl` row, then a `predictions.jsonl` row with `status="skipped"`, even when no head was observed. Skipped and `no_head` frames are copied unchanged into the rendered video; perception overlays are not rendered in this milestone. `--max-frames` limits both JSONL files and the optional rendered video to the same written-frame count. `--output-fps` is used only when the source video FPS is invalid; otherwise the source FPS is preserved. `--save-heatmaps` is not supported for video in this milestone and exits with `video heatmap export is not implemented yet`.
 
 ### Real Smoke Tests
 
@@ -440,7 +440,7 @@ Runtime head behavior is intentionally strict:
 
 The programmatic predictor API remains available for direct in-memory use. The CLI image and offline video pipelines above are user-facing wrappers around it.
 
-The following runtime features are planned but not available yet in this milestone: real-time webcam input, automatic head detection, tracking, ROI/process logic, Multi-Pose integration, audio remuxing, raw video heatmap export, and high-performance asynchronous inference.
+The following runtime features are planned but not available yet in this milestone: real-time webcam perception/tracking, ROI/process logic, Multi-Pose integration, audio remuxing, raw video heatmap export, perception overlays, and high-performance asynchronous inference.
 
 
 ## Usage

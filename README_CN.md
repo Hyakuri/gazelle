@@ -223,17 +223,17 @@ pose 选项会分别准备 `pose_landmarker_lite.task`、`pose_landmarker_full.t
 
 `--head-source mediapipe` 现已接入 runtime head provider 工厂。provider 会组合已准备的资源、MediaPipe backend、head/pose fusion；视频还会使用 ByteTrack 跟踪和 500 ms 的短时遮挡桥接。图片 ID 确定且从零开始，视频 ID 来自 ByteTrack。传给 Gazelle 的 MediaPipe head bbox 始终是归一化且非 `None`。
 
-这仍是分阶段集成：依赖/环境声明以及视频 observation 调度留待后续任务。最终推荐的端到端配置尚未完成，本文档不宣称已经进行了真实的 MediaPipe、tracker 或 Gazelle 验证。
+这仍是分阶段集成：依赖/环境声明留待后续任务。最终推荐的端到端配置尚未完成，本文档不宣称已经进行了真实的 MediaPipe、tracker 或 Gazelle 验证。
 
 ### 独立 Head Observation Schema
 
-`gazelle.runtime.perception.outputs` 提供 `head_frame_to_json_dict(...)`，用于序列化单个独立 provider 结果。当前图片 pipeline 使用 `write_head_observations_json(output_path, **frame_kwargs)` 创建父目录，并写入恰好一个带缩进且末尾换行的 JSON 文档。视频 observation JSONL 仍是后续行为：Task 10 才会把每个 `head_frame_to_json_dict(...)` record 传给现有的 `JsonlWriter.write(...)`，每帧写一行紧凑 JSONL；当前视频 CLI 不会写入该 artifact。record 恰好包含 `frame_index`、`timestamp_ms`、`status`、`width`、`height`、`provider`、`timings_ms` 和 `people` 字段。结果存在 head 时 `status` 为 `"ok"`，否则为 `"no_head"`。`timings_ms` 保留 provider 的 timing 名称及有限的毫秒数值。
+`gazelle.runtime.perception.outputs` 提供 `head_frame_to_json_dict(...)`，用于序列化单个独立 provider 结果。图片 pipeline 使用 `write_head_observations_json(output_path, **frame_kwargs)` 创建父目录，并写入恰好一个带缩进且末尾换行的 JSON 文档。视频 pipeline 会把每个序列化 provider 结果写成一行紧凑的 `head_observations.jsonl`。record 恰好包含 `frame_index`、`timestamp_ms`、`status`、`width`、`height`、`provider`、`timings_ms` 和 `people` 字段。结果存在 head 时 `status` 为 `"ok"`，否则为 `"no_head"`。`timings_ms` 保留 provider 的 timing 名称及有限的毫秒数值。
 
 每个人包含 `person_id`、`head_bbox_normalized` 和 `confidence`。head bbox 归一化到 `[0, 1]`，并保留 runtime bbox tuple 的顺序。rich MediaPipe perception 还会在适用时包含 face bbox、`state`、`view_state`、`observed`、`tracking`、face keypoint、pose-head landmark、facial transformation matrix，以及 yaw/pitch/roll head-pose evidence。rich perception 必须与 `result.heads` 一一对应且顺序相同，并在 person ID、head bbox 和可选 confidence 上一致。整数字段只接受数值上为整数的类型，并输出为 JSON integer；boolean 和 perception enum 必须使用其精确 contract 类型。所有数值输出都必须有限，且绝不嵌入 tensor。
 
-每次单图运行都会在 gaze 调度前写入这份独立 record 到 `head_observations.json`，与 `--head-source` 无关。该文件包含所选 provider、provider timing 字段、归一化的 head bbox，并且没有 head 时 `status="no_head"`。在这种 `no_head` 情况下，pipeline 会跳过 Gazelle predictor 构建，仍写入空的既有 prediction 输出和 run config，并正常结束。视频 observation 调度仍留待后续任务。
+每次单图运行都会在 gaze 调度前写入这份独立 record 到 `head_observations.json`，与 `--head-source` 无关。每个视频帧也会先写独立 observation 行，再写 gaze 行。这些输出包含所选 provider、provider timing 字段、归一化的 head bbox，并且没有 head 时 `status="no_head"`。视频中的 `tracked_only` perception 只要仍带有 head bbox，就可以继续用于 Gazelle。
 
-出于隐私和输出体积考虑，默认省略全部 478 个 face landmark。传入 `--save-face-landmarks` 后才会在 `head_observations.json` 中包含它们。
+出于隐私和输出体积考虑，默认省略全部 478 个 face landmark。传入 `--save-face-landmarks` 后才会在图片 `head_observations.json` 或视频 `head_observations.jsonl` 中包含它们；这会显著增加输出体积，并保留更多生物特征细节。
 
 单图推理会读取 `frame_index=0` 的 head 数据。JSON 使用 runtime head provider 的内部 record 格式，`bbox_format` 可以是 `normalized` 或 `pixel`，`heads` 中包含 `person_id`、`bbox` 和可选 `confidence`。
 
@@ -310,7 +310,7 @@ python main.py `
   --save-rendered
 ```
 
-该命令会构建 Gazelle 模型和 DINOv2 backbone。如果所选 Gazelle checkpoint 或 DINOv2 权重尚未缓存，运行时可能访问网络并下载它们。视频会以流式方式逐帧处理，并创建类似 `outputs/assembly_gazelle/` 的视频输出目录，始终写入 `predictions.jsonl` 和 `run_config.json`。这是离线视频处理，不是实时 webcam 模式。渲染视频不会保留音频。
+该命令会以流式方式逐帧处理视频，并创建类似 `outputs/assembly_gazelle/` 的视频输出目录。runtime 始终写入 `head_observations.jsonl`、`predictions.jsonl` 和 `run_config.json`，每个写出帧对应恰好一行 observation 和一行 gaze。Gazelle 及其 DINOv2 backbone 会延迟到首个未被跳过且至少有一个可用 head 的帧才构建，之后复用；全部跳过或全部为 `no_head` 的运行不会构建模型。如果权重尚未缓存，首次预测时可能下载它们。这是离线视频处理，不是实时 webcam 模式。渲染视频不会保留音频。
 
 传入 `--save-rendered` 时会写入渲染后的 `.mp4`；默认文件名是 `rendered.mp4`，也可以用 `--output-video-name` 指定另一个 `.mp4` 文件名。图片渲染使用的绘制选项同样适用于视频：`--heatmap-alpha`、`--head-box`、`--no-heatmap`、`--no-gaze-arrow`、`--no-gaze-peak`、`--draw-heatmap-contour`、`--heatmap-contour-quantile`、`--heatmap-contour-width` 和 `--no-labels`。
 
@@ -328,7 +328,7 @@ python main.py `
   --overwrite
 ```
 
-视频 head 输入复用图片推理的 `--head-source none`、`--head-source static` 和 `--head-source json`。视频 JSON head data 应按 `frame_index` 提供记录，可以使用 JSONL 或 JSON list。如果 JSON head data 缺少某一帧，runtime 会为该帧写入 `status="no_head"` 的 `predictions.jsonl` 行，并跳过该帧的模型推理。
+视频 head 输入复用图片推理的 `--head-source none`、`--head-source static` 和 `--head-source json`，也可使用 `--head-source mediapipe` 进行逐帧 perception 和 tracking。视频 JSON head data 应按 `frame_index` 提供记录，可以使用 JSONL 或 JSON list。如果 JSON head data 缺少某一帧，其 observation 行使用 `status="no_head"`；在 Gazelle 选中的帧上，gaze 行也为 `no_head`，但 `frame_step` 仍优先并写入 `skipped`。两种情况下 Gazelle 都不会运行，启用渲染时也会原样写入该帧。MediaPipe head bbox 使用 `[0, 1]` 内归一化的 `(xmin, ymin, xmax, ymax)` 坐标；短时遮挡期间仍可用的 `tracked_only` bbox 也遵循这一格式。
 
 使用 JSON head data：
 
@@ -371,7 +371,7 @@ python main.py `
   --overwrite
 ```
 
-`--frame-step` 表示每隔 N 帧运行一次 Gazelle。被跳过的帧仍会写入 `status="skipped"` 的 `predictions.jsonl` 行；如果启用了渲染，这些帧会以原帧写入渲染视频。`--max-frames` 限制写出的帧数。`--output-fps` 只在源视频 FPS 无效时作为 fallback；源视频 FPS 有效时会保留源 FPS。当前里程碑不支持视频 `--save-heatmaps`，使用时会报错 `video heatmap export is not implemented yet`。
+perception 和 tracking 会在每个解码并写出的帧上恰好运行一次。`--frame-step` 只控制 Gazelle：被跳过的帧仍会先写正常的 `head_observations.jsonl` 行，再写 `status="skipped"` 的 `predictions.jsonl` 行，即使该帧没有观察到 head 也是如此。启用渲染时，`skipped` 和 `no_head` 帧会原样写入；当前里程碑不会渲染 perception overlay。`--max-frames` 会把两份 JSONL 和可选渲染视频限制到相同的写出帧数。`--output-fps` 只在源视频 FPS 无效时作为 fallback；源视频 FPS 有效时会保留源 FPS。当前里程碑不支持视频 `--save-heatmaps`，使用时会报错 `video heatmap export is not implemented yet`。
 
 ### 真实 smoke test
 
@@ -449,7 +449,7 @@ runtime 对 head 的处理规则是严格的：
 
 编程式 predictor API 仍然可以直接用于内存中的单帧调用。上面的 CLI image pipeline 和离线视频 pipeline 都是基于它的用户可见封装。
 
-以下 runtime 功能在当前里程碑尚未完成：实时 webcam 输入、自动 head detection、tracking、ROI / 工序逻辑、Multi-Pose 集成、音频 remux、视频 raw heatmap 导出，以及高性能异步推理。
+以下 runtime 功能在当前里程碑尚未完成：实时 webcam perception/tracking、ROI / 工序逻辑、Multi-Pose 集成、音频 remux、视频 raw heatmap 导出、perception overlay，以及高性能异步推理。
 
 ## 推理流程
 

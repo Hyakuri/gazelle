@@ -10,9 +10,15 @@ import numpy as np
 import torch
 
 from gazelle.runtime.config import RuntimeConfig
-from gazelle.runtime.contracts import GazePrediction
+from gazelle.runtime.contracts import GazePrediction, HeadObservation
 from gazelle.runtime.media import VideoFrameReader
 from gazelle.runtime.pipeline import build_head_provider_from_config, run_video_pipeline
+from gazelle.runtime.perception.contracts import (
+    HeadFrameResult,
+    HeadPerception,
+    HeadPerceptionState,
+    HeadViewState,
+)
 from gazelle.runtime.perception.provider import MediaPipeHeadProvider
 
 
@@ -39,12 +45,34 @@ class FakePredictor:
 
 
 class FakeHeadProvider:
-    def __init__(self, close_error=None):
+    def __init__(self, result_factory=None, close_error=None):
         self.close_calls = 0
         self.close_error = close_error
+        self.calls = []
+        self.result_factory = result_factory or (
+            lambda frame_index: HeadFrameResult(
+                heads=(
+                    HeadObservation(
+                        person_id=frame_index,
+                        bbox=(0.1, 0.2, 0.4, 0.6),
+                        confidence=0.9,
+                    ),
+                )
+            )
+        )
+
+    def get_frame_result(self, frame, frame_index, timestamp_ms, image_width, image_height):
+        self.calls.append(frame_index)
+        return self.result_factory(frame_index)
 
     def get_heads(self, frame, frame_index, timestamp_ms, image_width, image_height):
-        return ()
+        return self.get_frame_result(
+            frame,
+            frame_index,
+            timestamp_ms,
+            image_width,
+            image_height,
+        ).heads
 
     def close(self):
         self.close_calls += 1
@@ -67,17 +95,52 @@ class FakeVideoWriter:
 
 
 class FakeVideoReader:
-    def __init__(self, fps):
+    def __init__(self, fps, frames=(), iteration_error=None, close_error=None):
         self.metadata = SimpleNamespace(width=32, height=24, fps=fps, frame_count=0)
+        self.frames = tuple(frames)
+        self.iteration_error = iteration_error
+        self.close_error = close_error
+        self.close_calls = 0
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
         return False
 
     def __iter__(self):
-        return iter(())
+        if self.iteration_error is not None:
+            raise self.iteration_error
+        return iter(self.frames)
+
+    def close(self):
+        self.close_calls += 1
+        if self.close_error is not None:
+            raise self.close_error
+
+
+class FakeJsonlWriter:
+    def __init__(self, name, events=None, close_error=None):
+        self.name = name
+        self.events = events if events is not None else []
+        self.close_error = close_error
+        self.close_calls = 0
+
+    def write(self, record):
+        self.events.append(self.name)
+
+    def close(self):
+        self.close_calls += 1
+        if self.close_error is not None:
+            raise self.close_error
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
+        return False
 
 
 def write_tiny_video(path, width=32, height=24, fps=5.0, frame_count=3):
@@ -111,6 +174,388 @@ def make_config(**overrides):
 
 
 class VideoPipelineTest(unittest.TestCase):
+    def test_perception_runs_on_every_frame_when_frame_step_is_two(self):
+        with TemporaryDirectory() as tmpdir:
+            video_path = Path(tmpdir) / "clip.mp4"
+            write_tiny_video(video_path, frame_count=4)
+            provider = FakeHeadProvider()
+            config = make_config(
+                input_path=str(video_path),
+                output_dir=str(Path(tmpdir) / "outputs"),
+                frame_step=2,
+            )
+
+            with patch(
+                "gazelle.runtime.pipeline.build_head_provider_from_config",
+                return_value=provider,
+            ):
+                run_video_pipeline(config, predictor_factory=lambda config: FakePredictor())
+
+        self.assertEqual(provider.calls, [0, 1, 2, 3])
+
+    def test_frame_step_skips_gazelle_after_perception(self):
+        with TemporaryDirectory() as tmpdir:
+            video_path = Path(tmpdir) / "clip.mp4"
+            write_tiny_video(video_path, frame_count=4)
+            provider = FakeHeadProvider()
+            predictor = FakePredictor()
+            config = make_config(
+                input_path=str(video_path),
+                output_dir=str(Path(tmpdir) / "outputs"),
+                frame_step=2,
+            )
+
+            with patch(
+                "gazelle.runtime.pipeline.build_head_provider_from_config",
+                return_value=provider,
+            ):
+                result = run_video_pipeline(config, predictor_factory=lambda config: predictor)
+            gaze_rows = read_jsonl(result.predictions_jsonl_path)
+
+        predictor_frame_ids = [call[1][0].person_id for call in predictor.calls]
+        self.assertEqual(provider.calls, [0, 1, 2, 3])
+        self.assertEqual(predictor_frame_ids, [0, 2])
+        self.assertEqual(
+            [row["status"] for row in gaze_rows],
+            ["ok", "skipped", "ok", "skipped"],
+        )
+
+    def test_missing_head_writes_no_head_without_predictor(self):
+        with TemporaryDirectory() as tmpdir:
+            video_path = Path(tmpdir) / "clip.mp4"
+            write_tiny_video(video_path, frame_count=3)
+            provider = FakeHeadProvider(lambda frame_index: HeadFrameResult(heads=()))
+            factory_calls = []
+            config = make_config(
+                input_path=str(video_path),
+                output_dir=str(Path(tmpdir) / "outputs"),
+            )
+
+            with patch(
+                "gazelle.runtime.pipeline.build_head_provider_from_config",
+                return_value=provider,
+            ):
+                result = run_video_pipeline(
+                    config,
+                    predictor_factory=lambda config: factory_calls.append(config),
+                )
+            gaze_rows = read_jsonl(result.predictions_jsonl_path)
+
+        self.assertEqual([row["status"] for row in gaze_rows], ["no_head"] * 3)
+        self.assertEqual(factory_calls, [])
+
+    def test_predictor_is_built_once_on_first_usable_frame(self):
+        with TemporaryDirectory() as tmpdir:
+            video_path = Path(tmpdir) / "clip.mp4"
+            write_tiny_video(video_path, frame_count=4)
+            provider = FakeHeadProvider(
+                lambda frame_index: HeadFrameResult(heads=())
+                if frame_index == 0
+                else HeadFrameResult(
+                    heads=(HeadObservation(frame_index, (0.1, 0.2, 0.4, 0.6), 0.9),)
+                )
+            )
+            predictor = FakePredictor()
+            factory_calls = []
+            provider_calls_at_construction = []
+            config = make_config(
+                input_path=str(video_path),
+                output_dir=str(Path(tmpdir) / "outputs"),
+            )
+
+            def factory(config):
+                factory_calls.append(config)
+                provider_calls_at_construction.append(tuple(provider.calls))
+                return predictor
+
+            with patch(
+                "gazelle.runtime.pipeline.build_head_provider_from_config",
+                return_value=provider,
+            ):
+                result = run_video_pipeline(config, predictor_factory=factory)
+            gaze_rows = read_jsonl(result.predictions_jsonl_path)
+
+        self.assertEqual(len(factory_calls), 1)
+        self.assertEqual(provider_calls_at_construction, [(0, 1)])
+        self.assertEqual([call[1][0].person_id for call in predictor.calls], [1, 2, 3])
+        self.assertEqual([row["status"] for row in gaze_rows], ["no_head", "ok", "ok", "ok"])
+
+    def test_all_skipped_video_does_not_build_predictor(self):
+        frame = SimpleNamespace(index=1, timestamp_ms=200.0, image=object())
+        reader = FakeVideoReader(fps=5.0, frames=(frame,))
+        provider = FakeHeadProvider()
+        factory_calls = []
+
+        with TemporaryDirectory() as tmpdir:
+            config = make_config(
+                input_path=str(Path(tmpdir) / "clip.mp4"),
+                output_dir=str(Path(tmpdir) / "outputs"),
+                frame_step=2,
+            )
+            with patch("gazelle.runtime.pipeline.VideoFrameReader", return_value=reader):
+                with patch(
+                    "gazelle.runtime.pipeline.build_head_provider_from_config",
+                    return_value=provider,
+                ):
+                    result = run_video_pipeline(
+                        config,
+                        predictor_factory=lambda config: factory_calls.append(config),
+                    )
+            gaze_rows = read_jsonl(result.predictions_jsonl_path)
+
+        self.assertEqual(provider.calls, [1])
+        self.assertEqual(factory_calls, [])
+        self.assertEqual([row["status"] for row in gaze_rows], ["skipped"])
+
+    def test_head_observation_row_is_written_before_gaze_row(self):
+        frame = SimpleNamespace(index=0, timestamp_ms=0.0, image=object())
+        reader = FakeVideoReader(fps=5.0, frames=(frame,))
+        provider = FakeHeadProvider()
+        events = []
+        head_writer = FakeJsonlWriter("head", events)
+        gaze_writer = FakeJsonlWriter("gaze", events)
+
+        with TemporaryDirectory() as tmpdir:
+            config = make_config(
+                input_path=str(Path(tmpdir) / "clip.mp4"),
+                output_dir=str(Path(tmpdir) / "outputs"),
+            )
+            with patch("gazelle.runtime.pipeline.VideoFrameReader", return_value=reader):
+                with patch(
+                    "gazelle.runtime.pipeline.build_head_provider_from_config",
+                    return_value=provider,
+                ):
+                    with patch(
+                        "gazelle.runtime.pipeline.JsonlWriter",
+                        side_effect=(head_writer, gaze_writer),
+                    ):
+                        run_video_pipeline(config, predictor_factory=lambda config: FakePredictor())
+
+        self.assertEqual(events, ["head", "gaze"])
+
+    def test_pipeline_attempts_all_resource_cleanup_on_processing_failure(self):
+        primary_error = RuntimeError("processing failed")
+        frame = SimpleNamespace(index=0, timestamp_ms=0.0, image=object())
+        reader = FakeVideoReader(
+            fps=5.0,
+            frames=(frame,),
+            close_error=RuntimeError("reader cleanup failed"),
+        )
+
+        def fail_result(frame_index):
+            raise primary_error
+
+        provider = FakeHeadProvider(
+            fail_result,
+            close_error=RuntimeError("provider cleanup failed"),
+        )
+        video_writer = FakeVideoWriter(close_error=RuntimeError("video cleanup failed"))
+        head_writer = FakeJsonlWriter(
+            "head",
+            close_error=RuntimeError("head JSONL cleanup failed"),
+        )
+        gaze_writer = FakeJsonlWriter(
+            "gaze",
+            close_error=RuntimeError("gaze JSONL cleanup failed"),
+        )
+
+        with TemporaryDirectory() as tmpdir:
+            config = make_config(
+                input_path=str(Path(tmpdir) / "clip.mp4"),
+                output_dir=str(Path(tmpdir) / "outputs"),
+                save_rendered=True,
+            )
+            with patch("gazelle.runtime.pipeline.VideoFrameReader", return_value=reader):
+                with patch(
+                    "gazelle.runtime.pipeline.build_head_provider_from_config",
+                    return_value=provider,
+                ):
+                    with patch(
+                        "gazelle.runtime.pipeline.VideoFrameWriter",
+                        return_value=video_writer,
+                    ):
+                        with patch(
+                            "gazelle.runtime.pipeline.JsonlWriter",
+                            side_effect=(head_writer, gaze_writer),
+                        ):
+                            with self.assertRaises(RuntimeError) as caught:
+                                run_video_pipeline(
+                                    config,
+                                    predictor_factory=lambda config: FakePredictor(),
+                                )
+
+        self.assertIs(caught.exception, primary_error)
+        self.assertEqual(head_writer.close_calls, 1)
+        self.assertEqual(gaze_writer.close_calls, 1)
+        self.assertEqual(video_writer.close_calls, 1)
+        self.assertEqual(provider.close_calls, 1)
+        self.assertEqual(reader.close_calls, 1)
+        notes = caught.exception.__notes__
+        for message in (
+            "head JSONL cleanup failed",
+            "gaze JSONL cleanup failed",
+            "video cleanup failed",
+            "provider cleanup failed",
+            "reader cleanup failed",
+        ):
+            self.assertTrue(any(message in note for note in notes))
+
+    def test_head_observation_rows_match_frames_written(self):
+        with TemporaryDirectory() as tmpdir:
+            video_path = Path(tmpdir) / "clip.mp4"
+            write_tiny_video(video_path, frame_count=4)
+            config = make_config(
+                input_path=str(video_path),
+                output_dir=str(Path(tmpdir) / "outputs"),
+                frame_step=2,
+            )
+
+            result = run_video_pipeline(config, predictor_factory=lambda config: FakePredictor())
+            rows = read_jsonl(result.head_observations_jsonl_path)
+
+        self.assertEqual(len(rows), result.frames_written)
+
+    def test_gaze_rows_match_frames_written(self):
+        with TemporaryDirectory() as tmpdir:
+            video_path = Path(tmpdir) / "clip.mp4"
+            write_tiny_video(video_path, frame_count=4)
+            config = make_config(
+                input_path=str(video_path),
+                output_dir=str(Path(tmpdir) / "outputs"),
+                frame_step=2,
+            )
+
+            result = run_video_pipeline(config, predictor_factory=lambda config: FakePredictor())
+            rows = read_jsonl(result.predictions_jsonl_path)
+
+        self.assertEqual(len(rows), result.frames_written)
+
+    def test_provider_receives_source_fps(self):
+        with TemporaryDirectory() as tmpdir:
+            config = make_config(
+                input_path=str(Path(tmpdir) / "clip.mp4"),
+                output_dir=str(Path(tmpdir) / "outputs"),
+                output_fps=12.0,
+            )
+            reader = FakeVideoReader(fps=0.0)
+            provider = FakeHeadProvider()
+
+            with patch("gazelle.runtime.pipeline.VideoFrameReader", return_value=reader):
+                with patch(
+                    "gazelle.runtime.pipeline.build_head_provider_from_config",
+                    return_value=provider,
+                ) as build_provider:
+                    run_video_pipeline(config, predictor_factory=lambda config: FakePredictor())
+
+        self.assertEqual(build_provider.call_args.kwargs["source_fps"], 12.0)
+
+    def test_provider_closes_on_reader_or_predictor_failure(self):
+        for failure_kind in ("reader", "predictor"):
+            with self.subTest(failure_kind=failure_kind), TemporaryDirectory() as tmpdir:
+                video_path = Path(tmpdir) / "clip.mp4"
+                write_tiny_video(video_path, frame_count=1)
+                provider = FakeHeadProvider()
+                primary_error = RuntimeError("{} failed".format(failure_kind))
+                config = make_config(
+                    input_path=str(video_path),
+                    output_dir=str(Path(tmpdir) / "outputs"),
+                )
+
+                if failure_kind == "reader":
+                    reader = FakeVideoReader(fps=5.0, iteration_error=primary_error)
+                    reader_patch = patch(
+                        "gazelle.runtime.pipeline.VideoFrameReader",
+                        return_value=reader,
+                    )
+                    predictor_factory = lambda config: FakePredictor()
+                else:
+                    reader_patch = patch("gazelle.runtime.pipeline.VideoFrameReader", wraps=VideoFrameReader)
+
+                    def predictor_factory(config):
+                        raise primary_error
+
+                with reader_patch:
+                    with patch(
+                        "gazelle.runtime.pipeline.build_head_provider_from_config",
+                        return_value=provider,
+                    ):
+                        with self.assertRaises(RuntimeError) as caught:
+                            run_video_pipeline(config, predictor_factory=predictor_factory)
+
+                self.assertIs(caught.exception, primary_error)
+                self.assertEqual(provider.close_calls, 1)
+
+    def test_existing_output_dir_rejects_before_provider(self):
+        with TemporaryDirectory() as tmpdir:
+            video_path = Path(tmpdir) / "clip.mp4"
+            write_tiny_video(video_path, frame_count=1)
+            output_dir = Path(tmpdir) / "outputs"
+            (output_dir / "clip_gazelle").mkdir(parents=True)
+            config = make_config(input_path=str(video_path), output_dir=str(output_dir))
+
+            with patch(
+                "gazelle.runtime.pipeline.build_head_provider_from_config"
+            ) as build_provider:
+                with self.assertRaises(FileExistsError):
+                    run_video_pipeline(config, predictor_factory=lambda config: FakePredictor())
+
+        build_provider.assert_not_called()
+
+    def test_max_frames_limits_both_output_files(self):
+        with TemporaryDirectory() as tmpdir:
+            video_path = Path(tmpdir) / "clip.mp4"
+            write_tiny_video(video_path, frame_count=5)
+            config = make_config(
+                input_path=str(video_path),
+                output_dir=str(Path(tmpdir) / "outputs"),
+                max_frames=2,
+            )
+
+            result = run_video_pipeline(config, predictor_factory=lambda config: FakePredictor())
+            head_rows = read_jsonl(result.head_observations_jsonl_path)
+            gaze_rows = read_jsonl(result.predictions_jsonl_path)
+
+        self.assertEqual(result.frames_written, 2)
+        self.assertEqual(len(head_rows), 2)
+        self.assertEqual(len(gaze_rows), 2)
+
+    def test_tracked_only_head_can_run_gazelle(self):
+        head = HeadObservation(9, (0.2, 0.2, 0.5, 0.6), 0.8)
+        perception = HeadPerception(
+            person_id=9,
+            head_bbox=head.bbox,
+            face_bbox=None,
+            confidence=0.8,
+            state=HeadPerceptionState.TRACKED_ONLY,
+            view_state=HeadViewState.UNKNOWN,
+            observed=False,
+            missed_frames=1,
+            missed_ms=200.0,
+        )
+        provider = FakeHeadProvider(
+            lambda frame_index: HeadFrameResult(heads=(head,), perceptions=(perception,))
+        )
+        predictor = FakePredictor()
+
+        with TemporaryDirectory() as tmpdir:
+            video_path = Path(tmpdir) / "clip.mp4"
+            write_tiny_video(video_path, frame_count=1)
+            config = make_config(
+                input_path=str(video_path),
+                output_dir=str(Path(tmpdir) / "outputs"),
+            )
+            with patch(
+                "gazelle.runtime.pipeline.build_head_provider_from_config",
+                return_value=provider,
+            ):
+                result = run_video_pipeline(config, predictor_factory=lambda config: predictor)
+            head_rows = read_jsonl(result.head_observations_jsonl_path)
+            gaze_rows = read_jsonl(result.predictions_jsonl_path)
+
+        self.assertEqual(len(predictor.calls), 1)
+        self.assertEqual(head_rows[0]["people"][0]["state"], "tracked_only")
+        self.assertEqual(gaze_rows[0]["status"], "ok")
+
     def test_build_head_provider_mediapipe_video_uses_source_fps_for_tracker(self):
         backend = SimpleNamespace(close=lambda: None)
         tracker = SimpleNamespace(close=lambda: None)
