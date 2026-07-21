@@ -195,7 +195,7 @@ python main.py `
   --head-data samples\frame_heads.json
 ```
 
-### MediaPipe Resource Preparation (Provider Staged)
+### MediaPipe Provider Composition (Staged)
 
 The CLI accepts `--head-source mediapipe` and validates MediaPipe runtime settings: `--max-heads` accepts `1` through `10` (default `1`), `--pose-model` accepts `lite`, `full`, or `heavy` (default `full`), `--head-track-max-gap-ms` accepts a finite value greater than `0` in milliseconds (default `500.0`), and `--save-face-landmarks` enables face-landmark output configuration (default off).
 
@@ -212,7 +212,9 @@ The pose selection prepares `pose_landmarker_lite.task`, `pose_landmarker_full.t
 
 Default unit tests use fake downloaders and do not access the network. The pinned registry hashes were established once by downloading exactly the five official versioned assets to an OS temporary directory outside the repository, calculating SHA-256, and deleting that temporary directory.
 
-This milestone prepares resources only. The MediaPipe provider remains staged and cannot run until the later provider integration task; no MediaPipe dependency is installed or imported by resource preparation.
+`--head-source mediapipe` is now wired into the runtime head-provider factory. The provider composes prepared resources, the MediaPipe backend, head/pose fusion, video ByteTrack tracking, and the 500 ms short-occlusion bridge. Image IDs are deterministic and start at zero; video IDs come from ByteTrack. Gazelle receives normalized, non-`None` MediaPipe head bboxes.
+
+This remains a staged integration: dependency/environment declaration and rich observation results in pipeline outputs are deferred to later tasks. The final recommended end-to-end setup is not complete, and this documentation does not claim real MediaPipe, tracker, or Gazelle validation.
 
 For single-image inference, JSON head data is read from `frame_index=0`. The JSON format is the same internal head record format used by the runtime head providers, with `bbox_format` set to `normalized` or `pixel` and `heads` containing `person_id`, `bbox`, and optional `confidence`.
 

@@ -204,7 +204,7 @@ python main.py `
   --head-data samples\frame_heads.json
 ```
 
-### MediaPipe 资源准备（Provider 暂存）
+### MediaPipe Provider 组合（分阶段）
 
 CLI 接受 `--head-source mediapipe`，并校验 MediaPipe 运行时设置：`--max-heads` 接受 `1` 到 `10`（默认 `1`）；`--pose-model` 接受 `lite`、`full` 或 `heavy`（默认 `full`）；`--head-track-max-gap-ms` 接受大于 `0` 的有限毫秒值（默认 `500.0`）；`--save-face-landmarks` 启用人脸关键点输出配置（默认关闭）。
 
@@ -221,7 +221,9 @@ pose 选项会分别准备 `pose_landmarker_lite.task`、`pose_landmarker_full.t
 
 默认单元测试使用 fake downloader，不访问网络。注册表中的固定摘要只在建立时进行过一次真实校验：将恰好五个官方版本化资源下载到仓库外的 OS 临时目录，计算 SHA-256，然后删除该临时目录。
 
-此里程碑只负责准备资源。MediaPipe provider 仍处于暂存阶段，在后续 provider 集成任务完成前无法运行；资源准备不会安装或导入 MediaPipe 依赖。
+`--head-source mediapipe` 现已接入 runtime head provider 工厂。provider 会组合已准备的资源、MediaPipe backend、head/pose fusion；视频还会使用 ByteTrack 跟踪和 500 ms 的短时遮挡桥接。图片 ID 确定且从零开始，视频 ID 来自 ByteTrack。传给 Gazelle 的 MediaPipe head bbox 始终是归一化且非 `None`。
+
+这仍是分阶段集成：依赖/环境声明以及 rich observation 结果到 pipeline 输出的接线留待后续任务。最终推荐的端到端配置尚未完成，本文档不宣称已经进行了真实的 MediaPipe、tracker 或 Gazelle 验证。
 
 单图推理会读取 `frame_index=0` 的 head 数据。JSON 使用 runtime head provider 的内部 record 格式，`bbox_format` 可以是 `normalized` 或 `pixel`，`heads` 中包含 `person_id`、`bbox` 和可选 `confidence`。
 

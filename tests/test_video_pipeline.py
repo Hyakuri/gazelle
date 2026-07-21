@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 import unittest
 
 import cv2
@@ -10,7 +11,8 @@ import torch
 from gazelle.runtime.config import RuntimeConfig
 from gazelle.runtime.contracts import GazePrediction
 from gazelle.runtime.media import VideoFrameReader
-from gazelle.runtime.pipeline import run_video_pipeline
+from gazelle.runtime.pipeline import build_head_provider_from_config, run_video_pipeline
+from gazelle.runtime.perception.provider import MediaPipeHeadProvider
 
 
 class FakePredictor:
@@ -66,6 +68,29 @@ def make_config(**overrides):
 
 
 class VideoPipelineTest(unittest.TestCase):
+    def test_build_head_provider_mediapipe_video_uses_source_fps_for_tracker(self):
+        backend = SimpleNamespace(close=lambda: None)
+        tracker = SimpleNamespace(close=lambda: None)
+
+        class FakeTrackerFactory:
+            source_fps = None
+
+            def __call__(self, source_fps):
+                self.source_fps = source_fps
+                return tracker
+
+        tracker_factory = FakeTrackerFactory()
+        provider = build_head_provider_from_config(
+            make_config(head_source="mediapipe"),
+            media_type="video",
+            source_fps=25.0,
+            backend_factory=lambda config, *, media_type: backend,
+            tracker_factory=tracker_factory,
+        )
+
+        self.assertIsInstance(provider, MediaPipeHeadProvider)
+        self.assertEqual(tracker_factory.source_fps, 25.0)
+
     def test_run_video_pipeline_none_head_source_writes_jsonl(self):
         with TemporaryDirectory() as tmpdir:
             video_path = Path(tmpdir) / "clip.mp4"

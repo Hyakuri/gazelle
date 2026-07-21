@@ -20,4 +20,13 @@ __all__ = [
     "HeadViewState",
     "NormalizedLandmark",
     "PoseObservation",
+    "MediaPipeHeadProvider",
 ]
+
+
+def __getattr__(name):
+    if name == "MediaPipeHeadProvider":
+        from gazelle.runtime.perception.provider import MediaPipeHeadProvider
+
+        return MediaPipeHeadProvider
+    raise AttributeError(name)

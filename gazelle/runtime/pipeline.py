@@ -47,7 +47,13 @@ class VideoPipelineResult:
     frames_written: int
 
 
-def build_head_provider_from_config(config):
+def build_head_provider_from_config(
+    config,
+    media_type: str = "image",
+    source_fps: float = 30.0,
+    backend_factory=None,
+    tracker_factory=None,
+):
     if config.head_source == "none":
         return NoneHeadProvider()
     if config.head_source == "static":
@@ -62,6 +68,16 @@ def build_head_provider_from_config(config):
         if not config.head_data:
             raise ValueError("--head-source json requires --head-data")
         return load_json_head_provider(config.head_data)
+    if config.head_source == "mediapipe":
+        from gazelle.runtime.perception.provider import MediaPipeHeadProvider
+
+        return MediaPipeHeadProvider.create(
+            config,
+            media_type=media_type,
+            source_fps=source_fps,
+            backend_factory=backend_factory,
+            tracker_factory=tracker_factory,
+        )
     raise ValueError("Unknown head source: {}".format(config.head_source))
 
 
@@ -189,16 +205,19 @@ def run_image_pipeline(config, predictor_factory: Optional[Callable[[object], ob
     image, width, height = load_image_rgb(config.input_path)
     output_dir = create_output_dir(config.input_path, config.output_dir, overwrite=config.overwrite)
 
-    head_provider = build_head_provider_from_config(config)
-    heads = tuple(
-        head_provider.get_heads(
-            frame=image,
-            frame_index=0,
-            timestamp_ms=0.0,
-            image_width=width,
-            image_height=height,
+    head_provider = build_head_provider_from_config(config, media_type="image")
+    try:
+        heads = tuple(
+            head_provider.get_heads(
+                frame=image,
+                frame_index=0,
+                timestamp_ms=0.0,
+                image_width=width,
+                image_height=height,
+            )
         )
-    )
+    finally:
+        head_provider.close()
 
     predictor = predictor_factory(config) if predictor_factory is not None else _build_real_predictor(config)
     predictions = tuple(predictor.predict_frame(image, heads))
@@ -258,7 +277,11 @@ def run_video_pipeline(config, predictor_factory: Optional[Callable[[object], ob
             config.output_dir,
             overwrite=config.overwrite,
         )
-        head_provider = build_head_provider_from_config(config)
+        head_provider = build_head_provider_from_config(
+            config,
+            media_type="video",
+            source_fps=metadata.fps,
+        )
         predictor = predictor_factory(config) if predictor_factory is not None else _build_real_predictor(config)
 
         predictions_jsonl_path = output_dir / "predictions.jsonl"
@@ -350,8 +373,11 @@ def run_video_pipeline(config, predictor_factory: Optional[Callable[[object], ob
                         writer.write(rendered)
                     frames_written += 1
         finally:
-            if writer is not None:
-                writer.close()
+            try:
+                if writer is not None:
+                    writer.close()
+            finally:
+                head_provider.close()
 
         write_run_config_json(
             run_config_path,

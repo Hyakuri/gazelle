@@ -11,6 +11,7 @@ from PIL import Image
 from gazelle.runtime.config import RuntimeConfig
 from gazelle.runtime.contracts import GazePrediction
 from gazelle.runtime.heads import JsonHeadProvider, NoneHeadProvider, StaticHeadProvider
+from gazelle.runtime.perception.provider import MediaPipeHeadProvider
 from gazelle.runtime.pipeline import (
     _safe_clear_output_dir,
     _build_real_predictor,
@@ -64,6 +65,22 @@ def make_config(**overrides):
 
 
 class ImagePipelineTest(unittest.TestCase):
+    def test_build_head_provider_mediapipe_image_uses_injected_backend(self):
+        backend = SimpleNamespace(close=lambda: None)
+        calls = []
+
+        def fake_backend_factory(config, *, media_type):
+            calls.append((config, media_type))
+            return backend
+
+        provider = build_head_provider_from_config(
+            make_config(head_source="mediapipe"),
+            backend_factory=fake_backend_factory,
+        )
+
+        self.assertIsInstance(provider, MediaPipeHeadProvider)
+        self.assertEqual(calls[0][1], "image")
+
     def test_build_head_provider_none(self):
         provider = build_head_provider_from_config(make_config(head_source="none"))
 
