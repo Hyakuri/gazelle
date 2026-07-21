@@ -1,6 +1,6 @@
 import json
 import math
-from numbers import Integral, Real
+from numbers import Real
 from pathlib import Path
 
 from gazelle.runtime.perception.contracts import HeadPerceptionState, HeadViewState
@@ -19,15 +19,17 @@ def _finite_float(value, field_name):
 def _exact_int(value, field_name):
     if isinstance(value, bool) or not isinstance(value, Real):
         raise ValueError("{} must be an integer".format(field_name))
-    if isinstance(value, Integral):
-        return int(value)
     try:
-        number = float(value)
+        integer = int(value)
     except (TypeError, ValueError, OverflowError) as error:
         raise ValueError("{} must be an integer".format(field_name)) from error
-    if not math.isfinite(number) or not number.is_integer():
+    try:
+        is_exact = bool(value == integer)
+    except (TypeError, ValueError, OverflowError) as error:
+        raise ValueError("{} must be an integer".format(field_name)) from error
+    if not is_exact:
         raise ValueError("{} must be an integer".format(field_name))
-    return int(number)
+    return integer
 
 
 def _exact_bool(value, field_name):

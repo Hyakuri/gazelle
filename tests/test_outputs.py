@@ -1,5 +1,6 @@
 import json
 from dataclasses import replace
+from fractions import Fraction
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
@@ -324,6 +325,32 @@ class OutputsTest(unittest.TestCase):
         self.assertIs(type(record["frame_index"]), int)
         self.assertIs(type(record["width"]), int)
         self.assertIs(type(record["height"]), int)
+
+    def test_head_frame_rejects_underflowing_non_integral_fraction(self):
+        with self.assertRaisesRegex(ValueError, "integer"):
+            head_frame_to_json_dict(
+                frame_index=Fraction(1, 10**400),
+                timestamp_ms=66.6,
+                image_width=640,
+                image_height=480,
+                provider="static",
+                result=HeadFrameResult(heads=()),
+            )
+
+    def test_head_frame_preserves_large_exact_integral_fraction(self):
+        exact_value = 9007199254740993
+
+        record = head_frame_to_json_dict(
+            frame_index=Fraction(exact_value, 1),
+            timestamp_ms=66.6,
+            image_width=640,
+            image_height=480,
+            provider="static",
+            result=HeadFrameResult(heads=()),
+        )
+
+        self.assertEqual(record["frame_index"], exact_value)
+        self.assertIs(type(record["frame_index"]), int)
 
     def test_head_frame_requires_exact_integral_person_and_tracking_fields(self):
         invalid_values = (True, "1", 1.5, float("nan"), float("inf"))
