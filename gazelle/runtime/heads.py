@@ -8,6 +8,7 @@ from typing import Optional, Tuple
 
 from gazelle.runtime.contracts import BBox, HeadObservation
 from gazelle.runtime.geometry import pixel_bbox_to_normalized, sanitize_normalized_bbox
+from gazelle.runtime.perception.contracts import HeadFrameResult
 
 
 SUPPORTED_BBOX_FORMATS = ("normalized", "pixel")
@@ -24,6 +25,20 @@ class HeadProvider(ABC):
         image_height: int,
     ) -> Tuple[HeadObservation, ...]:
         raise NotImplementedError
+
+    def get_frame_result(self, frame, frame_index, timestamp_ms, image_width, image_height):
+        heads = tuple(self.get_heads(frame, frame_index, timestamp_ms, image_width, image_height))
+        return HeadFrameResult(heads=heads)
+
+    def close(self):
+        return None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
+        return False
 
 
 def _is_finite_real(value: object) -> bool:
