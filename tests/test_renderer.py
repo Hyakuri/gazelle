@@ -1,10 +1,12 @@
+from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 import torch
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from gazelle.runtime.contracts import GazePrediction
 from gazelle.runtime.perception.contracts import (
@@ -14,7 +16,11 @@ from gazelle.runtime.perception.contracts import (
     NormalizedLandmark,
 )
 from gazelle.runtime.renderer import (
+    FACE_BOX_COLOR,
+    FACE_KEYPOINT_COLOR,
+    FACE_MESH_COLOR,
     PEAK_MARKER_COLOR,
+    POSE_HEAD_POINT_COLOR,
     PredictionRenderer,
     RenderOptions,
     build_prediction_label,
@@ -217,6 +223,191 @@ class RendererTest(unittest.TestCase):
 
         self.assertEqual(prediction.bbox, prediction_bbox)
         self.assertEqual(perception, perception_before)
+
+    def test_perception_contract_exact_layer_call_order(self):
+        image = Image.new("RGB", (64, 64), color=(20, 20, 20))
+        prediction = make_prediction()
+        perception = replace(
+            make_perception(),
+            face_keypoints=make_perception().face_keypoints
+            + (NormalizedLandmark(x=0.75, y=0.75),),
+        )
+        options = RenderOptions(
+            draw_head_box=True,
+            draw_heatmap_contour=True,
+            draw_face_box=True,
+            draw_face_keypoints=True,
+            draw_pose_head_points=True,
+            draw_face_mesh=True,
+        )
+        events = []
+        transparent = Image.new("RGBA", image.size, (0, 0, 0, 0))
+        person_color = stable_color_for_person(perception.person_id)
+
+        def record_rectangle(draw_context, xy, **kwargs):
+            color = kwargs.get("outline") or kwargs.get("fill")
+            rgb = tuple(color[:3])
+            if kwargs.get("outline") is not None:
+                events.append(
+                    "perception_head_box" if rgb == person_color else "face_box"
+                )
+            else:
+                events.append("perception_label_background")
+
+        def record_ellipse(draw_context, xy, **kwargs):
+            rgb = tuple(kwargs["fill"][:3])
+            names = {
+                FACE_KEYPOINT_COLOR: "face_keypoint",
+                POSE_HEAD_POINT_COLOR: "pose_head_point",
+                FACE_MESH_COLOR: "face_mesh_point",
+            }
+            events.append(names[rgb])
+
+        with patch(
+            "gazelle.runtime.renderer.heatmap_to_overlay",
+            side_effect=lambda *args, **kwargs: events.append("heatmap") or transparent,
+        ), patch(
+            "gazelle.runtime.renderer.heatmap_to_topk_mask",
+            return_value=np.ones((2, 2), dtype=bool),
+        ), patch(
+            "gazelle.runtime.renderer.heatmap_mask_to_contour_overlay",
+            side_effect=lambda *args, **kwargs: events.append("contour") or transparent,
+        ), patch(
+            "gazelle.runtime.renderer.draw_prediction",
+            side_effect=lambda *args, **kwargs: events.append("gaze_geometry"),
+        ), patch.object(
+            ImageDraw.ImageDraw,
+            "rectangle",
+            autospec=True,
+            side_effect=record_rectangle,
+        ), patch.object(
+            ImageDraw.ImageDraw,
+            "ellipse",
+            autospec=True,
+            side_effect=record_ellipse,
+        ), patch.object(
+            ImageDraw.ImageDraw,
+            "text",
+            autospec=True,
+            side_effect=lambda *args, **kwargs: events.append("perception_label"),
+        ), patch(
+            "gazelle.runtime.renderer.draw_prediction_label",
+            side_effect=lambda *args, **kwargs: events.append("gaze_label"),
+        ):
+            PredictionRenderer(options).render(image, (prediction,), (perception,))
+
+        self.assertEqual(
+            events,
+            [
+                "heatmap",
+                "contour",
+                "gaze_geometry",
+                "perception_head_box",
+                "face_box",
+                *("face_keypoint" for _ in range(6)),
+                *("pose_head_point" for _ in range(3)),
+                *("face_mesh_point" for _ in range(3)),
+                "perception_label_background",
+                "perception_label",
+                "gaze_label",
+            ],
+        )
+
+    def test_perception_contract_draws_only_first_six_face_keypoints(self):
+        image = Image.new("RGB", (21, 21), color=(20, 20, 20))
+        first_six = tuple(NormalizedLandmark(x=0.25, y=0.25) for _ in range(6))
+        perception = replace(
+            make_perception(),
+            face_keypoints=first_six + (NormalizedLandmark(x=0.75, y=0.75),),
+        )
+        options = RenderOptions(
+            draw_heatmap=False,
+            draw_gaze_peak=False,
+            draw_gaze_arrow=False,
+            draw_labels=False,
+            draw_face_keypoints=True,
+            draw_track_state=False,
+        )
+
+        rendered = PredictionRenderer(options).render(image, (), (perception,))
+
+        self.assertEqual(rendered.getpixel((5, 5)), FACE_KEYPOINT_COLOR)
+        self.assertEqual(rendered.getpixel((15, 15)), image.getpixel((15, 15)))
+
+    def test_perception_contract_clamps_out_of_range_bbox_and_landmark(self):
+        image = Image.new("RGB", (21, 21), color=(20, 20, 20))
+        common = RenderOptions(
+            draw_heatmap=False,
+            draw_gaze_peak=False,
+            draw_gaze_arrow=False,
+            draw_labels=False,
+            draw_track_state=False,
+        )
+        bbox_perception = replace(
+            make_perception(),
+            head_bbox=(-0.5, -0.5, 1.5, 1.5),
+        )
+        landmark_perception = replace(
+            make_perception(),
+            face_keypoints=(NormalizedLandmark(x=-0.5, y=1.5),),
+        )
+
+        bbox_rendered = PredictionRenderer(common).render(
+            image, (), (bbox_perception,)
+        )
+        landmark_rendered = PredictionRenderer(
+            replace(common, draw_face_keypoints=True)
+        ).render(image, (), (landmark_perception,))
+
+        person_color = stable_color_for_person(bbox_perception.person_id)
+        for corner in ((0, 0), (20, 0), (0, 20), (20, 20)):
+            with self.subTest(corner=corner):
+                self.assertEqual(bbox_rendered.getpixel(corner), person_color)
+        self.assertEqual(landmark_rendered.getpixel((0, 20)), FACE_KEYPOINT_COLOR)
+
+    def test_perception_contract_collections_keep_own_ids_colors_and_positions(self):
+        image = Image.new("RGB", (100, 60), color=(20, 20, 20))
+        predictions = (
+            make_prediction(
+                person_id=101,
+                bbox=(0.05, 0.10, 0.20, 0.40),
+                heatmap=None,
+                gaze_peak=None,
+            ),
+            make_prediction(
+                person_id=202,
+                bbox=(0.80, 0.10, 0.95, 0.40),
+                heatmap=None,
+                gaze_peak=None,
+            ),
+        )
+        perceptions = (
+            replace(
+                make_perception(),
+                person_id=202,
+                head_bbox=(0.05, 0.60, 0.20, 0.90),
+            ),
+            replace(
+                make_perception(),
+                person_id=999,
+                head_bbox=(0.80, 0.60, 0.95, 0.90),
+            ),
+        )
+        options = RenderOptions(
+            draw_heatmap=False,
+            draw_head_box=True,
+            draw_gaze_peak=False,
+            draw_gaze_arrow=False,
+            draw_labels=False,
+            draw_track_state=False,
+        )
+
+        rendered = PredictionRenderer(options).render(image, predictions, perceptions)
+
+        self.assertEqual(rendered.getpixel((5, 6)), stable_color_for_person(101))
+        self.assertEqual(rendered.getpixel((80, 6)), stable_color_for_person(202))
+        self.assertEqual(rendered.getpixel((80, 36)), stable_color_for_person(999))
+        self.assertEqual(rendered.getpixel((5, 36)), stable_color_for_person(202))
 
     def test_stable_color_is_repeatable(self):
         self.assertEqual(stable_color_for_person(7), stable_color_for_person(7))

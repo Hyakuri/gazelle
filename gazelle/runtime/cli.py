@@ -154,7 +154,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--face-mesh",
         action="store_true",
-        help="Draw saved MediaPipe face-mesh points in rendered output.",
+        help="Draw current MediaPipe face-mesh landmarks in rendered output.",
     )
     parser.add_argument(
         "--no-track-state",

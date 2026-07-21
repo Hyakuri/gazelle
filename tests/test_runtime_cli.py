@@ -16,6 +16,12 @@ from gazelle.runtime.config import (
 
 
 class RuntimeCliTest(unittest.TestCase):
+    def test_face_mesh_help_describes_rendering_opt_in_not_saved_landmarks(self):
+        help_text = build_parser().format_help()
+
+        self.assertIn("Draw current MediaPipe face-mesh landmarks", help_text)
+        self.assertNotIn("Draw saved MediaPipe face-mesh points", help_text)
+
     def assert_no_model_modules_newly_imported(self, callback):
         before = set(sys.modules)
         callback()
