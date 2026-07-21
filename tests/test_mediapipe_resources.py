@@ -47,6 +47,10 @@ class MediaPipeResourcesTest(unittest.TestCase):
     def task_download_dir(self):
         return self.paths.downloads_dir / self.spec.key
 
+    @property
+    def lock_path(self):
+        return self.paths.downloads_dir / "{}.lock".format(self.spec.key)
+
     def write_cached_asset(self, content):
         self.asset_path.parent.mkdir(parents=True, exist_ok=True)
         self.asset_path.write_bytes(content)
@@ -208,6 +212,66 @@ class MediaPipeResourcesTest(unittest.TestCase):
             [self.task_download_dir / self.spec.filename],
         )
         self.assertFalse(self.task_download_dir.exists())
+        self.assertFalse(self.lock_path.exists())
+
+    def test_held_lock_prevents_staging_mutation_and_preserves_cached_asset(self):
+        self.write_cached_asset(self.new_content)
+        self.task_download_dir.mkdir(parents=True)
+        marker_path = self.task_download_dir / "other-process.marker"
+        marker_path.write_text("keep", encoding="utf-8")
+        self.lock_path.write_text("pid=123\ntoken=held\n", encoding="ascii")
+        downloader_calls = []
+
+        def unexpected_downloader(url, destination):
+            downloader_calls.append((url, destination))
+            raise AssertionError("a held lock must prevent downloading")
+
+        with self.assertRaisesRegex(RuntimeError, "preserved.*lock is already held"):
+            ensure_mediapipe_asset(
+                self.spec,
+                self.paths,
+                force_download=True,
+                downloader=unexpected_downloader,
+            )
+
+        self.assertEqual(downloader_calls, [])
+        self.assertEqual(self.asset_path.read_bytes(), self.new_content)
+        self.assertEqual(marker_path.read_text(encoding="utf-8"), "keep")
+        self.assertEqual(
+            self.lock_path.read_text(encoding="ascii"),
+            "pid=123\ntoken=held\n",
+        )
+
+    def test_existing_lock_is_not_silently_removed_as_stale(self):
+        self.paths.downloads_dir.mkdir(parents=True)
+        self.lock_path.write_text("stale-looking", encoding="ascii")
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "not removed automatically.*no preparation process is active",
+        ):
+            ensure_mediapipe_asset(
+                self.spec,
+                self.paths,
+                downloader=lambda url, destination: self.fail("downloaded while locked"),
+            )
+
+        self.assertEqual(self.lock_path.read_text(encoding="ascii"), "stale-looking")
+
+    def test_lock_release_failure_does_not_fail_verified_replacement(self):
+        def successful_downloader(url, destination):
+            Path(destination).write_bytes(self.new_content)
+
+        with patch.object(Path, "unlink", side_effect=OSError("lock release denied")):
+            result = ensure_mediapipe_asset(
+                self.spec,
+                self.paths,
+                downloader=successful_downloader,
+            )
+
+        self.assertEqual(result, self.asset_path)
+        self.assertEqual(self.asset_path.read_bytes(), self.new_content)
+        self.assertTrue(self.lock_path.exists())
 
     def test_hash_failure_preserves_cached_asset_and_cleans_download(self):
         self.write_cached_asset(b"old")
@@ -228,6 +292,48 @@ class MediaPipeResourcesTest(unittest.TestCase):
 
     def test_unsafe_asset_path_components_are_rejected_before_filesystem_access(self):
         unsafe_values = ("", ".", "..", "nested/path", "nested\\path", "C:\\outside", "/outside")
+
+        for field_name in ("key", "filename"):
+            for value in unsafe_values:
+                with self.subTest(field_name=field_name, value=value):
+                    spec_values = {
+                        "key": self.spec.key,
+                        "filename": self.spec.filename,
+                        "url": self.spec.url,
+                        "sha256": self.spec.sha256,
+                    }
+                    spec_values[field_name] = value
+                    unsafe_spec = MediaPipeAssetSpec(**spec_values)
+                    with patch.object(
+                        Path,
+                        "mkdir",
+                        side_effect=AssertionError("filesystem was touched"),
+                    ):
+                        with self.assertRaisesRegex(ValueError, field_name):
+                            ensure_mediapipe_asset(
+                                unsafe_spec,
+                                self.paths,
+                                downloader=lambda url, destination: None,
+                            )
+
+    def test_windows_unsafe_asset_path_components_are_rejected_deterministically(self):
+        unsafe_values = (
+            "bad:name",
+            "bad*name",
+            "bad?name",
+            "bad|name",
+            'bad"name',
+            "bad<name",
+            "bad>name",
+            "trailing.",
+            "trailing ",
+            "CON",
+            "prn.txt",
+            "AUX.task",
+            "nul.bin",
+            *("COM{}.task".format(index) for index in range(1, 10)),
+            *("lpt{}".format(index) for index in range(1, 10)),
+        )
 
         for field_name in ("key", "filename"):
             for value in unsafe_values:
@@ -316,6 +422,29 @@ class MediaPipeResourcesTest(unittest.TestCase):
                 downloader=lambda url, destination: None,
             )
 
+        self.assertEqual(marker_path.read_text(encoding="utf-8"), "keep")
+
+    def test_download_containment_failure_reports_existing_cache_as_preserved(self):
+        self.write_cached_asset(self.new_content)
+        outside_downloads = self.paths.root_dir / "outside-downloads"
+        outside_downloads.mkdir()
+        marker_path = outside_downloads / "marker.txt"
+        marker_path.write_text("keep", encoding="utf-8")
+        unsafe_paths = MediaPipeResourcePaths(
+            root_dir=self.paths.root_dir,
+            mediapipe_dir=self.paths.mediapipe_dir,
+            downloads_dir=outside_downloads,
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "preserved.*contained"):
+            ensure_mediapipe_asset(
+                self.spec,
+                unsafe_paths,
+                force_download=True,
+                downloader=lambda url, destination: self.fail("downloaded outside cache"),
+            )
+
+        self.assertEqual(self.asset_path.read_bytes(), self.new_content)
         self.assertEqual(marker_path.read_text(encoding="utf-8"), "keep")
 
     def test_mediapipe_directory_must_be_contained_before_replacement(self):

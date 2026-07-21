@@ -1,6 +1,8 @@
 import hashlib
+import os
 import shutil
 import urllib.request
+import uuid
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Callable, Dict, Optional, Tuple
@@ -115,11 +117,23 @@ def _validate_path_component(value: str, field_name: str) -> str:
         raise ValueError("MediaPipe asset {} must be a string path component".format(field_name))
     windows_path = PureWindowsPath(value)
     posix_path = PurePosixPath(value)
+    windows_device_name = value.split(".", 1)[0].upper()
+    reserved_windows_device_names = {
+        "CON",
+        "PRN",
+        "AUX",
+        "NUL",
+        *("COM{}".format(index) for index in range(1, 10)),
+        *("LPT{}".format(index) for index in range(1, 10)),
+    }
     if (
         value in ("", ".", "..")
         or "\x00" in value
         or "/" in value
         or "\\" in value
+        or any(character in value for character in '<>:"|?*')
+        or value.endswith((".", " "))
+        or windows_device_name in reserved_windows_device_names
         or windows_path.is_absolute()
         or bool(windows_path.drive)
         or posix_path.is_absolute()
@@ -171,6 +185,72 @@ def _best_effort_cleanup_task_dir(task_download_dir: Path, downloads_dir: Path) 
         return
 
 
+def _best_effort_release_asset_lock(
+    lock_path: Path,
+    downloads_dir: Path,
+    lock_token: str,
+) -> None:
+    try:
+        _resolve_contained_path(
+            lock_path,
+            downloads_dir,
+            "MediaPipe asset preparation lock",
+        )
+        if lock_path.is_symlink() or not lock_path.is_file():
+            return
+        expected_owner = "pid={}\ntoken={}\n".format(os.getpid(), lock_token)
+        if lock_path.read_text(encoding="ascii") != expected_owner:
+            return
+        lock_path.unlink()
+    except Exception:
+        return
+
+
+def _acquire_asset_lock(lock_path: Path, downloads_dir: Path, key: str) -> str:
+    resolved_lock_path = _resolve_contained_path(
+        lock_path,
+        downloads_dir,
+        "MediaPipe asset preparation lock",
+    )
+    lock_token = uuid.uuid4().hex
+    flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
+    if hasattr(os, "O_BINARY"):
+        flags |= os.O_BINARY
+    try:
+        file_descriptor = os.open(str(lock_path), flags, 0o600)
+    except FileExistsError as exc:
+        raise RuntimeError(
+            "MediaPipe asset preparation lock is already held for {} at {}. Lock "
+            "artifacts are not removed automatically because they may belong to an "
+            "active process; verify no preparation process is active before removing "
+            "a stale lock.".format(key, lock_path)
+        ) from exc
+
+    try:
+        with os.fdopen(file_descriptor, "w", encoding="ascii", newline="\n") as handle:
+            handle.write("pid={}\ntoken={}\n".format(os.getpid(), lock_token))
+            handle.flush()
+        if (
+            _resolve_contained_path(
+                lock_path,
+                downloads_dir,
+                "MediaPipe asset preparation lock",
+            )
+            != resolved_lock_path
+            or lock_path.is_symlink()
+            or not lock_path.is_file()
+        ):
+            raise RuntimeError(
+                "MediaPipe asset preparation lock changed during acquisition: {}".format(
+                    lock_path
+                )
+            )
+    except Exception:
+        _best_effort_release_asset_lock(lock_path, downloads_dir, lock_token)
+        raise
+    return lock_token
+
+
 def ensure_mediapipe_asset(
     spec: MediaPipeAssetSpec,
     paths: MediaPipeResourcePaths,
@@ -182,10 +262,13 @@ def ensure_mediapipe_asset(
     destination = paths.mediapipe_dir / filename
     task_download_dir = paths.downloads_dir / key
     downloaded_path = task_download_dir / filename
+    lock_path = paths.downloads_dir / "{}.lock".format(key)
     downloader = urllib.request.urlretrieve if downloader is None else downloader
     cached_destination_present = False
-    task_scope_validated = False
+    resolved_downloads_dir = None
+    lock_token = None
     try:
+        cached_destination_present = destination.exists() or destination.is_symlink()
         resolved_root = paths.root_dir.resolve(strict=False)
         resolved_mediapipe_dir = _resolve_contained_path(
             paths.mediapipe_dir,
@@ -203,18 +286,10 @@ def ensure_mediapipe_asset(
             "MediaPipe asset destination",
         )
         _resolve_contained_path(
-            task_download_dir,
+            lock_path,
             resolved_downloads_dir,
-            "MediaPipe task download directory",
+            "MediaPipe asset preparation lock",
         )
-        _resolve_contained_path(
-            downloaded_path,
-            task_download_dir.resolve(strict=False),
-            "MediaPipe downloaded asset",
-        )
-        task_scope_validated = True
-
-        cached_destination_present = destination.exists() or destination.is_symlink()
         paths.mediapipe_dir.mkdir(parents=True, exist_ok=True)
         if cached_destination_present and not force_download:
             if destination.is_symlink() or not destination.is_file():
@@ -231,6 +306,32 @@ def ensure_mediapipe_asset(
                     )
                 )
             return destination
+
+        paths.downloads_dir.mkdir(parents=True, exist_ok=True)
+        if (
+            _resolve_contained_path(
+                paths.downloads_dir,
+                resolved_mediapipe_dir,
+                "MediaPipe downloads directory",
+            )
+            != resolved_downloads_dir
+        ):
+            raise RuntimeError(
+                "MediaPipe downloads directory changed during setup: {}".format(
+                    paths.downloads_dir
+                )
+            )
+        lock_token = _acquire_asset_lock(lock_path, resolved_downloads_dir, key)
+        resolved_task_download_dir = _resolve_contained_path(
+            task_download_dir,
+            resolved_downloads_dir,
+            "MediaPipe task download directory",
+        )
+        _resolve_contained_path(
+            downloaded_path,
+            resolved_task_download_dir,
+            "MediaPipe downloaded asset",
+        )
 
         if task_download_dir.exists() or task_download_dir.is_symlink():
             _resolve_contained_path(
@@ -327,8 +428,19 @@ def ensure_mediapipe_asset(
             )
         ) from exc
     finally:
-        if task_scope_validated:
-            _best_effort_cleanup_task_dir(task_download_dir, resolved_downloads_dir)
+        if lock_token is not None and resolved_downloads_dir is not None:
+            try:
+                _best_effort_cleanup_task_dir(task_download_dir, resolved_downloads_dir)
+            except Exception:
+                pass
+            try:
+                _best_effort_release_asset_lock(
+                    lock_path,
+                    resolved_downloads_dir,
+                    lock_token,
+                )
+            except Exception:
+                pass
 
 
 def prepare_mediapipe_resources(config) -> PreparedMediaPipeResources:
