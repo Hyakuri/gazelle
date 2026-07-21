@@ -178,6 +178,11 @@ def _render_options_from_config(config) -> RenderOptions:
         draw_gaze_arrow=config.draw_gaze_arrow,
         draw_heatmap_contour=config.draw_heatmap_contour,
         draw_labels=config.draw_labels,
+        draw_face_box=config.draw_face_box,
+        draw_face_keypoints=config.draw_face_keypoints,
+        draw_pose_head_points=config.draw_pose_head_points,
+        draw_face_mesh=config.draw_face_mesh,
+        draw_track_state=config.draw_track_state,
         heatmap_contour_quantile=config.heatmap_contour_quantile,
         heatmap_contour_width=config.heatmap_contour_width,
     )
@@ -276,7 +281,11 @@ def run_image_pipeline(config, predictor_factory: Optional[Callable[[object], ob
     rendered_path = None
     if config.save_rendered:
         renderer = PredictionRenderer(_render_options_from_config(config))
-        rendered = renderer.render(image, predictions)
+        rendered = renderer.render(
+            image,
+            predictions,
+            head_result.perceptions if head_result.heads else (),
+        )
         rendered_path = output_dir / config.rendered_name
         save_rendered_image(rendered_path, rendered)
 
@@ -419,7 +428,7 @@ def run_video_pipeline(config, predictor_factory: Optional[Callable[[object], ob
             )
             if writer is not None:
                 output_frame = (
-                    renderer.render(frame.image, predictions)
+                    renderer.render(frame.image, predictions, head_result.perceptions)
                     if status == "ok"
                     else frame.image
                 )

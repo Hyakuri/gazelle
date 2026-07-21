@@ -158,6 +158,11 @@ class RuntimeConfig:
     draw_gaze_arrow: bool = True
     draw_heatmap_contour: bool = False
     draw_labels: bool = True
+    draw_face_box: bool = False
+    draw_face_keypoints: bool = False
+    draw_pose_head_points: bool = False
+    draw_face_mesh: bool = False
+    draw_track_state: bool = True
     heatmap_contour_quantile: float = 0.90
     heatmap_contour_width: Optional[int] = None
     output_fps: Optional[float] = None
@@ -237,6 +242,11 @@ class RuntimeConfig:
             draw_gaze_arrow=not args.no_gaze_arrow,
             draw_heatmap_contour=args.draw_heatmap_contour,
             draw_labels=not args.no_labels,
+            draw_face_box=args.face_box,
+            draw_face_keypoints=args.face_keypoints,
+            draw_pose_head_points=args.pose_head_points,
+            draw_face_mesh=args.face_mesh,
+            draw_track_state=not args.no_track_state,
             heatmap_contour_quantile=args.heatmap_contour_quantile,
             heatmap_contour_width=args.heatmap_contour_width,
             output_fps=args.output_fps,

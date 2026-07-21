@@ -84,9 +84,10 @@ class FakeVideoWriter:
     def __init__(self, close_error=None):
         self.close_calls = 0
         self.close_error = close_error
+        self.images = []
 
     def write(self, image):
-        return None
+        self.images.append(image)
 
     def close(self):
         self.close_calls += 1
@@ -174,6 +175,75 @@ def make_config(**overrides):
 
 
 class VideoPipelineTest(unittest.TestCase):
+    def test_video_renderer_receives_perceptions_only_for_ok_frames(self):
+        perceptions = tuple(
+            HeadPerception(
+                person_id=index,
+                head_bbox=(0.1, 0.2, 0.4, 0.6),
+                face_bbox=None,
+                confidence=0.9,
+                state=HeadPerceptionState.FACE_ONLY,
+                view_state=HeadViewState.FRONTAL,
+                observed=True,
+            )
+            for index in range(2)
+        )
+
+        def result_for_frame(frame_index):
+            if frame_index == 2:
+                return HeadFrameResult(heads=())
+            head = HeadObservation(frame_index, (0.1, 0.2, 0.4, 0.6), 0.9)
+            return HeadFrameResult(heads=(head,), perceptions=(perceptions[frame_index],))
+
+        frames = tuple(
+            SimpleNamespace(index=index, timestamp_ms=index * 200.0, image=object())
+            for index in range(3)
+        )
+        reader = FakeVideoReader(fps=5.0, frames=frames)
+        provider = FakeHeadProvider(result_for_frame)
+        writer = FakeVideoWriter()
+        rendered_marker = object()
+        render_calls = []
+
+        class FakeRenderer:
+            def __init__(self, options):
+                self.options = options
+
+            def render(self, image, predictions, perceptions=()):
+                render_calls.append((image, tuple(predictions), tuple(perceptions)))
+                return rendered_marker
+
+        with TemporaryDirectory() as tmpdir:
+            config = make_config(
+                input_path=str(Path(tmpdir) / "clip.mp4"),
+                output_dir=str(Path(tmpdir) / "outputs"),
+                frame_step=2,
+                save_rendered=True,
+            )
+            with patch("gazelle.runtime.pipeline.VideoFrameReader", return_value=reader):
+                with patch(
+                    "gazelle.runtime.pipeline.build_head_provider_from_config",
+                    return_value=provider,
+                ):
+                    with patch(
+                        "gazelle.runtime.pipeline.VideoFrameWriter",
+                        return_value=writer,
+                    ):
+                        with patch(
+                            "gazelle.runtime.pipeline.PredictionRenderer",
+                            FakeRenderer,
+                        ):
+                            run_video_pipeline(
+                                config,
+                                predictor_factory=lambda config: FakePredictor(),
+                            )
+
+        self.assertEqual(len(render_calls), 1)
+        self.assertEqual(render_calls[0][2], (perceptions[0],))
+        self.assertIs(writer.images[0], rendered_marker)
+        self.assertIs(writer.images[1], frames[1].image)
+        self.assertIs(writer.images[2], frames[2].image)
+
     def test_perception_runs_on_every_frame_when_frame_step_is_two(self):
         with TemporaryDirectory() as tmpdir:
             video_path = Path(tmpdir) / "clip.mp4"

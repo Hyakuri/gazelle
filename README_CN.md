@@ -263,7 +263,11 @@ python main.py `
   --save-rendered
 ```
 
-默认情况下，单图推理会写入 `head_observations.json`、`predictions.json` 和 `run_config.json`；只有传入 `--save-rendered` 时才会写可视化图片。默认文件名是 `rendered.png`。可以用 `--rendered-name` 指定 `.png`、`.jpg` 或 `.jpeg` 文件名，用 `--heatmap-alpha` 控制 heatmap 透明度。可视化 overlay 可以包含 heatmap、需要显式开启的 head bbox、在存在 bbox 时从 head bbox 中心指向 gaze peak 的箭头、gaze target peak 位置的红色 X、稳定的 per-person 颜色，以及包含 `person_id`、可选 `inout_score` 和 `heatmap_peak_value` 的 label。head bbox 默认不绘制；如果 bbox 可用并希望显示它，请传入 `--head-box`。可以用 `--no-heatmap`、`--no-gaze-arrow`、`--no-gaze-peak` 或 `--no-labels` 关闭对应绘制元素。可以用 `--draw-heatmap-contour` 绘制 heatmap 高响应区域轮廓，用 `--heatmap-contour-quantile` 设置阈值，并用 `--heatmap-contour-width` 设置轮廓线宽。渲染不会改变 `predictions.json`，`heatmap_peak_value` 也不是校准后的概率。
+默认情况下，单图推理会写入 `head_observations.json`、`predictions.json` 和 `run_config.json`；只有传入 `--save-rendered` 时才会写可视化图片。默认文件名是 `rendered.png`。可以用 `--rendered-name` 指定 `.png`、`.jpg` 或 `.jpeg` 文件名，用 `--heatmap-alpha` 控制 heatmap 透明度。gaze overlay 可以包含 heatmap、需要显式开启的 Gazelle prediction bbox、在存在 bbox 时从 head bbox 中心指向 gaze peak 的箭头、gaze target peak 位置的红色 X、稳定的 per-person 颜色，以及包含 `person_id`、可选 `inout_score` 和 `heatmap_peak_value` 的 label。Gazelle prediction bbox 默认不绘制；如果 bbox 可用并希望显示它，请传入 `--head-box`。可以用 `--no-heatmap`、`--no-gaze-arrow`、`--no-gaze-peak` 或 `--no-labels` 关闭对应绘制元素。可以用 `--draw-heatmap-contour` 绘制 heatmap 高响应区域轮廓，用 `--heatmap-contour-quantile` 设置阈值，并用 `--heatmap-contour-width` 设置轮廓线宽。渲染不会改变 `predictions.json`，`heatmap_peak_value` 也不是校准后的概率。
+
+当传入 `HeadPerception` 结果时，其 primary head bbox 默认绘制，并且独立于需要显式开启的 Gazelle `--head-box`。perception 绘制选项包括：`--face-box`（辅助 face bbox，默认关闭）、`--face-keypoints`（最多六个 detector keypoint，默认关闭）、`--pose-head-points`（pose head 和 shoulder point，默认关闭）、`--face-mesh`（完整的已保存 face landmark，默认关闭），以及 `--no-track-state`（关闭默认开启的 person ID、perception state 和 confidence label）。`tracked_only` primary bbox 使用低透明度虚线，明确区别于当前帧观察到的证据。
+
+绘制层级依次为：gaze heatmap 和可选 contour、现有 gaze bbox/arrow/peak、perception primary head bbox、辅助 face bbox、六个 detector keypoint、pose head/shoulder point、可选 face mesh、perception state/person/confidence label，最后是 gaze prediction label。perception 渲染会原样使用传入的 `HeadPerception`：不会重新计算 perception bbox，不会修改 perception，也不会替换 `GazePrediction.bbox` 或已经传给 Gazelle 的归一化 bbox。`--face-mesh` 只有在保留 face landmark 数据时才有可见输出，应与 `--save-face-landmarks` 一起使用。逐帧绘制数百个 mesh point 会增加渲染工作量，保存这些 landmark 也会增加 observation 输出体积和生物特征细节。调用方未传 perceptions 或显式传入 `perceptions=()` 时，仍保持逐字节一致的旧版渲染行为；此时 perception 选项不起作用。
 
 gaze arrow 只是从 head bbox 中心到预测 gaze peak 的可视化，不是 face keypoint、eye keypoint、head pose，也不是真实眼睛方向向量。gaze peak 会画成红色 X；heatmap 和可选 contour 用于展示 gaze target 的高响应区域。
 
@@ -312,7 +316,7 @@ python main.py `
 
 该命令会以流式方式逐帧处理视频，并创建类似 `outputs/assembly_gazelle/` 的视频输出目录。runtime 始终写入 `head_observations.jsonl`、`predictions.jsonl` 和 `run_config.json`，每个写出帧对应恰好一行 observation 和一行 gaze。Gazelle 及其 DINOv2 backbone 会延迟到首个未被跳过且至少有一个可用 head 的帧才构建，之后复用；全部跳过或全部为 `no_head` 的运行不会构建模型。如果权重尚未缓存，首次预测时可能下载它们。这是离线视频处理，不是实时 webcam 模式。渲染视频不会保留音频。
 
-传入 `--save-rendered` 时会写入渲染后的 `.mp4`；默认文件名是 `rendered.mp4`，也可以用 `--output-video-name` 指定另一个 `.mp4` 文件名。图片渲染使用的绘制选项同样适用于视频：`--heatmap-alpha`、`--head-box`、`--no-heatmap`、`--no-gaze-arrow`、`--no-gaze-peak`、`--draw-heatmap-contour`、`--heatmap-contour-quantile`、`--heatmap-contour-width` 和 `--no-labels`。
+传入 `--save-rendered` 时会写入渲染后的 `.mp4`；默认文件名是 `rendered.mp4`，也可以用 `--output-video-name` 指定另一个 `.mp4` 文件名。图片渲染使用的绘制选项同样适用于视频，也包括上述具有相同默认值的 `--face-box`、`--face-keypoints`、`--pose-head-points`、`--face-mesh` 和 `--no-track-state`。
 
 `--head-source none` 可以显示 heatmap、contour 和红色 X gaze peak，但因为没有 bbox，不能显示 bbox 或 arrow。如果需要 bbox 和 arrow，请使用 `--head-source static` 或 `--head-source json` 提供 bbox，并传入 `--head-box`。
 
@@ -371,7 +375,7 @@ python main.py `
   --overwrite
 ```
 
-perception 和 tracking 会在每个解码并写出的帧上恰好运行一次。`--frame-step` 只控制 Gazelle：被跳过的帧仍会先写正常的 `head_observations.jsonl` 行，再写 `status="skipped"` 的 `predictions.jsonl` 行，即使该帧没有观察到 head 也是如此。启用渲染时，`skipped` 和 `no_head` 帧会原样写入；当前里程碑不会渲染 perception overlay。`--max-frames` 会把两份 JSONL 和可选渲染视频限制到相同的写出帧数。`--output-fps` 只在源视频 FPS 无效时作为 fallback；源视频 FPS 有效时会保留源 FPS。当前里程碑不支持视频 `--save-heatmaps`，使用时会报错 `video heatmap export is not implemented yet`。
+perception 和 tracking 会在每个解码并写出的帧上恰好运行一次。`--frame-step` 只控制 Gazelle：被跳过的帧仍会先写正常的 `head_observations.jsonl` 行，再写 `status="skipped"` 的 `predictions.jsonl` 行，即使该帧没有观察到 head 也是如此。只有 gaze `status="ok"` 的帧才会把 perceptions 传给 renderer；启用渲染时，`skipped` 和 `no_head` 帧会原样写入。`--max-frames` 会把两份 JSONL 和可选渲染视频限制到相同的写出帧数。`--output-fps` 只在源视频 FPS 无效时作为 fallback；源视频 FPS 有效时会保留源 FPS。当前里程碑不支持视频 `--save-heatmaps`，使用时会报错 `video heatmap export is not implemented yet`。
 
 ### 真实 smoke test
 
@@ -449,7 +453,7 @@ runtime 对 head 的处理规则是严格的：
 
 编程式 predictor API 仍然可以直接用于内存中的单帧调用。上面的 CLI image pipeline 和离线视频 pipeline 都是基于它的用户可见封装。
 
-以下 runtime 功能在当前里程碑尚未完成：实时 webcam perception/tracking、ROI / 工序逻辑、Multi-Pose 集成、音频 remux、视频 raw heatmap 导出、perception overlay，以及高性能异步推理。
+以下 runtime 功能在当前里程碑尚未完成：实时 webcam perception/tracking、ROI / 工序逻辑、Multi-Pose 集成、音频 remux、视频 raw heatmap 导出，以及高性能异步推理。
 
 ## 推理流程
 

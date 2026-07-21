@@ -137,6 +137,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="Draw head bounding boxes in rendered output when bboxes are available.",
     )
     parser.add_argument(
+        "--face-box",
+        action="store_true",
+        help="Draw auxiliary MediaPipe face boxes in rendered output.",
+    )
+    parser.add_argument(
+        "--face-keypoints",
+        action="store_true",
+        help="Draw up to six MediaPipe face detector keypoints in rendered output.",
+    )
+    parser.add_argument(
+        "--pose-head-points",
+        action="store_true",
+        help="Draw MediaPipe pose head and shoulder points in rendered output.",
+    )
+    parser.add_argument(
+        "--face-mesh",
+        action="store_true",
+        help="Draw saved MediaPipe face-mesh points in rendered output.",
+    )
+    parser.add_argument(
+        "--no-track-state",
+        action="store_true",
+        help="Do not draw MediaPipe person, state, and confidence labels.",
+    )
+    parser.add_argument(
         "--no-gaze-peak",
         action="store_true",
         help="Do not draw gaze peak markers in rendered output.",

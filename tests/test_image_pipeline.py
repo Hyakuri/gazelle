@@ -139,6 +139,51 @@ def make_config(**overrides):
 
 
 class ImagePipelineTest(unittest.TestCase):
+    def test_ok_image_inference_passes_perceptions_and_render_options(self):
+        result = make_rich_head_result()
+        provider = FakeHeadProvider(result)
+        render_calls = []
+        renderer_options = []
+
+        class FakeRenderer:
+            def __init__(self, options):
+                renderer_options.append(options)
+
+            def render(self, image, predictions, perceptions=()):
+                render_calls.append((tuple(predictions), tuple(perceptions)))
+                return image
+
+        with TemporaryDirectory() as tmpdir:
+            image_path = Path(tmpdir) / "frame.png"
+            write_test_image(image_path)
+            config = make_config(
+                input_path=str(image_path),
+                output_dir=str(Path(tmpdir) / "outputs"),
+                head_source="mediapipe",
+                save_rendered=True,
+                draw_face_box=True,
+                draw_face_keypoints=True,
+                draw_pose_head_points=True,
+                draw_face_mesh=True,
+                draw_track_state=False,
+            )
+            with unittest.mock.patch(
+                "gazelle.runtime.pipeline.build_head_provider_from_config",
+                return_value=provider,
+            ):
+                with unittest.mock.patch(
+                    "gazelle.runtime.pipeline.PredictionRenderer",
+                    FakeRenderer,
+                ):
+                    run_image_pipeline(config, predictor_factory=lambda config: FakePredictor())
+
+        self.assertEqual(render_calls[0][1], result.perceptions)
+        self.assertTrue(renderer_options[0].draw_face_box)
+        self.assertTrue(renderer_options[0].draw_face_keypoints)
+        self.assertTrue(renderer_options[0].draw_pose_head_points)
+        self.assertTrue(renderer_options[0].draw_face_mesh)
+        self.assertFalse(renderer_options[0].draw_track_state)
+
     def test_build_head_provider_mediapipe_image_uses_injected_backend(self):
         backend = SimpleNamespace(close=lambda: None)
         calls = []

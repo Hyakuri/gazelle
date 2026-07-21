@@ -179,6 +179,35 @@ class RuntimeCliTest(unittest.TestCase):
 
         self.assertFalse(config.draw_head_box)
 
+    def test_perception_render_defaults(self):
+        config = parse_runtime_config(["--input", "image.jpg", "--save-rendered"])
+
+        self.assertFalse(config.draw_face_box)
+        self.assertFalse(config.draw_face_keypoints)
+        self.assertFalse(config.draw_pose_head_points)
+        self.assertFalse(config.draw_face_mesh)
+        self.assertTrue(config.draw_track_state)
+
+    def test_parse_perception_render_config(self):
+        config = parse_runtime_config(
+            [
+                "--input",
+                "image.jpg",
+                "--save-rendered",
+                "--face-box",
+                "--face-keypoints",
+                "--pose-head-points",
+                "--face-mesh",
+                "--no-track-state",
+            ]
+        )
+
+        self.assertTrue(config.draw_face_box)
+        self.assertTrue(config.draw_face_keypoints)
+        self.assertTrue(config.draw_pose_head_points)
+        self.assertTrue(config.draw_face_mesh)
+        self.assertFalse(config.draw_track_state)
+
     def test_parse_head_box_enabled(self):
         config = parse_runtime_config(["--input", "image.jpg", "--save-rendered", "--head-box"])
 
