@@ -208,7 +208,7 @@ python main.py `
   --pose-model full
 ```
 
-The pose selection prepares `pose_landmarker_lite.task`, `pose_landmarker_full.task`, or `pose_landmarker_heavy.task`. Existing assets in `<cache-root>/mediapipe` are reused unless `--force-download` is passed. Every new asset is downloaded to its own temporary `.downloads` directory, checked against the immutable SHA-256 digest pinned for its versioned official URL, and atomically moved into the cache. Any download, missing-file, or digest failure leaves an existing cached asset in place and removes the task-specific temporary directory.
+The pose selection prepares `pose_landmarker_lite.task`, `pose_landmarker_full.task`, or `pose_landmarker_heavy.task`. Existing assets in `<cache-root>/mediapipe` are reused only when they are regular files whose SHA-256 matches the immutable digest pinned for the versioned official URL. A tampered, truncated, or non-file cache entry fails clearly and is never returned. Every new or forced asset is downloaded to its own temporary `.downloads` directory, verified, and atomically moved into the cache. Any setup, download, missing-file, digest, or replacement failure leaves an existing cache entry in place. Task-specific cleanup is best-effort, remains confined to the validated download directory, and never masks the primary preparation result.
 
 Default unit tests use fake downloaders and do not access the network. The pinned registry hashes were established once by downloading exactly the five official versioned assets to an OS temporary directory outside the repository, calculating SHA-256, and deleting that temporary directory.
 

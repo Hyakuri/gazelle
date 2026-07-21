@@ -217,7 +217,7 @@ python main.py `
   --pose-model full
 ```
 
-pose 选项会分别准备 `pose_landmarker_lite.task`、`pose_landmarker_full.task` 或 `pose_landmarker_heavy.task`。除非传入 `--force-download`，否则会复用 `<cache-root>/mediapipe` 中已有的资源。每个新资源都会先下载到自己的临时 `.downloads` 目录，使用对应版本化官方 URL 的固定 SHA-256 摘要进行校验，再以原子方式移动到缓存中。下载失败、文件缺失或摘要不匹配时，已有缓存资源都会保留，同时清理该任务的临时目录。
+pose 选项会分别准备 `pose_landmarker_lite.task`、`pose_landmarker_full.task` 或 `pose_landmarker_heavy.task`。只有当 `<cache-root>/mediapipe` 中已有的资源是普通文件，并且 SHA-256 与对应版本化官方 URL 的固定摘要一致时，才会复用该资源；被篡改、截断或不是文件的缓存项会明确报错，绝不会作为有效路径返回。每个新资源或强制刷新资源都会先下载到自己的临时 `.downloads` 目录，通过校验后再以原子方式移动到缓存中。初始化、下载、文件缺失、摘要校验或替换失败时，已有缓存项都会保留。任务临时目录采用 best-effort 清理，范围严格限制在经过校验的下载目录内，并且清理失败不会掩盖资源准备的主要结果。
 
 默认单元测试使用 fake downloader，不访问网络。注册表中的固定摘要只在建立时进行过一次真实校验：将恰好五个官方版本化资源下载到仓库外的 OS 临时目录，计算 SHA-256，然后删除该临时目录。
 

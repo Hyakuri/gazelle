@@ -2,7 +2,7 @@ import hashlib
 import shutil
 import urllib.request
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Callable, Dict, Optional, Tuple
 
 from gazelle.runtime.resources import resolve_cache_root
@@ -110,29 +110,166 @@ def _file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _validate_path_component(value: str, field_name: str) -> str:
+    if not isinstance(value, str):
+        raise ValueError("MediaPipe asset {} must be a string path component".format(field_name))
+    windows_path = PureWindowsPath(value)
+    posix_path = PurePosixPath(value)
+    if (
+        value in ("", ".", "..")
+        or "\x00" in value
+        or "/" in value
+        or "\\" in value
+        or windows_path.is_absolute()
+        or bool(windows_path.drive)
+        or posix_path.is_absolute()
+        or len(windows_path.parts) != 1
+        or len(posix_path.parts) != 1
+    ):
+        raise ValueError(
+            "MediaPipe asset {} must be a safe single path component: {!r}".format(
+                field_name,
+                value,
+            )
+        )
+    return value
+
+
+def _resolve_contained_path(path: Path, resolved_root: Path, description: str) -> Path:
+    if not resolved_root.is_absolute():
+        raise ValueError("Containment root must be an absolute resolved path: {}".format(resolved_root))
+    resolved_path = path.resolve(strict=False)
+    try:
+        relative_path = resolved_path.relative_to(resolved_root)
+    except ValueError:
+        raise ValueError(
+            "{} must be contained within {}: {}".format(
+                description,
+                resolved_root,
+                resolved_path,
+            )
+        )
+    if relative_path == Path("."):
+        raise ValueError(
+            "{} must be a child contained within {}".format(description, resolved_root)
+        )
+    return resolved_path
+
+
+def _best_effort_cleanup_task_dir(task_download_dir: Path, downloads_dir: Path) -> None:
+    try:
+        _resolve_contained_path(
+            task_download_dir,
+            downloads_dir,
+            "MediaPipe task download directory",
+        )
+        if task_download_dir.is_symlink():
+            return
+        if task_download_dir.exists():
+            shutil.rmtree(task_download_dir)
+    except Exception:
+        return
+
+
 def ensure_mediapipe_asset(
     spec: MediaPipeAssetSpec,
     paths: MediaPipeResourcePaths,
     force_download: bool = False,
     downloader: Optional[Callable[[str, str], object]] = None,
 ) -> Path:
-    paths.mediapipe_dir.mkdir(parents=True, exist_ok=True)
-    destination = paths.mediapipe_dir / spec.filename
-    if destination.exists() and not force_download:
-        return destination
-
+    key = _validate_path_component(spec.key, "key")
+    filename = _validate_path_component(spec.filename, "filename")
+    destination = paths.mediapipe_dir / filename
+    task_download_dir = paths.downloads_dir / key
+    downloaded_path = task_download_dir / filename
     downloader = urllib.request.urlretrieve if downloader is None else downloader
-    task_download_dir = paths.downloads_dir / spec.key
-    downloaded_path = task_download_dir / spec.filename
+    cached_destination_present = False
+    task_scope_validated = False
     try:
-        if task_download_dir.exists():
+        resolved_root = paths.root_dir.resolve(strict=False)
+        resolved_mediapipe_dir = _resolve_contained_path(
+            paths.mediapipe_dir,
+            resolved_root,
+            "MediaPipe cache directory",
+        )
+        resolved_downloads_dir = _resolve_contained_path(
+            paths.downloads_dir,
+            resolved_mediapipe_dir,
+            "MediaPipe downloads directory",
+        )
+        _resolve_contained_path(
+            destination,
+            resolved_mediapipe_dir,
+            "MediaPipe asset destination",
+        )
+        _resolve_contained_path(
+            task_download_dir,
+            resolved_downloads_dir,
+            "MediaPipe task download directory",
+        )
+        _resolve_contained_path(
+            downloaded_path,
+            task_download_dir.resolve(strict=False),
+            "MediaPipe downloaded asset",
+        )
+        task_scope_validated = True
+
+        cached_destination_present = destination.exists() or destination.is_symlink()
+        paths.mediapipe_dir.mkdir(parents=True, exist_ok=True)
+        if cached_destination_present and not force_download:
+            if destination.is_symlink() or not destination.is_file():
+                raise RuntimeError(
+                    "cached MediaPipe asset is not a regular file: {}".format(destination)
+                )
+            actual_cached_sha256 = _file_sha256(destination)
+            if actual_cached_sha256 != spec.sha256:
+                raise RuntimeError(
+                    "cached MediaPipe asset SHA-256 mismatch for {}: expected {}, got {}".format(
+                        spec.key,
+                        spec.sha256,
+                        actual_cached_sha256,
+                    )
+                )
+            return destination
+
+        if task_download_dir.exists() or task_download_dir.is_symlink():
+            _resolve_contained_path(
+                task_download_dir,
+                resolved_downloads_dir,
+                "MediaPipe task download directory",
+            )
+            if task_download_dir.is_symlink() or not task_download_dir.is_dir():
+                raise RuntimeError(
+                    "MediaPipe task download path is not a regular directory: {}".format(
+                        task_download_dir
+                    )
+                )
             shutil.rmtree(task_download_dir)
         task_download_dir.mkdir(parents=True, exist_ok=True)
+        resolved_task_download_dir = _resolve_contained_path(
+            task_download_dir,
+            resolved_downloads_dir,
+            "MediaPipe task download directory",
+        )
         downloader(spec.url, str(downloaded_path))
-        if not downloaded_path.exists():
+        resolved_task_download_dir = _resolve_contained_path(
+            task_download_dir,
+            resolved_downloads_dir,
+            "MediaPipe task download directory",
+        )
+        _resolve_contained_path(
+            downloaded_path,
+            resolved_task_download_dir,
+            "MediaPipe downloaded asset",
+        )
+        if (
+            not downloaded_path.exists()
+            or downloaded_path.is_symlink()
+            or not downloaded_path.is_file()
+        ):
             raise RuntimeError(
-                "MediaPipe asset download completed but file was not found: {}".format(
-                    downloaded_path
+                "MediaPipe asset download completed but a regular file was not found: {}".format(
+                    downloaded_path,
                 )
             )
         actual_sha256 = _file_sha256(downloaded_path)
@@ -144,10 +281,35 @@ def ensure_mediapipe_asset(
                     actual_sha256,
                 )
             )
+        resolved_task_download_dir = _resolve_contained_path(
+            task_download_dir,
+            resolved_downloads_dir,
+            "MediaPipe task download directory",
+        )
+        _resolve_contained_path(
+            downloaded_path,
+            resolved_task_download_dir,
+            "MediaPipe downloaded asset",
+        )
+        if downloaded_path.is_symlink() or not downloaded_path.is_file():
+            raise RuntimeError(
+                "Verified MediaPipe asset is no longer a regular file: {}".format(
+                    downloaded_path
+                )
+            )
+        _resolve_contained_path(
+            destination,
+            resolved_mediapipe_dir,
+            "MediaPipe asset destination",
+        )
+        if destination.is_symlink():
+            raise RuntimeError(
+                "MediaPipe asset destination must not be a symbolic link: {}".format(destination)
+            )
         downloaded_path.replace(destination)
         return destination
     except Exception as exc:
-        if destination.exists():
+        if cached_destination_present:
             raise RuntimeError(
                 "Failed to prepare MediaPipe asset {} from {}; existing cached asset was "
                 "preserved at {}: {}".format(
@@ -165,8 +327,8 @@ def ensure_mediapipe_asset(
             )
         ) from exc
     finally:
-        if task_download_dir.exists():
-            shutil.rmtree(task_download_dir)
+        if task_scope_validated:
+            _best_effort_cleanup_task_dir(task_download_dir, resolved_downloads_dir)
 
 
 def prepare_mediapipe_resources(config) -> PreparedMediaPipeResources:

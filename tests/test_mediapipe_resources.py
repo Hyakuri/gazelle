@@ -109,6 +109,36 @@ class MediaPipeResourcesTest(unittest.TestCase):
         self.assertEqual(self.asset_path.read_bytes(), self.new_content)
         self.assertFalse(self.task_download_dir.exists())
 
+    def test_tampered_cached_asset_is_not_reused(self):
+        self.write_cached_asset(b"truncated")
+
+        def unexpected_downloader(url, destination):
+            raise AssertionError("an invalid non-force cache must not download")
+
+        with self.assertRaisesRegex(RuntimeError, "cached.*SHA-256 mismatch"):
+            ensure_mediapipe_asset(
+                self.spec,
+                self.paths,
+                downloader=unexpected_downloader,
+            )
+
+        self.assertEqual(self.asset_path.read_bytes(), b"truncated")
+
+    def test_directory_at_cached_asset_path_is_not_reused(self):
+        self.asset_path.mkdir(parents=True)
+
+        def unexpected_downloader(url, destination):
+            raise AssertionError("an invalid non-force cache must not download")
+
+        with self.assertRaisesRegex(RuntimeError, "cached.*regular file"):
+            ensure_mediapipe_asset(
+                self.spec,
+                self.paths,
+                downloader=unexpected_downloader,
+            )
+
+        self.assertTrue(self.asset_path.is_dir())
+
     def test_force_download_failure_preserves_cached_asset(self):
         self.write_cached_asset(b"old")
 
@@ -195,6 +225,206 @@ class MediaPipeResourcesTest(unittest.TestCase):
 
         self.assertEqual(self.asset_path.read_bytes(), b"old")
         self.assertFalse(self.task_download_dir.exists())
+
+    def test_unsafe_asset_path_components_are_rejected_before_filesystem_access(self):
+        unsafe_values = ("", ".", "..", "nested/path", "nested\\path", "C:\\outside", "/outside")
+
+        for field_name in ("key", "filename"):
+            for value in unsafe_values:
+                with self.subTest(field_name=field_name, value=value):
+                    spec_values = {
+                        "key": self.spec.key,
+                        "filename": self.spec.filename,
+                        "url": self.spec.url,
+                        "sha256": self.spec.sha256,
+                    }
+                    spec_values[field_name] = value
+                    unsafe_spec = MediaPipeAssetSpec(**spec_values)
+                    with patch.object(
+                        Path,
+                        "mkdir",
+                        side_effect=AssertionError("filesystem was touched"),
+                    ):
+                        with self.assertRaisesRegex(ValueError, field_name):
+                            ensure_mediapipe_asset(
+                                unsafe_spec,
+                                self.paths,
+                                downloader=lambda url, destination: None,
+                            )
+
+    def test_malicious_key_does_not_delete_outside_download_directory(self):
+        self.paths.downloads_dir.mkdir(parents=True)
+        outside_dir = self.paths.mediapipe_dir / "outside-download"
+        outside_dir.mkdir()
+        marker_path = outside_dir / "marker.txt"
+        marker_path.write_text("keep", encoding="utf-8")
+        unsafe_spec = MediaPipeAssetSpec(
+            key="../outside-download",
+            filename=self.spec.filename,
+            url=self.spec.url,
+            sha256=self.spec.sha256,
+        )
+
+        with self.assertRaisesRegex(ValueError, "key"):
+            ensure_mediapipe_asset(
+                unsafe_spec,
+                self.paths,
+                downloader=lambda url, destination: None,
+            )
+
+        self.assertEqual(marker_path.read_text(encoding="utf-8"), "keep")
+
+    def test_malicious_filename_does_not_replace_outside_destination(self):
+        outside_path = self.paths.root_dir / "outside.task"
+        outside_path.write_bytes(b"keep")
+        unsafe_spec = MediaPipeAssetSpec(
+            key=self.spec.key,
+            filename="../outside.task",
+            url=self.spec.url,
+            sha256=self.spec.sha256,
+        )
+
+        def successful_downloader(url, destination):
+            Path(destination).write_bytes(self.new_content)
+
+        with self.assertRaisesRegex(ValueError, "filename"):
+            ensure_mediapipe_asset(
+                unsafe_spec,
+                self.paths,
+                force_download=True,
+                downloader=successful_downloader,
+            )
+
+        self.assertEqual(outside_path.read_bytes(), b"keep")
+
+    def test_download_directory_must_be_contained_before_recursive_delete(self):
+        outside_downloads = self.paths.root_dir / "outside-downloads"
+        outside_task_dir = outside_downloads / self.spec.key
+        outside_task_dir.mkdir(parents=True)
+        marker_path = outside_task_dir / "marker.txt"
+        marker_path.write_text("keep", encoding="utf-8")
+        unsafe_paths = MediaPipeResourcePaths(
+            root_dir=self.paths.root_dir,
+            mediapipe_dir=self.paths.mediapipe_dir,
+            downloads_dir=outside_downloads,
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "contained"):
+            ensure_mediapipe_asset(
+                self.spec,
+                unsafe_paths,
+                downloader=lambda url, destination: None,
+            )
+
+        self.assertEqual(marker_path.read_text(encoding="utf-8"), "keep")
+
+    def test_mediapipe_directory_must_be_contained_before_replacement(self):
+        declared_root = self.paths.root_dir / "declared-root"
+        outside_mediapipe = self.paths.root_dir / "outside-mediapipe"
+        outside_mediapipe.mkdir()
+        outside_path = outside_mediapipe / self.spec.filename
+        outside_path.write_bytes(b"keep")
+        unsafe_paths = MediaPipeResourcePaths(
+            root_dir=declared_root,
+            mediapipe_dir=outside_mediapipe,
+            downloads_dir=outside_mediapipe / ".downloads",
+        )
+
+        def successful_downloader(url, destination):
+            Path(destination).write_bytes(self.new_content)
+
+        with self.assertRaisesRegex(RuntimeError, "contained"):
+            ensure_mediapipe_asset(
+                self.spec,
+                unsafe_paths,
+                force_download=True,
+                downloader=successful_downloader,
+            )
+
+        self.assertEqual(outside_path.read_bytes(), b"keep")
+
+    def test_setup_failure_preserves_cached_asset(self):
+        self.write_cached_asset(b"old")
+
+        with patch.object(Path, "mkdir", side_effect=OSError("setup denied")):
+            with self.assertRaisesRegex(RuntimeError, "preserved.*setup denied"):
+                ensure_mediapipe_asset(
+                    self.spec,
+                    self.paths,
+                    force_download=True,
+                    downloader=lambda url, destination: None,
+                )
+
+        self.assertEqual(self.asset_path.read_bytes(), b"old")
+
+    def test_cleanup_failure_does_not_mask_download_failure(self):
+        self.write_cached_asset(b"old")
+
+        def failing_downloader(url, destination):
+            raise OSError("download offline")
+
+        with patch(
+            "gazelle.runtime.perception.resources.shutil.rmtree",
+            side_effect=OSError("cleanup denied"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "preserved.*download offline"):
+                ensure_mediapipe_asset(
+                    self.spec,
+                    self.paths,
+                    force_download=True,
+                    downloader=failing_downloader,
+                )
+
+        self.assertEqual(self.asset_path.read_bytes(), b"old")
+
+    def test_cleanup_failure_does_not_fail_verified_replacement(self):
+        self.write_cached_asset(b"old")
+
+        def successful_downloader(url, destination):
+            Path(destination).write_bytes(self.new_content)
+
+        with patch(
+            "gazelle.runtime.perception.resources.shutil.rmtree",
+            side_effect=OSError("cleanup denied"),
+        ):
+            result = ensure_mediapipe_asset(
+                self.spec,
+                self.paths,
+                force_download=True,
+                downloader=successful_downloader,
+            )
+
+        self.assertEqual(result, self.asset_path)
+        self.assertEqual(self.asset_path.read_bytes(), self.new_content)
+
+    def test_cleanup_uses_the_resolved_validated_download_scope(self):
+        alias_dir = self.paths.mediapipe_dir / "alias"
+        alias_dir.mkdir(parents=True)
+        aliased_downloads_dir = alias_dir / ".." / ".downloads"
+        aliased_paths = MediaPipeResourcePaths(
+            root_dir=self.paths.root_dir,
+            mediapipe_dir=self.paths.mediapipe_dir,
+            downloads_dir=aliased_downloads_dir,
+        )
+
+        def successful_downloader(url, destination):
+            Path(destination).write_bytes(self.new_content)
+
+        with patch(
+            "gazelle.runtime.perception.resources._best_effort_cleanup_task_dir"
+        ) as mock_cleanup:
+            result = ensure_mediapipe_asset(
+                self.spec,
+                aliased_paths,
+                downloader=successful_downloader,
+            )
+
+        self.assertEqual(result, self.asset_path)
+        mock_cleanup.assert_called_once()
+        self.assertEqual(
+            mock_cleanup.call_args.args[1],
+            aliased_downloads_dir.resolve(strict=False),
+        )
 
     def test_selected_pose_variant_is_required(self):
         specs = get_required_mediapipe_specs("heavy")
