@@ -227,9 +227,9 @@ pose 选项会分别准备 `pose_landmarker_lite.task`、`pose_landmarker_full.t
 
 ### 独立 Head Observation Schema（分阶段输出）
 
-`gazelle.runtime.perception.outputs` 提供 `head_frame_to_json_dict(...)`，用于序列化单个独立 provider 结果；`write_head_observations_json(...)` 通过现有 `JsonlWriter` 追加该 record。record 包含 `frame_index`、`timestamp_ms`、`status`、`width`、`height`、`provider`、`timings_ms` 和 `people` 字段。结果存在 head 时 `status` 为 `"ok"`，否则为 `"no_head"`。`timings_ms` 保留 provider 的 timing 名称及有限的毫秒数值。
+`gazelle.runtime.perception.outputs` 提供 `head_frame_to_json_dict(...)`，用于序列化单个独立 provider 结果。对于图片输出，`write_head_observations_json(output_path, **frame_kwargs)` 会创建父目录，并写入恰好一个带缩进且末尾换行的 JSON 文档。视频输出则把每个 `head_frame_to_json_dict(...)` record 传给现有的 `JsonlWriter.write(...)`，每帧写一行紧凑 JSONL。record 恰好包含 `frame_index`、`timestamp_ms`、`status`、`width`、`height`、`provider`、`timings_ms` 和 `people` 字段。结果存在 head 时 `status` 为 `"ok"`，否则为 `"no_head"`。`timings_ms` 保留 provider 的 timing 名称及有限的毫秒数值。
 
-每个人包含 `person_id`、`head_bbox_normalized` 和 `confidence`。head bbox 归一化到 `[0, 1]`，并保留 runtime bbox tuple 的顺序。rich MediaPipe perception 还会在适用时包含 face bbox、`state`、`view_state`、`observed`、`tracking`、face keypoint、pose-head landmark、facial transformation matrix，以及 yaw/pitch/roll head-pose evidence。serializer 只输出有限的 JSON 数字，绝不嵌入 tensor。
+每个人包含 `person_id`、`head_bbox_normalized` 和 `confidence`。head bbox 归一化到 `[0, 1]`，并保留 runtime bbox tuple 的顺序。rich MediaPipe perception 还会在适用时包含 face bbox、`state`、`view_state`、`observed`、`tracking`、face keypoint、pose-head landmark、facial transformation matrix，以及 yaw/pitch/roll head-pose evidence。rich perception 必须与 `result.heads` 一一对应且顺序相同，并在 person ID、head bbox 和可选 confidence 上一致。整数字段只接受数值上为整数的类型，并输出为 JSON integer；boolean 和 perception enum 必须使用其精确 contract 类型。所有数值输出都必须有限，且绝不嵌入 tensor。
 
 出于隐私和输出体积考虑，默认省略全部 478 个 face landmark。只有 `save_face_landmarks=True` 时才会包含它们。这只是独立 schema 边界：后续图片/视频任务才会将 observation 文件接入 pipeline 输出，因此当前 CLI 运行尚不会生成这一新的 observation artifact。
 

@@ -1,6 +1,9 @@
+import json
 import math
+from numbers import Integral, Real
+from pathlib import Path
 
-from gazelle.runtime.outputs import JsonlWriter
+from gazelle.runtime.perception.contracts import HeadPerceptionState, HeadViewState
 
 
 def _finite_float(value, field_name):
@@ -13,9 +16,30 @@ def _finite_float(value, field_name):
     return number
 
 
-def _finite_int(value, field_name):
-    _finite_float(value, field_name)
-    return int(value)
+def _exact_int(value, field_name):
+    if isinstance(value, bool) or not isinstance(value, Real):
+        raise ValueError("{} must be an integer".format(field_name))
+    if isinstance(value, Integral):
+        return int(value)
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError) as error:
+        raise ValueError("{} must be an integer".format(field_name)) from error
+    if not math.isfinite(number) or not number.is_integer():
+        raise ValueError("{} must be an integer".format(field_name))
+    return int(number)
+
+
+def _exact_bool(value, field_name):
+    if type(value) is not bool:
+        raise ValueError("{} must be bool".format(field_name))
+    return value
+
+
+def _enum_value(value, enum_type, field_name):
+    if type(value) is not enum_type:
+        raise ValueError("{} must be a {} member".format(field_name, enum_type.__name__))
+    return value.value
 
 
 def _optional_float(value, field_name):
@@ -47,18 +71,18 @@ def _landmark_to_json_dict(landmark, field_name):
 
 def _perception_to_json_dict(perception, *, save_face_landmarks):
     record = {
-        "person_id": _finite_int(perception.person_id, "person_id"),
+        "person_id": _exact_int(perception.person_id, "person_id"),
         "head_bbox_normalized": _optional_float_list(
             perception.head_bbox,
             "head_bbox_normalized",
         ),
         "confidence": _optional_float(perception.confidence, "confidence"),
-        "state": perception.state.value,
-        "view_state": perception.view_state.value,
-        "observed": bool(perception.observed),
+        "state": _enum_value(perception.state, HeadPerceptionState, "state"),
+        "view_state": _enum_value(perception.view_state, HeadViewState, "view_state"),
+        "observed": _exact_bool(perception.observed, "observed"),
         "tracking": {
-            "track_age_frames": _finite_int(perception.track_age_frames, "track_age_frames"),
-            "missed_frames": _finite_int(perception.missed_frames, "missed_frames"),
+            "track_age_frames": _exact_int(perception.track_age_frames, "track_age_frames"),
+            "missed_frames": _exact_int(perception.missed_frames, "missed_frames"),
             "missed_ms": _finite_float(perception.missed_ms, "missed_ms"),
         },
     }
@@ -98,7 +122,7 @@ def _perception_to_json_dict(perception, *, save_face_landmarks):
 
 def _head_to_json_dict(head):
     return {
-        "person_id": _finite_int(head.person_id, "person_id"),
+        "person_id": _exact_int(head.person_id, "person_id"),
         "head_bbox_normalized": _optional_float_list(head.bbox, "head_bbox_normalized"),
         "confidence": _optional_float(head.confidence, "confidence"),
     }
@@ -115,24 +139,36 @@ def head_frame_to_json_dict(
     save_face_landmarks=False,
 ):
     """Serialize one independent head-provider result into a JSON-safe record."""
+    save_face_landmarks = _exact_bool(save_face_landmarks, "save_face_landmarks")
+    heads = tuple(result.heads)
     perceptions = tuple(result.perceptions)
-    people = (
-        [
-            _perception_to_json_dict(
+    if perceptions:
+        if len(perceptions) != len(heads):
+            raise ValueError("result.heads and result.perceptions must have the same length")
+        people = []
+        for index, (head, perception) in enumerate(zip(heads, perceptions)):
+            head_record = _head_to_json_dict(head)
+            perception_record = _perception_to_json_dict(
                 perception,
                 save_face_landmarks=save_face_landmarks,
             )
-            for perception in perceptions
-        ]
-        if perceptions
-        else [_head_to_json_dict(head) for head in result.heads]
-    )
+            for field_name in ("person_id", "head_bbox_normalized", "confidence"):
+                if perception_record[field_name] != head_record[field_name]:
+                    raise ValueError(
+                        "result.perceptions at index {} must match result.heads for {}".format(
+                            index,
+                            field_name,
+                        )
+                    )
+            people.append(perception_record)
+    else:
+        people = [_head_to_json_dict(head) for head in heads]
     return {
-        "frame_index": _finite_int(frame_index, "frame_index"),
+        "frame_index": _exact_int(frame_index, "frame_index"),
         "timestamp_ms": _finite_float(timestamp_ms, "timestamp_ms"),
-        "status": "ok" if result.heads else "no_head",
-        "width": _finite_int(image_width, "width"),
-        "height": _finite_int(image_height, "height"),
+        "status": "ok" if heads else "no_head",
+        "width": _exact_int(image_width, "width"),
+        "height": _exact_int(image_height, "height"),
         "provider": str(provider),
         "timings_ms": {
             str(key): _finite_float(value, "timings_ms.{}".format(key))
@@ -142,8 +178,13 @@ def head_frame_to_json_dict(
     }
 
 
-def write_head_observations_json(writer: JsonlWriter, **kwargs):
-    """Serialize and append one head-observation record through ``JsonlWriter``."""
+def write_head_observations_json(output_path, **kwargs):
+    """Serialize one image head-observation record as an indented JSON document."""
     record = head_frame_to_json_dict(**kwargs)
-    writer.write(record)
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
+        json.dumps(record, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
     return record

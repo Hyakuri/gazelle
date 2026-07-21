@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
@@ -97,6 +98,19 @@ class OutputsTest(unittest.TestCase):
         self.assertEqual(record["provider"], "static")
         self.assertEqual(record["timings_ms"], {"provider": 1.0})
         self.assertEqual(
+            set(record),
+            {
+                "frame_index",
+                "timestamp_ms",
+                "status",
+                "width",
+                "height",
+                "provider",
+                "timings_ms",
+                "people",
+            },
+        )
+        self.assertEqual(
             record["people"],
             [{"person_id": 4, "head_bbox_normalized": [0.1, 0.2, 0.3, 0.4], "confidence": 0.8}],
         )
@@ -144,41 +158,342 @@ class OutputsTest(unittest.TestCase):
         self.assertEqual(landmarks[0], {"x": 0.0, "y": 0.0, "z": 0.0})
         self.assertEqual(landmarks[-1], {"x": 0.477, "y": 0.2385, "z": -0.159})
 
-    def test_head_frame_serializes_no_head_and_reuses_jsonl_writer(self):
+    def test_write_head_observations_json_writes_one_indented_document(self):
         result = HeadFrameResult(heads=(), timings_ms={"provider": 0.5})
         with TemporaryDirectory() as tmpdir:
-            output_path = Path(tmpdir) / "heads.jsonl"
-            with JsonlWriter(output_path) as writer:
-                record = write_head_observations_json(
-                    writer,
-                    frame_index=3,
-                    timestamp_ms=100.0,
-                    image_width=320,
-                    image_height=240,
-                    provider="mediapipe",
-                    result=result,
-                )
-            payload = json.loads(output_path.read_text(encoding="utf-8"))
+            output_path = Path(tmpdir) / "nested" / "head_observations.json"
+            record = write_head_observations_json(
+                output_path,
+                frame_index=3,
+                timestamp_ms=100.0,
+                image_width=320,
+                image_height=240,
+                provider="mediapipe",
+                result=result,
+            )
+            document = output_path.read_text(encoding="utf-8")
+            payload = json.loads(document)
 
         self.assertEqual(record, payload)
+        self.assertEqual(document, json.dumps(record, ensure_ascii=False, indent=2) + "\n")
         self.assertEqual(payload["status"], "no_head")
         self.assertEqual(payload["people"], [])
         self.assertEqual(payload["timings_ms"], {"provider": 0.5})
 
-    def test_head_frame_rejects_non_finite_serialized_values(self):
-        result = HeadFrameResult(
-            heads=(HeadObservation(person_id=1, bbox=(0.1, float("nan"), 0.3, 0.4), confidence=0.8),),
+    def test_head_frame_record_can_be_written_as_one_video_jsonl_row(self):
+        record = head_frame_to_json_dict(
+            frame_index=3,
+            timestamp_ms=100.0,
+            image_width=320,
+            image_height=240,
+            provider="mediapipe",
+            result=HeadFrameResult(heads=(), timings_ms={"provider": 0.5}),
+        )
+        with TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "head_observations.jsonl"
+            with JsonlWriter(output_path) as writer:
+                writer.write(record)
+            lines = output_path.read_text(encoding="utf-8").splitlines()
+
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(json.loads(lines[0]), record)
+
+    def test_head_frame_rejects_non_finite_float_fields(self):
+        rich_result = make_rich_head_result()
+        perception = rich_result.perceptions[0]
+        cases = (
+            (
+                "timestamp",
+                {"timestamp_ms": float("nan"), "result": HeadFrameResult(heads=())},
+            ),
+            (
+                "timing",
+                {"result": HeadFrameResult(heads=(), timings_ms={"provider": float("inf")})},
+            ),
+            (
+                "bbox",
+                {
+                    "result": HeadFrameResult(
+                        heads=(
+                            HeadObservation(
+                                person_id=1,
+                                bbox=(0.1, float("nan"), 0.3, 0.4),
+                                confidence=0.8,
+                            ),
+                        ),
+                    ),
+                },
+            ),
+            (
+                "tracking",
+                {
+                    "result": replace(
+                        rich_result,
+                        perceptions=(replace(perception, missed_ms=float("inf")),),
+                    ),
+                },
+            ),
+            (
+                "matrix",
+                {
+                    "result": replace(
+                        rich_result,
+                        perceptions=(
+                            replace(
+                                perception,
+                                facial_transformation_matrix=((1.0, float("nan")),),
+                            ),
+                        ),
+                    ),
+                },
+            ),
+            (
+                "landmark",
+                {
+                    "result": replace(
+                        rich_result,
+                        perceptions=(
+                            replace(
+                                perception,
+                                face_keypoints=(NormalizedLandmark(x=float("inf"), y=0.2),),
+                            ),
+                        ),
+                    ),
+                },
+            ),
+            (
+                "angle",
+                {
+                    "result": replace(
+                        rich_result,
+                        perceptions=(
+                            replace(
+                                perception,
+                                head_pose=HeadPoseAngles(
+                                    yaw_deg=float("nan"),
+                                    pitch_deg=0.0,
+                                    roll_deg=0.0,
+                                ),
+                            ),
+                        ),
+                    ),
+                },
+            ),
         )
 
-        with self.assertRaisesRegex(ValueError, "finite"):
-            head_frame_to_json_dict(
-                frame_index=0,
-                timestamp_ms=0.0,
-                image_width=10,
-                image_height=8,
-                provider="static",
-                result=result,
+        for name, overrides in cases:
+            kwargs = {
+                "frame_index": 0,
+                "timestamp_ms": 0.0,
+                "image_width": 10,
+                "image_height": 8,
+                "provider": "static",
+                "result": HeadFrameResult(heads=()),
+            }
+            kwargs.update(overrides)
+            with self.subTest(field=name), self.assertRaisesRegex(ValueError, "finite"):
+                head_frame_to_json_dict(**kwargs)
+
+    def test_head_frame_requires_exact_integral_frame_metadata(self):
+        invalid_values = (True, "1", 1.5, float("nan"), float("inf"))
+        for field in ("frame_index", "image_width", "image_height"):
+            for invalid in invalid_values:
+                kwargs = {
+                    "frame_index": 2,
+                    "timestamp_ms": 66.6,
+                    "image_width": 640,
+                    "image_height": 480,
+                    "provider": "static",
+                    "result": HeadFrameResult(heads=()),
+                }
+                kwargs[field] = invalid
+                with self.subTest(field=field, value=invalid), self.assertRaisesRegex(
+                    ValueError,
+                    "integer",
+                ):
+                    head_frame_to_json_dict(**kwargs)
+
+        record = head_frame_to_json_dict(
+            frame_index=2.0,
+            timestamp_ms=66.6,
+            image_width=640.0,
+            image_height=480.0,
+            provider="static",
+            result=HeadFrameResult(heads=()),
+        )
+        self.assertIs(type(record["frame_index"]), int)
+        self.assertIs(type(record["width"]), int)
+        self.assertIs(type(record["height"]), int)
+
+    def test_head_frame_requires_exact_integral_person_and_tracking_fields(self):
+        invalid_values = (True, "1", 1.5, float("nan"), float("inf"))
+        rich_result = make_rich_head_result()
+        head = rich_result.heads[0]
+        perception = rich_result.perceptions[0]
+
+        for invalid in invalid_values:
+            fallback_result = HeadFrameResult(
+                heads=(replace(head, person_id=invalid),),
             )
+            with self.subTest(field="fallback person_id", value=invalid), self.assertRaisesRegex(
+                ValueError,
+                "integer",
+            ):
+                head_frame_to_json_dict(
+                    frame_index=0,
+                    timestamp_ms=0.0,
+                    image_width=10,
+                    image_height=8,
+                    provider="static",
+                    result=fallback_result,
+                )
+
+            rich_person_result = replace(
+                rich_result,
+                heads=(replace(head, person_id=invalid),),
+                perceptions=(replace(perception, person_id=invalid),),
+            )
+            with self.subTest(field="rich person_id", value=invalid), self.assertRaisesRegex(
+                ValueError,
+                "integer",
+            ):
+                head_frame_to_json_dict(
+                    frame_index=0,
+                    timestamp_ms=0.0,
+                    image_width=10,
+                    image_height=8,
+                    provider="mediapipe",
+                    result=rich_person_result,
+                )
+
+            for field in ("track_age_frames", "missed_frames"):
+                invalid_perception = replace(perception, **{field: invalid})
+                with self.subTest(field=field, value=invalid), self.assertRaisesRegex(
+                    ValueError,
+                    "integer",
+                ):
+                    head_frame_to_json_dict(
+                        frame_index=0,
+                        timestamp_ms=0.0,
+                        image_width=10,
+                        image_height=8,
+                        provider="mediapipe",
+                        result=replace(rich_result, perceptions=(invalid_perception,)),
+                    )
+
+    def test_head_frame_requires_actual_boolean_flags(self):
+        rich_result = make_rich_head_result()
+        for invalid in ("false", 0, None):
+            with self.subTest(field="save_face_landmarks", value=invalid), self.assertRaisesRegex(
+                ValueError,
+                "save_face_landmarks.*bool",
+            ):
+                head_frame_to_json_dict(
+                    frame_index=2,
+                    timestamp_ms=66.6,
+                    image_width=640,
+                    image_height=480,
+                    provider="mediapipe",
+                    result=rich_result,
+                    save_face_landmarks=invalid,
+                )
+
+        perception = replace(rich_result.perceptions[0], observed="false")
+        with self.assertRaisesRegex(ValueError, "observed.*bool"):
+            head_frame_to_json_dict(
+                frame_index=2,
+                timestamp_ms=66.6,
+                image_width=640,
+                image_height=480,
+                provider="mediapipe",
+                result=replace(rich_result, perceptions=(perception,)),
+            )
+
+    def test_head_frame_requires_exact_perception_enums(self):
+        rich_result = make_rich_head_result()
+        perception = rich_result.perceptions[0]
+        for field, invalid, enum_name in (
+            ("state", "face_pose", "HeadPerceptionState"),
+            ("view_state", "frontal", "HeadViewState"),
+        ):
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, enum_name):
+                head_frame_to_json_dict(
+                    frame_index=2,
+                    timestamp_ms=66.6,
+                    image_width=640,
+                    image_height=480,
+                    provider="mediapipe",
+                    result=replace(
+                        rich_result,
+                        perceptions=(replace(perception, **{field: invalid}),),
+                    ),
+                )
+
+    def test_head_frame_rejects_rich_result_length_mismatch(self):
+        rich_result = make_rich_head_result()
+        mismatched = replace(
+            rich_result,
+            heads=rich_result.heads
+            + (HeadObservation(person_id=8, bbox=(0.5, 0.5, 0.7, 0.8), confidence=0.75),),
+        )
+
+        with self.assertRaisesRegex(ValueError, "same length"):
+            head_frame_to_json_dict(
+                frame_index=2,
+                timestamp_ms=66.6,
+                image_width=640,
+                image_height=480,
+                provider="mediapipe",
+                result=mismatched,
+            )
+
+    def test_head_frame_rejects_rich_result_order_mismatch(self):
+        rich_result = make_rich_head_result()
+        first_perception = rich_result.perceptions[0]
+        second_perception = replace(
+            first_perception,
+            person_id=8,
+            head_bbox=(0.5, 0.5, 0.7, 0.8),
+            confidence=0.75,
+        )
+        ordered_heads = (
+            rich_result.heads[0],
+            HeadObservation(person_id=8, bbox=(0.5, 0.5, 0.7, 0.8), confidence=0.75),
+        )
+
+        with self.assertRaisesRegex(ValueError, "index 0"):
+            head_frame_to_json_dict(
+                frame_index=2,
+                timestamp_ms=66.6,
+                image_width=640,
+                image_height=480,
+                provider="mediapipe",
+                result=replace(
+                    rich_result,
+                    heads=ordered_heads,
+                    perceptions=(second_perception, first_perception),
+                ),
+            )
+
+    def test_head_frame_rejects_rich_result_content_mismatch(self):
+        rich_result = make_rich_head_result()
+        head = rich_result.heads[0]
+        mismatched_heads = (
+            replace(head, person_id=8),
+            replace(head, bbox=None),
+            replace(head, confidence=None),
+        )
+
+        for mismatched_head in mismatched_heads:
+            with self.subTest(head=mismatched_head), self.assertRaisesRegex(ValueError, "index 0"):
+                head_frame_to_json_dict(
+                    frame_index=2,
+                    timestamp_ms=66.6,
+                    image_width=640,
+                    image_height=480,
+                    provider="mediapipe",
+                    result=replace(rich_result, heads=(mismatched_head,)),
+                )
 
     def test_prediction_to_json_dict(self):
         record = prediction_to_json_dict(make_prediction(), heatmap_path="heatmaps/person_1.pt")
