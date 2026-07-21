@@ -64,6 +64,19 @@ class FakeDetections:
 FAKE_SUPERVISION = SimpleNamespace(Detections=FakeDetections)
 
 
+def tracked_output(detections, tracker_ids, candidate_indexes=None):
+    if candidate_indexes is None:
+        candidate_indexes = tuple(range(len(tracker_ids)))
+    indexes = np.asarray(candidate_indexes, dtype=np.int32)
+    return FakeDetections(
+        xyxy=detections.xyxy[indexes],
+        confidence=detections.confidence[indexes],
+        class_id=detections.class_id[indexes],
+        data={"candidate_index": indexes},
+        tracker_id=np.asarray(tracker_ids, dtype=object),
+    )
+
+
 class FakeTracker:
     def __init__(self, output_builder=None, *, reset_error=None, close_error=None):
         self.output_builder = output_builder or self._echo
@@ -219,7 +232,7 @@ class ByteTrackHeadTrackerTest(unittest.TestCase):
             detections.data["candidate_index"],
             np.arange(2, dtype=np.int32),
         )
-        self.assertEqual(tuple(item.person_id for item in result), (10, 11))
+        self.assertEqual(tuple(item.person_id for item in result), (0, 1))
         self.assertEqual(tuple(item.candidate for item in result), (first, second))
         self.assertEqual(tuple(item.track_age_frames for item in result), (1, 1))
 
@@ -244,7 +257,7 @@ class ByteTrackHeadTrackerTest(unittest.TestCase):
             image_height=480,
         )
 
-        self.assertEqual(tuple(item.person_id for item in result), (7, 41))
+        self.assertEqual(tuple(item.person_id for item in result), (0, 1))
         self.assertEqual(tuple(item.candidate for item in result), candidates)
 
     def test_filters_untracked_sentinel_and_returns_stable_candidates(self):
@@ -270,7 +283,7 @@ class ByteTrackHeadTrackerTest(unittest.TestCase):
             image_height=480,
         )
 
-        self.assertEqual(tuple(item.person_id for item in result), (7, 21))
+        self.assertEqual(tuple(item.person_id for item in result), (0, 1))
         self.assertEqual(
             tuple(item.candidate for item in result),
             (candidates[0], candidates[2]),
@@ -388,7 +401,161 @@ class ByteTrackHeadTrackerTest(unittest.TestCase):
 
         self.assertEqual(len(factory.calls), 2)
         self.assertEqual(bad_tracker.close_calls, 1)
+        self.assertEqual(result[0].person_id, 0)
         self.assertEqual(result[0].track_age_frames, 1)
+
+    def test_public_id_is_stable_within_backend_generation(self):
+        raw_id = 10**100
+        tracker = FakeTracker(
+            lambda detections: tracked_output(detections, (raw_id,))
+        )
+        adapter, _, _ = make_tracker(tracker)
+
+        first = adapter.update(
+            (candidate(),),
+            frame_index=0,
+            timestamp_ms=0.0,
+            image_width=100,
+            image_height=100,
+        )[0]
+        second = adapter.update(
+            (candidate(),),
+            frame_index=1,
+            timestamp_ms=1.0,
+            image_width=100,
+            image_height=100,
+        )[0]
+
+        self.assertEqual(first.person_id, second.person_id)
+        self.assertEqual(first.person_id, 0)
+        self.assertEqual((first.track_age_frames, second.track_age_frames), (1, 2))
+
+    def test_same_raw_id_after_backend_retirement_gets_new_public_id(self):
+        raw_id = 91
+        malformed = FakeDetections(
+            xyxy=np.empty((2, 4), dtype=np.float32),
+            confidence=np.ones(2, dtype=np.float32),
+            class_id=np.zeros(2, dtype=np.int32),
+            data={"candidate_index": np.asarray((0, 1), dtype=np.int32)},
+            tracker_id=np.asarray((raw_id, True), dtype=object),
+        )
+        old_tracker = None
+
+        def old_output(detections):
+            if len(old_tracker.updates) == 1:
+                return tracked_output(detections, (raw_id,))
+            return malformed
+
+        old_tracker = FakeTracker(old_output)
+        fresh_tracker = FakeTracker(
+            lambda detections: tracked_output(detections, (raw_id,))
+        )
+        factory = SequencedFactory(old_tracker, fresh_tracker)
+        adapter = ByteTrackHeadTracker(
+            source_fps=30.0,
+            tracker_factory=factory,
+            supervision_module=FAKE_SUPERVISION,
+        )
+        old = adapter.update(
+            (candidate(),),
+            frame_index=0,
+            timestamp_ms=0.0,
+            image_width=100,
+            image_height=100,
+        )[0]
+
+        with self.assertRaisesRegex(RuntimeError, "tracker output"):
+            adapter.update(
+                (candidate(0), candidate(1)),
+                frame_index=1,
+                timestamp_ms=1.0,
+                image_width=100,
+                image_height=100,
+            )
+
+        fresh = adapter.update(
+            (candidate(),),
+            frame_index=2,
+            timestamp_ms=2.0,
+            image_width=100,
+            image_height=100,
+        )[0]
+        self.assertNotEqual(fresh.person_id, old.person_id)
+        self.assertEqual(old.person_id, 0)
+        self.assertEqual(fresh.person_id, 1)
+        self.assertEqual(fresh.track_age_frames, 1)
+
+    def test_distinct_arbitrarily_large_raw_ids_never_collide(self):
+        raw_ids = (10**100, 10**200)
+        adapter, _, _ = make_tracker(
+            FakeTracker(lambda detections: tracked_output(detections, raw_ids))
+        )
+
+        result = adapter.update(
+            (candidate(0), candidate(1)),
+            frame_index=0,
+            timestamp_ms=0.0,
+            image_width=100,
+            image_height=100,
+        )
+
+        self.assertEqual(tuple(item.person_id for item in result), (0, 1))
+        self.assertEqual(len({item.person_id for item in result}), 2)
+
+    def test_reset_starts_clean_public_id_namespace_for_new_video(self):
+        def output(detections):
+            raw_ids = (111, 222) if len(detections.xyxy) == 2 else (222,)
+            return tracked_output(detections, raw_ids)
+
+        adapter, _, _ = make_tracker(FakeTracker(output))
+        before_reset = adapter.update(
+            (candidate(0), candidate(1)),
+            frame_index=0,
+            timestamp_ms=0.0,
+            image_width=100,
+            image_height=100,
+        )
+
+        adapter.reset()
+
+        after_reset = adapter.update(
+            (candidate(),),
+            frame_index=0,
+            timestamp_ms=0.0,
+            image_width=100,
+            image_height=100,
+        )[0]
+        self.assertEqual(tuple(item.person_id for item in before_reset), (0, 1))
+        self.assertEqual(after_reset.person_id, 0)
+        self.assertEqual(after_reset.track_age_frames, 1)
+
+    def test_untracked_sentinel_never_consumes_public_id(self):
+        tracker = None
+
+        def output(detections):
+            raw_id = -1 if len(tracker.updates) == 1 else 77
+            return tracked_output(detections, (raw_id,))
+
+        tracker = FakeTracker(output)
+        adapter, _, _ = make_tracker(tracker)
+
+        untracked = adapter.update(
+            (candidate(),),
+            frame_index=0,
+            timestamp_ms=0.0,
+            image_width=100,
+            image_height=100,
+        )
+        tracked = adapter.update(
+            (candidate(),),
+            frame_index=1,
+            timestamp_ms=1.0,
+            image_width=100,
+            image_height=100,
+        )[0]
+
+        self.assertEqual(untracked, ())
+        self.assertEqual(tracked.person_id, 0)
 
     def test_updates_tracker_with_empty_detections(self):
         adapter, fake, _ = make_tracker()
@@ -413,6 +580,65 @@ class ByteTrackHeadTrackerTest(unittest.TestCase):
         self.assertEqual(set(detections.data), {"candidate_index"})
         self.assertEqual(detections.data["candidate_index"].shape, (0,))
         self.assertEqual(detections.data["candidate_index"].dtype, np.int32)
+
+    def test_empty_candidates_reject_nonempty_output_and_recreate_backend(self):
+        malformed_outputs = (
+            SimpleNamespace(xyxy=np.ones((1, 4), dtype=np.float32)),
+            SimpleNamespace(
+                xyxy=np.empty((0, 4), dtype=np.float32),
+                tracker_id=np.asarray((17,), dtype=np.int32),
+            ),
+            SimpleNamespace(
+                xyxy=np.empty((0, 4), dtype=np.float32),
+                confidence=np.ones((1,), dtype=np.float32),
+            ),
+        )
+        for malformed in malformed_outputs:
+            with self.subTest(malformed=malformed):
+                bad_tracker = FakeTracker(lambda detections, value=malformed: value)
+                fresh_tracker = FakeTracker()
+                factory = SequencedFactory(bad_tracker, fresh_tracker)
+                adapter = ByteTrackHeadTracker(
+                    source_fps=30.0,
+                    tracker_factory=factory,
+                    supervision_module=FAKE_SUPERVISION,
+                )
+
+                with self.assertRaisesRegex(RuntimeError, "empty candidate"):
+                    adapter.update(
+                        (),
+                        frame_index=7,
+                        timestamp_ms=100.0,
+                        image_width=100,
+                        image_height=100,
+                    )
+
+                result = adapter.update(
+                    (candidate(),),
+                    frame_index=7,
+                    timestamp_ms=50.0,
+                    image_width=100,
+                    image_height=100,
+                )
+                self.assertEqual(len(factory.calls), 2)
+                self.assertEqual(bad_tracker.close_calls, 1)
+                self.assertEqual(result[0].track_age_frames, 1)
+
+    def test_empty_candidates_accept_truly_empty_output_without_mapping_fields(self):
+        empty_output = SimpleNamespace(xyxy=np.empty((0, 4), dtype=np.float32))
+        adapter, fake, factory = make_tracker(FakeTracker(lambda detections: empty_output))
+
+        result = adapter.update(
+            (),
+            frame_index=0,
+            timestamp_ms=0.0,
+            image_width=100,
+            image_height=100,
+        )
+
+        self.assertEqual(result, ())
+        self.assertEqual(len(fake.updates), 1)
+        self.assertEqual(len(factory.calls), 1)
 
     def test_frame_index_must_increase_strictly_without_mutating_age_state(self):
         adapter, fake, _ = make_tracker()

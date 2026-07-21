@@ -1,5 +1,6 @@
 import importlib
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from numbers import Integral, Real
 from typing import Optional, Tuple
@@ -112,6 +113,9 @@ class ByteTrackHeadTracker:
         self._supervision = supervision_module
         self._tracker = None
         self._first_frame_by_person = {}
+        self._public_id_by_raw_id = {}
+        self._reserved_public_ids = set()
+        self._next_public_id = 0
         self._last_frame_index: Optional[int] = None
         self._last_timestamp_ms: Optional[float] = None
         self._closed = False
@@ -200,7 +204,28 @@ class ByteTrackHeadTracker:
         frame_index: int,
     ):
         if not candidates:
-            return (), dict(self._first_frame_by_person)
+            output_fields = tuple(
+                getattr(tracked, name, None)
+                for name in ("xyxy", "tracker_id", "confidence", "class_id")
+            )
+            data = getattr(tracked, "data", None)
+            if isinstance(data, Mapping):
+                output_fields += tuple(data.values())
+            try:
+                has_rows = len(tracked) > 0
+            except TypeError:
+                has_rows = False
+            if has_rows or any(self._has_output_values(value) for value in output_fields):
+                raise RuntimeError(
+                    "Invalid tracker output for empty candidate frame: expected no rows"
+                )
+            return (
+                (),
+                dict(self._first_frame_by_person),
+                dict(self._public_id_by_raw_id),
+                set(self._reserved_public_ids),
+                self._next_public_id,
+            )
         try:
             tracker_ids = tuple(tracked.tracker_id)
             candidate_indexes = tuple(tracked.data["candidate_index"])
@@ -217,7 +242,7 @@ class ByteTrackHeadTracker:
         seen_people = set()
         seen_candidates = set()
         for raw_person_id, raw_candidate_index in zip(tracker_ids, candidate_indexes):
-            person_id = _tracker_person_id(raw_person_id)
+            raw_person_id = _tracker_person_id(raw_person_id)
             candidate_index = _nonnegative_int(
                 raw_candidate_index,
                 name="tracker output candidate_index",
@@ -228,16 +253,27 @@ class ByteTrackHeadTracker:
             if candidate_index in seen_candidates:
                 raise RuntimeError("Invalid tracker output: duplicate candidate index")
             seen_candidates.add(candidate_index)
-            if person_id is None:
+            if raw_person_id is None:
                 continue
-            if person_id in seen_people:
+            if raw_person_id in seen_people:
                 raise RuntimeError("Invalid tracker output: duplicate person ID")
-            seen_people.add(person_id)
-            parsed_rows.append((candidate_index, person_id))
+            seen_people.add(raw_person_id)
+            parsed_rows.append((candidate_index, raw_person_id))
 
         next_first_frames = dict(self._first_frame_by_person)
+        next_public_ids = dict(self._public_id_by_raw_id)
+        next_reserved_ids = set(self._reserved_public_ids)
+        next_public_id = self._next_public_id
         mapped = []
-        for candidate_index, person_id in parsed_rows:
+        for candidate_index, raw_person_id in sorted(parsed_rows):
+            person_id = next_public_ids.get(raw_person_id)
+            if person_id is None:
+                while next_public_id in next_reserved_ids:
+                    next_public_id += 1
+                person_id = next_public_id
+                next_public_id += 1
+                next_public_ids[raw_person_id] = person_id
+                next_reserved_ids.add(person_id)
             first_frame = next_first_frames.setdefault(person_id, frame_index)
             mapped.append(
                 (
@@ -249,8 +285,23 @@ class ByteTrackHeadTracker:
                     ),
                 )
             )
-        result = tuple(item for _, item in sorted(mapped, key=lambda entry: entry[0]))
-        return result, next_first_frames
+        result = tuple(item for _, item in mapped)
+        return (
+            result,
+            next_first_frames,
+            next_public_ids,
+            next_reserved_ids,
+            next_public_id,
+        )
+
+    @staticmethod
+    def _has_output_values(value: object) -> bool:
+        if value is None:
+            return False
+        try:
+            return len(value) > 0
+        except TypeError:
+            return True
 
     @staticmethod
     def _cleanup_backend(tracker) -> None:
@@ -266,6 +317,7 @@ class ByteTrackHeadTracker:
         tracker = self._tracker
         self._tracker = None
         self._first_frame_by_person.clear()
+        self._public_id_by_raw_id.clear()
         if tracker is None:
             return
         try:
@@ -302,7 +354,13 @@ class ByteTrackHeadTracker:
         )
         try:
             tracked = tracker.update(detections)
-            result, next_first_frames = self._map_tracked_candidates(
+            (
+                result,
+                next_first_frames,
+                next_public_ids,
+                next_reserved_ids,
+                next_public_id,
+            ) = self._map_tracked_candidates(
                 tracked,
                 candidates,
                 frame_index=frame_index,
@@ -311,6 +369,9 @@ class ByteTrackHeadTracker:
             self._invalidate_tracker(exc)
             raise
         self._first_frame_by_person = next_first_frames
+        self._public_id_by_raw_id = next_public_ids
+        self._reserved_public_ids = next_reserved_ids
+        self._next_public_id = next_public_id
         self._last_frame_index = frame_index
         self._last_timestamp_ms = timestamp_ms
         return result
@@ -320,6 +381,9 @@ class ByteTrackHeadTracker:
             raise RuntimeError("ByteTrackHeadTracker is closed")
         tracker = self._tracker
         self._first_frame_by_person.clear()
+        self._public_id_by_raw_id.clear()
+        self._reserved_public_ids.clear()
+        self._next_public_id = 0
         self._last_frame_index = None
         self._last_timestamp_ms = None
         if tracker is None:
@@ -344,6 +408,9 @@ class ByteTrackHeadTracker:
         tracker = self._tracker
         self._tracker = None
         self._first_frame_by_person.clear()
+        self._public_id_by_raw_id.clear()
+        self._reserved_public_ids.clear()
+        self._next_public_id = 0
         self._last_frame_index = None
         self._last_timestamp_ms = None
         if tracker is None:
