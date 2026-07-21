@@ -624,8 +624,97 @@ class ByteTrackHeadTrackerTest(unittest.TestCase):
                 self.assertEqual(bad_tracker.close_calls, 1)
                 self.assertEqual(result[0].track_age_frames, 1)
 
-    def test_empty_candidates_accept_truly_empty_output_without_mapping_fields(self):
-        empty_output = SimpleNamespace(xyxy=np.empty((0, 4), dtype=np.float32))
+    def test_empty_candidates_reject_structurally_invalid_empty_outputs(self):
+        malformed_outputs = (
+            None,
+            object(),
+            {},
+            SimpleNamespace(data={}),
+            SimpleNamespace(xyxy=np.empty((0, 4), dtype=np.float32)),
+            SimpleNamespace(xyxy=np.empty((0,), dtype=np.float32), data={}),
+            SimpleNamespace(xyxy=np.empty((0, 5), dtype=np.float32), data={}),
+            SimpleNamespace(xyxy=[], data={}),
+            SimpleNamespace(
+                xyxy=np.empty((0, 4), dtype=np.float32),
+                data=(),
+            ),
+        )
+        for malformed in malformed_outputs:
+            with self.subTest(malformed=malformed):
+                bad_tracker = FakeTracker(
+                    lambda detections, value=malformed: value
+                )
+                fresh_tracker = FakeTracker()
+                factory = SequencedFactory(bad_tracker, fresh_tracker)
+                adapter = ByteTrackHeadTracker(
+                    source_fps=30.0,
+                    tracker_factory=factory,
+                    supervision_module=FAKE_SUPERVISION,
+                )
+
+                with self.assertRaisesRegex(RuntimeError, "empty candidate"):
+                    adapter.update(
+                        (),
+                        frame_index=7,
+                        timestamp_ms=100.0,
+                        image_width=100,
+                        image_height=100,
+                    )
+
+                result = adapter.update(
+                    (candidate(),),
+                    frame_index=7,
+                    timestamp_ms=50.0,
+                    image_width=100,
+                    image_height=100,
+                )
+                self.assertEqual(len(factory.calls), 2)
+                self.assertEqual(bad_tracker.close_calls, 1)
+                self.assertEqual(result[0].track_age_frames, 1)
+
+    def test_malformed_output_preserves_cleanup_failure_context(self):
+        cleanup_error = RuntimeError("cleanup failed")
+        bad_tracker = FakeTracker(
+            lambda detections: None,
+            close_error=cleanup_error,
+        )
+        fresh_tracker = FakeTracker()
+        factory = SequencedFactory(bad_tracker, fresh_tracker)
+        adapter = ByteTrackHeadTracker(
+            source_fps=30.0,
+            tracker_factory=factory,
+            supervision_module=FAKE_SUPERVISION,
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "empty candidate") as caught:
+            adapter.update(
+                (),
+                frame_index=7,
+                timestamp_ms=100.0,
+                image_width=100,
+                image_height=100,
+            )
+
+        self.assertIn(
+            "cleanup failed",
+            "\n".join(getattr(caught.exception, "__notes__", ())),
+        )
+        result = adapter.update(
+            (candidate(),),
+            frame_index=7,
+            timestamp_ms=50.0,
+            image_width=100,
+            image_height=100,
+        )
+        self.assertEqual(len(factory.calls), 2)
+        self.assertEqual(bad_tracker.close_calls, 1)
+        self.assertEqual(result[0].track_age_frames, 1)
+
+    def test_empty_candidates_accept_detections_like_output_without_optional_fields(self):
+        empty_output = SimpleNamespace(
+            xyxy=np.empty((0, 4), dtype=np.float32),
+            data={},
+        )
         adapter, fake, factory = make_tracker(FakeTracker(lambda detections: empty_output))
 
         result = adapter.update(

@@ -204,21 +204,30 @@ class ByteTrackHeadTracker:
         frame_index: int,
     ):
         if not candidates:
+            empty_output_error = (
+                "Invalid tracker output for empty candidate frame: expected "
+                "Detections-like xyxy with shape (0, 4) and mapping data with no rows"
+            )
+            try:
+                xyxy = tracked.xyxy
+                data = tracked.data
+            except AttributeError as exc:
+                raise RuntimeError(empty_output_error) from exc
+            if not isinstance(xyxy, np.ndarray) or xyxy.shape != (0, 4):
+                raise RuntimeError(empty_output_error)
+            if not isinstance(data, Mapping):
+                raise RuntimeError(empty_output_error)
             output_fields = tuple(
                 getattr(tracked, name, None)
-                for name in ("xyxy", "tracker_id", "confidence", "class_id")
+                for name in ("tracker_id", "confidence", "class_id")
             )
-            data = getattr(tracked, "data", None)
-            if isinstance(data, Mapping):
-                output_fields += tuple(data.values())
+            output_fields += tuple(data.values())
             try:
                 has_rows = len(tracked) > 0
             except TypeError:
                 has_rows = False
             if has_rows or any(self._has_output_values(value) for value in output_fields):
-                raise RuntimeError(
-                    "Invalid tracker output for empty candidate frame: expected no rows"
-                )
+                raise RuntimeError(empty_output_error)
             return (
                 (),
                 dict(self._first_frame_by_person),
