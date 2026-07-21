@@ -3,6 +3,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 import cv2
 import numpy as np
@@ -35,6 +36,48 @@ class FakePredictor:
                 )
             )
         return predictions
+
+
+class FakeHeadProvider:
+    def __init__(self, close_error=None):
+        self.close_calls = 0
+        self.close_error = close_error
+
+    def get_heads(self, frame, frame_index, timestamp_ms, image_width, image_height):
+        return ()
+
+    def close(self):
+        self.close_calls += 1
+        if self.close_error is not None:
+            raise self.close_error
+
+
+class FakeVideoWriter:
+    def __init__(self, close_error=None):
+        self.close_calls = 0
+        self.close_error = close_error
+
+    def write(self, image):
+        return None
+
+    def close(self):
+        self.close_calls += 1
+        if self.close_error is not None:
+            raise self.close_error
+
+
+class FakeVideoReader:
+    def __init__(self, fps):
+        self.metadata = SimpleNamespace(width=32, height=24, fps=fps, frame_count=0)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return False
+
+    def __iter__(self):
+        return iter(())
 
 
 def write_tiny_video(path, width=32, height=24, fps=5.0, frame_count=3):
@@ -90,6 +133,125 @@ class VideoPipelineTest(unittest.TestCase):
 
         self.assertIsInstance(provider, MediaPipeHeadProvider)
         self.assertEqual(tracker_factory.source_fps, 25.0)
+
+    def test_run_video_pipeline_closes_provider_when_predictor_factory_fails(self):
+        with TemporaryDirectory() as tmpdir:
+            video_path = Path(tmpdir) / "clip.mp4"
+            write_tiny_video(video_path, frame_count=1)
+            provider = FakeHeadProvider(close_error=RuntimeError("provider cleanup failed"))
+            primary_error = RuntimeError("predictor construction failed")
+            config = make_config(
+                input_path=str(video_path),
+                output_dir=str(Path(tmpdir) / "outputs"),
+            )
+
+            def fail_predictor(config):
+                raise primary_error
+
+            with patch(
+                "gazelle.runtime.pipeline.build_head_provider_from_config",
+                return_value=provider,
+            ):
+                with self.assertRaises(RuntimeError) as caught:
+                    run_video_pipeline(config, predictor_factory=fail_predictor)
+
+        self.assertIs(caught.exception, primary_error)
+        self.assertEqual(provider.close_calls, 1)
+        self.assertTrue(
+            any("provider cleanup failed" in note for note in caught.exception.__notes__)
+        )
+
+    def test_run_video_pipeline_closes_provider_when_writer_setup_fails(self):
+        with TemporaryDirectory() as tmpdir:
+            video_path = Path(tmpdir) / "clip.mp4"
+            write_tiny_video(video_path, frame_count=1)
+            provider = FakeHeadProvider()
+            primary_error = RuntimeError("writer construction failed")
+            config = make_config(
+                input_path=str(video_path),
+                output_dir=str(Path(tmpdir) / "outputs"),
+                save_rendered=True,
+            )
+
+            with patch(
+                "gazelle.runtime.pipeline.build_head_provider_from_config",
+                return_value=provider,
+            ):
+                with patch(
+                    "gazelle.runtime.pipeline.VideoFrameWriter",
+                    side_effect=primary_error,
+                ):
+                    with self.assertRaises(RuntimeError) as caught:
+                        run_video_pipeline(
+                            config,
+                            predictor_factory=lambda config: FakePredictor(),
+                        )
+
+        self.assertIs(caught.exception, primary_error)
+        self.assertEqual(provider.close_calls, 1)
+
+    def test_run_video_pipeline_attempts_writer_and_provider_cleanup(self):
+        with TemporaryDirectory() as tmpdir:
+            video_path = Path(tmpdir) / "clip.mp4"
+            write_tiny_video(video_path, frame_count=1)
+            provider = FakeHeadProvider(close_error=RuntimeError("provider cleanup failed"))
+            writer = FakeVideoWriter(close_error=RuntimeError("writer cleanup failed"))
+            primary_error = RuntimeError("renderer construction failed")
+            config = make_config(
+                input_path=str(video_path),
+                output_dir=str(Path(tmpdir) / "outputs"),
+                save_rendered=True,
+            )
+
+            with patch(
+                "gazelle.runtime.pipeline.build_head_provider_from_config",
+                return_value=provider,
+            ):
+                with patch("gazelle.runtime.pipeline.VideoFrameWriter", return_value=writer):
+                    with patch(
+                        "gazelle.runtime.pipeline.PredictionRenderer",
+                        side_effect=primary_error,
+                    ):
+                        with self.assertRaises(RuntimeError) as caught:
+                            run_video_pipeline(
+                                config,
+                                predictor_factory=lambda config: FakePredictor(),
+                            )
+
+        self.assertIs(caught.exception, primary_error)
+        self.assertEqual(writer.close_calls, 1)
+        self.assertEqual(provider.close_calls, 1)
+        notes = caught.exception.__notes__
+        self.assertTrue(any("writer cleanup failed" in note for note in notes))
+        self.assertTrue(any("provider cleanup failed" in note for note in notes))
+
+    def test_run_video_pipeline_resolves_tracker_fps_fallbacks(self):
+        for output_fps, expected_fps in ((12.0, 12.0), (None, 30.0)):
+            with self.subTest(output_fps=output_fps):
+                with TemporaryDirectory() as tmpdir:
+                    provider = FakeHeadProvider()
+                    config = make_config(
+                        input_path=str(Path(tmpdir) / "clip.mp4"),
+                        output_dir=str(Path(tmpdir) / "outputs"),
+                        output_fps=output_fps,
+                    )
+                    with patch(
+                        "gazelle.runtime.pipeline.VideoFrameReader",
+                        return_value=FakeVideoReader(fps=0.0),
+                    ):
+                        with patch(
+                            "gazelle.runtime.pipeline.build_head_provider_from_config",
+                            return_value=provider,
+                        ) as build_provider:
+                            run_video_pipeline(
+                                config,
+                                predictor_factory=lambda config: FakePredictor(),
+                            )
+
+                self.assertEqual(
+                    build_provider.call_args.kwargs["source_fps"],
+                    expected_fps,
+                )
 
     def test_run_video_pipeline_none_head_source_writes_jsonl(self):
         with TemporaryDirectory() as tmpdir:

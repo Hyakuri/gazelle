@@ -91,6 +91,56 @@ class FakeTrackerFactory:
 
 
 class MediaPipeHeadProviderTest(unittest.TestCase):
+    def test_tracker_construction_failure_closes_backend_without_masking_error(self):
+        backend = FakeBackend([])
+        construction_error = RuntimeError("tracker construction failed")
+        backend.close_error = RuntimeError("backend cleanup failed")
+
+        def fail_tracker_construction(source_fps):
+            raise construction_error
+
+        with self.assertRaises(RuntimeError) as caught:
+            MediaPipeHeadProvider.create(
+                make_config(),
+                media_type="video",
+                source_fps=25.0,
+                backend_factory=lambda config, *, media_type: backend,
+                tracker_factory=fail_tracker_construction,
+            )
+
+        self.assertIs(caught.exception, construction_error)
+        self.assertEqual(backend.close_calls, 1)
+        self.assertTrue(
+            any("backend cleanup failed" in note for note in caught.exception.__notes__)
+        )
+
+    def test_bridge_construction_failure_closes_tracker_and_backend(self):
+        backend = FakeBackend([])
+        tracker = FakeTracker()
+        construction_error = RuntimeError("bridge construction failed")
+        tracker.close_error = RuntimeError("tracker cleanup failed")
+        backend.close_error = RuntimeError("backend cleanup failed")
+
+        with patch(
+            "gazelle.runtime.perception.provider._create_short_occlusion_bridge",
+            side_effect=construction_error,
+        ):
+            with self.assertRaises(RuntimeError) as caught:
+                MediaPipeHeadProvider.create(
+                    make_config(),
+                    media_type="video",
+                    source_fps=25.0,
+                    backend_factory=lambda config, *, media_type: backend,
+                    tracker_factory=lambda source_fps: tracker,
+                )
+
+        self.assertIs(caught.exception, construction_error)
+        self.assertEqual(tracker.close_calls, 1)
+        self.assertEqual(backend.close_calls, 1)
+        notes = caught.exception.__notes__
+        self.assertTrue(any("tracker cleanup failed" in note for note in notes))
+        self.assertTrue(any("backend cleanup failed" in note for note in notes))
+
     def test_image_result_assigns_ordered_ids_and_retains_rich_landmarks(self):
         landmarks = tuple(NormalizedLandmark(index / 478.0, 0.5) for index in range(478))
         backend = FakeBackend(
@@ -111,6 +161,27 @@ class MediaPipeHeadProviderTest(unittest.TestCase):
         self.assertEqual(len(result.perceptions[0].face_landmarks), 478)
         self.assertEqual(result.timings_ms["face_detector"], 1.25)
         self.assertTrue(math.isfinite(result.timings_ms["fusion"]))
+
+    def test_total_timing_covers_the_whole_provider_and_preserves_backend_total(self):
+        backend = FakeBackend(
+            [SimpleNamespace(faces=(), poses=(), timings_ms={"total": 2.5})]
+        )
+        provider = MediaPipeHeadProvider(backend=backend, max_heads=1)
+
+        with patch(
+            "gazelle.runtime.perception.provider.build_head_candidates",
+            return_value=(),
+        ):
+            with patch(
+                "gazelle.runtime.perception.provider.perf_counter",
+                side_effect=(10.000, 10.002, 10.003, 10.004, 10.005, 10.010),
+            ):
+                result = provider.get_frame_result("frame", 0, 0.0, 100, 80)
+
+        self.assertEqual(result.timings_ms["backend_total"], 2.5)
+        self.assertAlmostEqual(result.timings_ms["fusion"], 1.0)
+        self.assertAlmostEqual(result.timings_ms["total"], 10.0)
+        self.assertGreater(result.timings_ms["total"], result.timings_ms["backend_total"])
 
     def test_video_result_uses_tracker_and_short_occlusion_bridge(self):
         backend = FakeBackend(

@@ -33,6 +33,23 @@ def _create_short_occlusion_bridge(max_gap_ms: float):
     return ShortOcclusionBridge(max_gap_ms=max_gap_ms)
 
 
+def _attach_cleanup_context(primary_error, resource_name: str, cleanup_error) -> None:
+    add_note = getattr(primary_error, "add_note", None)
+    if callable(add_note):
+        add_note("{} cleanup also failed: {!r}".format(resource_name, cleanup_error))
+
+
+def _cleanup_after_construction_failure(primary_error, resources) -> None:
+    for resource_name, resource in resources:
+        close = getattr(resource, "close", None)
+        if not callable(close):
+            continue
+        try:
+            close()
+        except BaseException as cleanup_error:
+            _attach_cleanup_context(primary_error, resource_name, cleanup_error)
+
+
 def _normalized_candidate(candidate):
     return replace(
         candidate,
@@ -95,11 +112,27 @@ class MediaPipeHeadProvider(HeadProvider):
             return cls(backend=backend, max_heads=config.max_heads)
 
         tracker_factory = _create_default_tracker if tracker_factory is None else tracker_factory
+        try:
+            tracker = tracker_factory(source_fps)
+        except BaseException as construction_error:
+            _cleanup_after_construction_failure(
+                construction_error,
+                (("backend", backend),),
+            )
+            raise
+        try:
+            bridge = _create_short_occlusion_bridge(config.head_track_max_gap_ms)
+        except BaseException as construction_error:
+            _cleanup_after_construction_failure(
+                construction_error,
+                (("tracker", tracker), ("backend", backend)),
+            )
+            raise
         return cls(
             backend=backend,
             max_heads=config.max_heads,
-            tracker=tracker_factory(source_fps),
-            bridge=_create_short_occlusion_bridge(config.head_track_max_gap_ms),
+            tracker=tracker,
+            bridge=bridge,
         )
 
     def _assign_people(
@@ -128,6 +161,7 @@ class MediaPipeHeadProvider(HeadProvider):
     def get_frame_result(self, frame, frame_index, timestamp_ms, image_width, image_height):
         if self._closed:
             raise RuntimeError("MediaPipe head provider is closed")
+        total_start = perf_counter()
         observed = self._backend.observe(
             frame,
             frame_index=frame_index,
@@ -164,9 +198,13 @@ class MediaPipeHeadProvider(HeadProvider):
             for item in perceptions
         )
         timings = dict(observed.timings_ms)
+        backend_total = timings.pop("total", None)
+        if backend_total is not None:
+            timings["backend_total"] = backend_total
         timings["fusion"] = fusion_ms
         if self._tracker is not None:
             timings["tracking"] = tracking_ms
+        timings["total"] = (perf_counter() - total_start) * 1000.0
         return HeadFrameResult(heads=heads, perceptions=perceptions, timings_ms=timings)
 
     def get_heads(self, frame, frame_index, timestamp_ms, image_width, image_height):

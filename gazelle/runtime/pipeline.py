@@ -201,6 +201,33 @@ def _video_run_config_payload(
     return payload
 
 
+def _attach_cleanup_context(primary_error, resource_name: str, cleanup_error) -> None:
+    add_note = getattr(primary_error, "add_note", None)
+    if callable(add_note):
+        add_note("{} cleanup also failed: {!r}".format(resource_name, cleanup_error))
+
+
+def _close_video_resources(writer, head_provider, primary_error) -> None:
+    first_cleanup_error = None
+    for resource_name, resource in (("writer", writer), ("provider", head_provider)):
+        if resource is None:
+            continue
+        close = getattr(resource, "close", None)
+        if not callable(close):
+            continue
+        try:
+            close()
+        except BaseException as cleanup_error:
+            if primary_error is not None:
+                _attach_cleanup_context(primary_error, resource_name, cleanup_error)
+            elif first_cleanup_error is None:
+                first_cleanup_error = cleanup_error
+            else:
+                _attach_cleanup_context(first_cleanup_error, resource_name, cleanup_error)
+    if primary_error is None and first_cleanup_error is not None:
+        raise first_cleanup_error
+
+
 def run_image_pipeline(config, predictor_factory: Optional[Callable[[object], object]] = None) -> ImagePipelineResult:
     image, width, height = load_image_rgb(config.input_path)
     output_dir = create_output_dir(config.input_path, config.output_dir, overwrite=config.overwrite)
@@ -277,34 +304,39 @@ def run_video_pipeline(config, predictor_factory: Optional[Callable[[object], ob
             config.output_dir,
             overwrite=config.overwrite,
         )
+        video_fps = resolve_video_fps(metadata.fps, config.output_fps)
         head_provider = build_head_provider_from_config(
             config,
             media_type="video",
-            source_fps=metadata.fps,
+            source_fps=video_fps,
         )
-        predictor = predictor_factory(config) if predictor_factory is not None else _build_real_predictor(config)
-
-        predictions_jsonl_path = output_dir / "predictions.jsonl"
-        run_config_path = output_dir / "run_config.json"
-        rendered_video_path = None
         writer = None
-        renderer = None
-        if config.save_rendered:
-            video_fps = resolve_video_fps(metadata.fps, config.output_fps)
-            rendered_video_path = output_dir / config.output_video_name
-            writer = VideoFrameWriter(
-                rendered_video_path,
-                width=metadata.width,
-                height=metadata.height,
-                fps=video_fps,
-            )
-            renderer = PredictionRenderer(
-                _render_options_from_config(config)
+        primary_error = None
+        try:
+            predictor = (
+                predictor_factory(config)
+                if predictor_factory is not None
+                else _build_real_predictor(config)
             )
 
-        frames_read = 0
-        frames_written = 0
-        try:
+            predictions_jsonl_path = output_dir / "predictions.jsonl"
+            run_config_path = output_dir / "run_config.json"
+            rendered_video_path = None
+            renderer = None
+            if config.save_rendered:
+                rendered_video_path = output_dir / config.output_video_name
+                writer = VideoFrameWriter(
+                    rendered_video_path,
+                    width=metadata.width,
+                    height=metadata.height,
+                    fps=video_fps,
+                )
+                renderer = PredictionRenderer(
+                    _render_options_from_config(config)
+                )
+
+            frames_read = 0
+            frames_written = 0
             with JsonlWriter(predictions_jsonl_path) as jsonl_writer:
                 frame_iterator = iter(reader)
                 while config.max_frames is None or frames_written < config.max_frames:
@@ -372,12 +404,11 @@ def run_video_pipeline(config, predictor_factory: Optional[Callable[[object], ob
                         rendered = renderer.render(frame.image, predictions)
                         writer.write(rendered)
                     frames_written += 1
+        except BaseException as exc:
+            primary_error = exc
+            raise
         finally:
-            try:
-                if writer is not None:
-                    writer.close()
-            finally:
-                head_provider.close()
+            _close_video_resources(writer, head_provider, primary_error)
 
         write_run_config_json(
             run_config_path,
@@ -387,7 +418,7 @@ def run_video_pipeline(config, predictor_factory: Optional[Callable[[object], ob
                 width=metadata.width,
                 height=metadata.height,
                 source_fps=metadata.fps,
-                output_fps=resolve_video_fps(metadata.fps, config.output_fps),
+                output_fps=video_fps,
                 frames_read=frames_read,
                 frames_written=frames_written,
             ),
