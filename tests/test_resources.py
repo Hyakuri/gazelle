@@ -56,7 +56,10 @@ def valid_state_dict():
 
 class ResourcesTest(unittest.TestCase):
     def test_cache_paths_precedence(self):
-        self.assertEqual(resolve_cache_paths("custom").root_dir, Path("custom"))
+        custom_paths = resolve_cache_paths("custom")
+        self.assertEqual(custom_paths.root_dir, Path("custom"))
+        self.assertEqual(custom_paths.checkpoints_dir, Path("custom/checkpoints"))
+        self.assertEqual(custom_paths.torch_hub_dir, Path("custom/torch_hub"))
         self.assertEqual(
             resolve_cache_paths(None, env={"GAZELLE_CACHE_DIR": "env-cache"}).root_dir,
             Path("env-cache"),

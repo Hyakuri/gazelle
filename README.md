@@ -111,9 +111,9 @@ Use `--prepare-only` to prepare local model resources without running image or v
 python main.py --prepare-only --model gazelle_dinov2_vitb14_inout
 ```
 
-This command may download the Gazelle checkpoint and may construct the DINOv2 backbone through PyTorch Hub. Constructing DINOv2 can download DINOv2 weights if they are not already cached. It does not process images, process videos, open a camera, render output, or write JSON/JSONL predictions.
+This command may download the Gazelle checkpoint and may construct the DINOv2 backbone through PyTorch Hub. Constructing DINOv2 can download DINOv2 weights if they are not already cached. With `--head-source mediapipe`, it also prepares the selected official MediaPipe task assets. It does not process images, process videos, open a camera, render output, or write JSON/JSONL predictions.
 
-On success, the command prints the resolved checkpoint path, `checkpoint_source`, cache root, Torch Hub cache directory, and strict-load validation details for registered checkpoint candidates. `checkpoint_source` is `local` when `--checkpoint` is used, or the registered candidate source when the runtime prepares a downloaded checkpoint.
+On success, the command prints the resolved checkpoint path, `checkpoint_source`, cache root, Torch Hub cache directory, and strict-load validation details for registered checkpoint candidates. `checkpoint_source` is `local` when `--checkpoint` is used, or the registered candidate source when the runtime prepares a downloaded checkpoint. MediaPipe preparation additionally prints the face detector, face landmarker, selected pose landmarker, and pose model.
 
 Cache root priority:
 
@@ -126,6 +126,7 @@ The runtime uses this directory layout:
 ```text
 models/
 ├── checkpoints/
+├── mediapipe/
 └── torch_hub/
 ```
 
@@ -138,7 +139,7 @@ python main.py `
   --checkpoint C:\path\to\gazelle_dinov2_vitb14_inout.pt
 ```
 
-Use `--force-download` to refresh the cached registered checkpoint for the selected model:
+Use `--force-download` to refresh the cached registered checkpoint and any selected MediaPipe assets:
 
 ```powershell
 python main.py `
@@ -148,7 +149,7 @@ python main.py `
   --force-download
 ```
 
-For safety, forced downloads are written to a temporary `.downloads` directory under the checkpoint cache first. The old cached checkpoint is replaced only after the new file is downloaded and found on disk. If the download fails, the existing cached checkpoint is preserved.
+For safety, forced downloads are written to a temporary `.downloads` directory under the relevant cache first. The old cached file is replaced only after the new file is downloaded and validated. If download or validation fails, the existing cached file is preserved.
 
 Checkpoint validation is strict in the runtime path: empty state dicts, missing keys, unexpected keys, shape mismatches, non-tensor values, and incompatible checkpoint structures stop preparation with an error.
 
@@ -194,11 +195,24 @@ python main.py `
   --head-data samples\frame_heads.json
 ```
 
-### MediaPipe Runtime Configuration (Staged)
+### MediaPipe Resource Preparation (Provider Staged)
 
-The CLI also accepts `--head-source mediapipe` and validates MediaPipe runtime settings: `--max-heads` accepts `1` through `10` (default `1`), `--pose-model` accepts `lite`, `full`, or `heavy` (default `full`), `--head-track-max-gap-ms` accepts a finite value greater than `0` in milliseconds (default `500.0`), and `--save-face-landmarks` enables face-landmark output configuration (default off).
+The CLI accepts `--head-source mediapipe` and validates MediaPipe runtime settings: `--max-heads` accepts `1` through `10` (default `1`), `--pose-model` accepts `lite`, `full`, or `heavy` (default `full`), `--head-track-max-gap-ms` accepts a finite value greater than `0` in milliseconds (default `500.0`), and `--save-face-landmarks` enables face-landmark output configuration (default off).
 
-This milestone only accepts and validates this configuration. The MediaPipe provider is staged and is not runnable until its later integration task; MediaPipe dependencies and task models are not installed, downloaded, or used here.
+Prepare the official face detector, face landmarker, and one selected pose landmarker without running inference:
+
+```powershell
+python main.py `
+  --prepare-only `
+  --head-source mediapipe `
+  --pose-model full
+```
+
+The pose selection prepares `pose_landmarker_lite.task`, `pose_landmarker_full.task`, or `pose_landmarker_heavy.task`. Existing assets in `<cache-root>/mediapipe` are reused unless `--force-download` is passed. Every new asset is downloaded to its own temporary `.downloads` directory, checked against the immutable SHA-256 digest pinned for its versioned official URL, and atomically moved into the cache. Any download, missing-file, or digest failure leaves an existing cached asset in place and removes the task-specific temporary directory.
+
+Default unit tests use fake downloaders and do not access the network. The pinned registry hashes were established once by downloading exactly the five official versioned assets to an OS temporary directory outside the repository, calculating SHA-256, and deleting that temporary directory.
+
+This milestone prepares resources only. The MediaPipe provider remains staged and cannot run until the later provider integration task; no MediaPipe dependency is installed or imported by resource preparation.
 
 For single-image inference, JSON head data is read from `frame_index=0`. The JSON format is the same internal head record format used by the runtime head providers, with `bbox_format` set to `normalized` or `pixel` and `heads` containing `person_id`, `bbox`, and optional `confidence`.
 

@@ -22,6 +22,7 @@ class RuntimeCliTest(unittest.TestCase):
         newly_imported = set(sys.modules) - before
         self.assertNotIn("gazelle.model", newly_imported)
         self.assertNotIn("gazelle.backbone", newly_imported)
+        self.assertNotIn("mediapipe", newly_imported)
 
     def test_help_exits_without_model_construction_imports(self):
         def run_help():
@@ -239,12 +240,61 @@ class RuntimeCliTest(unittest.TestCase):
             candidate_results=(),
         )
         with patch("gazelle.runtime.resources.prepare_runtime_resources", return_value=prepared) as mock_prepare:
-            stdout = io.StringIO()
-            exit_code = main(["--prepare-only", "--cache-dir", "models"], stdout=stdout)
+            with patch(
+                "gazelle.runtime.perception.resources.prepare_mediapipe_resources"
+            ) as mock_prepare_mediapipe:
+                stdout = io.StringIO()
+                exit_code = main(["--prepare-only", "--cache-dir", "models"], stdout=stdout)
         self.assertEqual(exit_code, 0)
         mock_prepare.assert_called_once()
+        mock_prepare_mediapipe.assert_not_called()
         self.assertIn("Prepared Gazelle resources", stdout.getvalue())
         self.assertIn("checkpoint_source: local", stdout.getvalue())
+
+    def test_prepare_only_mediapipe_prepares_and_prints_selected_assets(self):
+        prepared = SimpleNamespace(
+            model_name="gazelle_dinov2_vitb14_inout",
+            checkpoint_path="models/checkpoints/example.pt",
+            checkpoint_candidate=None,
+            cache_paths=SimpleNamespace(root_dir="models", torch_hub_dir="models/torch_hub"),
+            candidate_results=(),
+        )
+        prepared_mediapipe = SimpleNamespace(
+            face_detector_path="models/mediapipe/blaze_face_full_range.tflite",
+            face_landmarker_path="models/mediapipe/face_landmarker.task",
+            pose_landmarker_path="models/mediapipe/pose_landmarker_heavy.task",
+            pose_model="heavy",
+        )
+        with patch(
+            "gazelle.runtime.resources.prepare_runtime_resources",
+            return_value=prepared,
+        ) as mock_prepare:
+            with patch(
+                "gazelle.runtime.perception.resources.prepare_mediapipe_resources",
+                return_value=prepared_mediapipe,
+            ) as mock_prepare_mediapipe:
+                stdout = io.StringIO()
+                exit_code = main(
+                    [
+                        "--prepare-only",
+                        "--head-source",
+                        "mediapipe",
+                        "--pose-model",
+                        "heavy",
+                    ],
+                    stdout=stdout,
+                )
+
+        self.assertEqual(exit_code, 0)
+        mock_prepare.assert_called_once()
+        mock_prepare_mediapipe.assert_called_once()
+        config = mock_prepare_mediapipe.call_args.args[0]
+        self.assertEqual(config.pose_model, "heavy")
+        output = stdout.getvalue()
+        self.assertIn("face_detector: models/mediapipe/blaze_face_full_range.tflite", output)
+        self.assertIn("face_landmarker: models/mediapipe/face_landmarker.task", output)
+        self.assertIn("pose_landmarker: models/mediapipe/pose_landmarker_heavy.task", output)
+        self.assertIn("pose_model: heavy", output)
 
     def test_image_input_route_calls_pipeline(self):
         result = SimpleNamespace(

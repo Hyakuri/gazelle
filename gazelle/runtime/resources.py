@@ -38,9 +38,13 @@ class PreparedResources:
     candidate_results: Tuple[CandidateValidationResult, ...]
 
 
-def resolve_cache_paths(cache_dir: Optional[str] = None, env: Optional[Mapping[str, str]] = None) -> RuntimeCachePaths:
+def resolve_cache_root(cache_dir: Optional[str] = None, env: Optional[Mapping[str, str]] = None) -> Path:
     env = os.environ if env is None else env
-    root = Path(cache_dir or env.get("GAZELLE_CACHE_DIR") or "models")
+    return Path(cache_dir or env.get("GAZELLE_CACHE_DIR") or "models")
+
+
+def resolve_cache_paths(cache_dir: Optional[str] = None, env: Optional[Mapping[str, str]] = None) -> RuntimeCachePaths:
+    root = resolve_cache_root(cache_dir, env=env)
     return RuntimeCachePaths(
         root_dir=root,
         checkpoints_dir=root / "checkpoints",

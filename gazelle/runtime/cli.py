@@ -20,8 +20,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--prepare-only",
         action="store_true",
         help=(
-            "Prepare the Gazelle checkpoint and DINOv2 Torch Hub cache, then exit without "
-            "running image or video inference."
+            "Prepare the Gazelle checkpoint, DINOv2 Torch Hub cache, and selected MediaPipe "
+            "assets when requested, then exit without running image or video inference."
         ),
     )
     parser.add_argument(
@@ -186,7 +186,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--force-download",
         action="store_true",
-        help="Refresh the registered cached checkpoint after a successful temporary download.",
+        help="Refresh registered cached resources after successful temporary downloads.",
     )
     return parser
 
@@ -210,6 +210,11 @@ def main(argv: Optional[Sequence[str]] = None, stdout: Optional[TextIO] = None) 
         from gazelle.runtime.resources import prepare_runtime_resources
 
         prepared = prepare_runtime_resources(config)
+        prepared_mediapipe = None
+        if config.head_source == "mediapipe":
+            from gazelle.runtime.perception.resources import prepare_mediapipe_resources
+
+            prepared_mediapipe = prepare_mediapipe_resources(config)
         checkpoint_source = (
             "local" if prepared.checkpoint_candidate is None else prepared.checkpoint_candidate.source
         )
@@ -228,6 +233,11 @@ def main(argv: Optional[Sequence[str]] = None, stdout: Optional[TextIO] = None) 
                     "" if result.error is None else " error={}".format(result.error),
                 )
             )
+        if prepared_mediapipe is not None:
+            stdout.write("face_detector: {}\n".format(prepared_mediapipe.face_detector_path))
+            stdout.write("face_landmarker: {}\n".format(prepared_mediapipe.face_landmarker_path))
+            stdout.write("pose_landmarker: {}\n".format(prepared_mediapipe.pose_landmarker_path))
+            stdout.write("pose_model: {}\n".format(prepared_mediapipe.pose_model))
         return 0
 
     if config.input_path:

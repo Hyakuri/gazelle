@@ -120,9 +120,9 @@ python main.py --list-models
 python main.py --prepare-only --model gazelle_dinov2_vitb14_inout
 ```
 
-该命令可能下载 Gazelle checkpoint，并且会通过 PyTorch Hub 构建 DINOv2 backbone。如果本地没有 DINOv2 缓存，构建 DINOv2 时可能下载 DINOv2 权重。它不会处理图片、处理视频、打开摄像头、渲染输出，也不会写入 JSON/JSONL 预测结果。
+该命令可能下载 Gazelle checkpoint，并且会通过 PyTorch Hub 构建 DINOv2 backbone。如果本地没有 DINOv2 缓存，构建 DINOv2 时可能下载 DINOv2 权重。传入 `--head-source mediapipe` 时，它还会准备所选的官方 MediaPipe task 资源。它不会处理图片、处理视频、打开摄像头、渲染输出，也不会写入 JSON/JSONL 预测结果。
 
-成功时，该命令会输出解析后的 checkpoint 路径、`checkpoint_source`、缓存根目录、Torch Hub 缓存目录，以及注册 checkpoint 候选的 strict-load 校验信息。使用 `--checkpoint` 时，`checkpoint_source` 为 `local`；使用 runtime 注册 checkpoint 时，`checkpoint_source` 为对应候选来源。
+成功时，该命令会输出解析后的 checkpoint 路径、`checkpoint_source`、缓存根目录、Torch Hub 缓存目录，以及注册 checkpoint 候选的 strict-load 校验信息。使用 `--checkpoint` 时，`checkpoint_source` 为 `local`；使用 runtime 注册 checkpoint 时，`checkpoint_source` 为对应候选来源。准备 MediaPipe 资源时还会输出 face detector、face landmarker、所选 pose landmarker 和 pose model。
 
 缓存根目录优先级：
 
@@ -135,6 +135,7 @@ runtime 使用以下目录结构：
 ```text
 models/
 ├── checkpoints/
+├── mediapipe/
 └── torch_hub/
 ```
 
@@ -147,7 +148,7 @@ python main.py `
   --checkpoint C:\path\to\gazelle_dinov2_vitb14_inout.pt
 ```
 
-如果希望刷新已缓存的注册 checkpoint，可以使用 `--force-download`：
+如果希望刷新已缓存的注册 checkpoint 和所选 MediaPipe 资源，可以使用 `--force-download`：
 
 ```powershell
 python main.py `
@@ -157,7 +158,7 @@ python main.py `
   --force-download
 ```
 
-为了避免网络失败导致旧缓存丢失，强制下载会先写入 checkpoint 缓存下的临时 `.downloads` 目录。只有新文件下载完成且确认存在后，runtime 才会替换旧 checkpoint。如果下载失败，已有 checkpoint 会被保留。
+为了避免下载失败导致旧缓存丢失，强制下载会先写入相关缓存下的临时 `.downloads` 目录。只有新文件下载完成并通过校验后，runtime 才会替换旧文件。如果下载或校验失败，已有缓存文件会被保留。
 
 runtime 路径中的 checkpoint 校验是严格的：空 state dict、缺失 key、额外 key、tensor shape 不一致、非 tensor 值、checkpoint 顶层结构不兼容都会让准备流程报错停止。
 
@@ -203,11 +204,24 @@ python main.py `
   --head-data samples\frame_heads.json
 ```
 
-### MediaPipe 运行时配置（暂存）
+### MediaPipe 资源准备（Provider 暂存）
 
-CLI 还接受 `--head-source mediapipe`，并校验 MediaPipe 运行时设置：`--max-heads` 接受 `1` 到 `10`（默认 `1`）；`--pose-model` 接受 `lite`、`full` 或 `heavy`（默认 `full`）；`--head-track-max-gap-ms` 接受大于 `0` 的有限毫秒值（默认 `500.0`）；`--save-face-landmarks` 启用人脸关键点输出配置（默认关闭）。
+CLI 接受 `--head-source mediapipe`，并校验 MediaPipe 运行时设置：`--max-heads` 接受 `1` 到 `10`（默认 `1`）；`--pose-model` 接受 `lite`、`full` 或 `heavy`（默认 `full`）；`--head-track-max-gap-ms` 接受大于 `0` 的有限毫秒值（默认 `500.0`）；`--save-face-landmarks` 启用人脸关键点输出配置（默认关闭）。
 
-此里程碑仅接受并校验这些配置。MediaPipe provider 仍处于暂存阶段，在后续集成任务完成前不可运行；这里不会安装、下载或使用 MediaPipe 依赖和任务模型。
+使用以下命令准备官方 face detector、face landmarker 和一个所选 pose landmarker，而不执行推理：
+
+```powershell
+python main.py `
+  --prepare-only `
+  --head-source mediapipe `
+  --pose-model full
+```
+
+pose 选项会分别准备 `pose_landmarker_lite.task`、`pose_landmarker_full.task` 或 `pose_landmarker_heavy.task`。除非传入 `--force-download`，否则会复用 `<cache-root>/mediapipe` 中已有的资源。每个新资源都会先下载到自己的临时 `.downloads` 目录，使用对应版本化官方 URL 的固定 SHA-256 摘要进行校验，再以原子方式移动到缓存中。下载失败、文件缺失或摘要不匹配时，已有缓存资源都会保留，同时清理该任务的临时目录。
+
+默认单元测试使用 fake downloader，不访问网络。注册表中的固定摘要只在建立时进行过一次真实校验：将恰好五个官方版本化资源下载到仓库外的 OS 临时目录，计算 SHA-256，然后删除该临时目录。
+
+此里程碑只负责准备资源。MediaPipe provider 仍处于暂存阶段，在后续 provider 集成任务完成前无法运行；资源准备不会安装或导入 MediaPipe 依赖。
 
 单图推理会读取 `frame_index=0` 的 head 数据。JSON 使用 runtime head provider 的内部 record 格式，`bbox_format` 可以是 `normalized` 或 `pixel`，`heads` 中包含 `person_id`、`bbox` 和可选 `confidence`。
 
