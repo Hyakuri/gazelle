@@ -165,7 +165,7 @@ python main.py `
   --model gazelle_dinov2_vitb14_inout
 ```
 
-This command constructs the Gazelle model and DINOv2 backbone. If the selected Gazelle checkpoint or DINOv2 weights are not already cached, it may download them. It writes a per-image output directory such as `outputs/frame_gazelle/` containing `predictions.json` and `run_config.json`. Image input does not open a camera or write video JSONL; video input is handled by the video inference path below.
+This command loads the image, creates its output directory, collects head observations, and writes a per-image output directory such as `outputs/frame_gazelle/` containing `head_observations.json`, `predictions.json`, and `run_config.json`. It constructs the Gazelle model and DINOv2 backbone only when the head provider returns at least one head. If the selected Gazelle checkpoint or DINOv2 weights are not already cached, that prediction path may download them. Image input does not open a camera or write video JSONL; video input is handled by the video inference path below.
 
 When `--overwrite` is used, the per-image output directory is cleaned before writing new results, so stale heatmaps or rendered images from earlier runs are removed.
 
@@ -214,15 +214,17 @@ Default unit tests use fake downloaders and do not access the network. The pinne
 
 `--head-source mediapipe` is now wired into the runtime head-provider factory. The provider composes prepared resources, the MediaPipe backend, head/pose fusion, video ByteTrack tracking, and the 500 ms short-occlusion bridge. Image IDs are deterministic and start at zero; video IDs come from ByteTrack. Gazelle receives normalized, non-`None` MediaPipe head bboxes.
 
-This remains a staged integration: dependency/environment declaration and rich observation results in pipeline outputs are deferred to later tasks. The final recommended end-to-end setup is not complete, and this documentation does not claim real MediaPipe, tracker, or Gazelle validation.
+This remains a staged integration: dependency/environment declaration and video observation scheduling are deferred. The final recommended end-to-end setup is not complete, and this documentation does not claim real MediaPipe, tracker, or Gazelle validation.
 
-### Independent Head Observation Schema (Staged Output)
+### Independent Head Observation Schema
 
 `gazelle.runtime.perception.outputs` provides `head_frame_to_json_dict(...)` for one independent provider result. For image output, `write_head_observations_json(output_path, **frame_kwargs)` creates parent directories and writes exactly one indented JSON document with a trailing newline. Video output instead passes each `head_frame_to_json_dict(...)` record to the existing `JsonlWriter.write(...)` for one compact JSONL row per frame. The record has exactly `frame_index`, `timestamp_ms`, `status`, `width`, `height`, `provider`, `timings_ms`, and `people` fields. `status` is `"ok"` when the result has heads and `"no_head"` otherwise. `timings_ms` retains provider timing names and finite millisecond values.
 
 Each person has `person_id`, `head_bbox_normalized`, and `confidence`. Head boxes are normalized to `[0, 1]` and retain the runtime bbox tuple ordering. Rich MediaPipe perceptions additionally include applicable face bbox, `state`, `view_state`, `observed`, `tracking`, face keypoints, pose-head landmarks, facial transformation matrix, and yaw/pitch/roll head-pose evidence. Rich perceptions must match `result.heads` one-for-one in the same order for person ID, head bbox, and optional confidence. Integer fields accept only integral numeric values and are emitted as JSON integers; booleans and perception enums require their exact contract types. All numeric output must be finite, and tensors are never embedded.
 
-For privacy and output size, all 478 face landmarks are omitted by default. They are included only when `save_face_landmarks=True`. This is an independent schema boundary only: later image/video tasks will wire observation files into pipeline outputs, so current CLI runs do not yet emit this new observation artifact.
+Every image run writes this independent record to `head_observations.json` before gaze scheduling, regardless of `--head-source`. The file includes the selected provider, provider timing fields, normalized head boxes, and `status="no_head"` when there are no heads. In that `no_head` case the pipeline skips Gazelle predictor construction, writes empty existing prediction outputs and run configuration, and completes normally. Video observation scheduling remains deferred.
+
+For privacy and output size, all 478 face landmarks are omitted by default. Pass `--save-face-landmarks` to include them in `head_observations.json`.
 
 For single-image inference, JSON head data is read from `frame_index=0`. The JSON format is the same internal head record format used by the runtime head providers, with `bbox_format` set to `normalized` or `pixel` and `heads` containing `person_id`, `bbox`, and optional `confidence`.
 
@@ -252,7 +254,7 @@ python main.py `
   --save-rendered
 ```
 
-By default, image inference writes `predictions.json` and `run_config.json`; rendered output is written only when `--save-rendered` is passed. The default rendered file is `rendered.png`. Use `--rendered-name` to choose a `.png`, `.jpg`, or `.jpeg` file name, and `--heatmap-alpha` to control heatmap transparency. The rendered overlay can include the heatmap, an opt-in head bbox, a head-center-to-gaze-peak arrow when bbox data exists, a red X at the gaze target peak, stable per-person colors, and labels with `person_id`, optional `inout_score`, and `heatmap_peak_value`. Head boxes are not drawn by default; pass `--head-box` to draw them when bboxes are available. Pass `--no-heatmap`, `--no-gaze-arrow`, `--no-gaze-peak`, or `--no-labels` to disable those drawing components. Pass `--draw-heatmap-contour` to draw a top-response heatmap contour, use `--heatmap-contour-quantile` to set its threshold, and use `--heatmap-contour-width` to set its line width. Rendering does not change `predictions.json`, and `heatmap_peak_value` is not a calibrated probability.
+By default, image inference writes `head_observations.json`, `predictions.json`, and `run_config.json`; rendered output is written only when `--save-rendered` is passed. The default rendered file is `rendered.png`. Use `--rendered-name` to choose a `.png`, `.jpg`, or `.jpeg` file name, and `--heatmap-alpha` to control heatmap transparency. The rendered overlay can include the heatmap, an opt-in head bbox, a head-center-to-gaze-peak arrow when bbox data exists, a red X at the gaze target peak, stable per-person colors, and labels with `person_id`, optional `inout_score`, and `heatmap_peak_value`. Head boxes are not drawn by default; pass `--head-box` to draw them when bboxes are available. Pass `--no-heatmap`, `--no-gaze-arrow`, `--no-gaze-peak`, or `--no-labels` to disable those drawing components. Pass `--draw-heatmap-contour` to draw a top-response heatmap contour, use `--heatmap-contour-quantile` to set its threshold, and use `--heatmap-contour-width` to set its line width. Rendering does not change `predictions.json`, and `heatmap_peak_value` is not a calibrated probability.
 
 The gaze arrow is a visualization from the head bbox center to the predicted gaze peak. It is not a face keypoint, eye keypoint, head pose estimate, or true eye vector. The gaze peak is drawn as a red X; the heatmap and optional contour visualize high-response gaze target regions.
 

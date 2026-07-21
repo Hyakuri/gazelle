@@ -10,6 +10,8 @@ from gazelle.runtime.heads import (
     StaticHeadProvider,
     load_json_head_provider,
 )
+from gazelle.runtime.perception.contracts import HeadFrameResult
+from gazelle.runtime.perception.outputs import write_head_observations_json
 from gazelle.runtime.media import (
     VideoFrameReader,
     VideoFrameWriter,
@@ -30,10 +32,12 @@ from gazelle.runtime.renderer import PredictionRenderer, RenderOptions, save_ren
 class ImagePipelineResult:
     output_dir: Path
     predictions_path: Path
+    head_observations_path: Path
     run_config_path: Path
     rendered_path: Optional[Path]
     heatmap_paths: Tuple[str, ...]
     heads: Tuple[HeadObservation, ...]
+    head_result: HeadFrameResult
     predictions: Tuple[GazePrediction, ...]
 
 
@@ -232,22 +236,34 @@ def run_image_pipeline(config, predictor_factory: Optional[Callable[[object], ob
     image, width, height = load_image_rgb(config.input_path)
     output_dir = create_output_dir(config.input_path, config.output_dir, overwrite=config.overwrite)
 
-    head_provider = build_head_provider_from_config(config, media_type="image")
-    try:
-        heads = tuple(
-            head_provider.get_heads(
-                frame=image,
-                frame_index=0,
-                timestamp_ms=0.0,
-                image_width=width,
-                image_height=height,
-            )
+    with build_head_provider_from_config(config, media_type="image") as head_provider:
+        head_result = head_provider.get_frame_result(
+            image,
+            0,
+            0.0,
+            width,
+            height,
         )
-    finally:
-        head_provider.close()
-
-    predictor = predictor_factory(config) if predictor_factory is not None else _build_real_predictor(config)
-    predictions = tuple(predictor.predict_frame(image, heads))
+        head_observations_path = output_dir / "head_observations.json"
+        write_head_observations_json(
+            head_observations_path,
+            frame_index=0,
+            timestamp_ms=0.0,
+            image_width=width,
+            image_height=height,
+            provider=config.head_source,
+            result=head_result,
+            save_face_landmarks=config.save_face_landmarks,
+        )
+        if head_result.heads:
+            predictor = (
+                predictor_factory(config)
+                if predictor_factory is not None
+                else _build_real_predictor(config)
+            )
+            predictions = tuple(predictor.predict_frame(image, head_result.heads))
+        else:
+            predictions = ()
 
     heatmap_paths: List[str] = []
     if config.save_heatmaps:
@@ -268,7 +284,7 @@ def run_image_pipeline(config, predictor_factory: Optional[Callable[[object], ob
         image_width=width,
         image_height=height,
         model_name=config.model,
-        heads=heads,
+        heads=head_result.heads,
         predictions=predictions,
         heatmap_paths=heatmap_paths if config.save_heatmaps else None,
     )
@@ -285,10 +301,12 @@ def run_image_pipeline(config, predictor_factory: Optional[Callable[[object], ob
     return ImagePipelineResult(
         output_dir=output_dir,
         predictions_path=predictions_path,
+        head_observations_path=head_observations_path,
         run_config_path=run_config_path,
         rendered_path=rendered_path,
         heatmap_paths=tuple(heatmap_paths),
-        heads=heads,
+        heads=head_result.heads,
+        head_result=head_result,
         predictions=predictions,
     )
 

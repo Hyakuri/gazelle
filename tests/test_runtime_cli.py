@@ -300,6 +300,7 @@ class RuntimeCliTest(unittest.TestCase):
         result = SimpleNamespace(
             output_dir="outputs/frame_gazelle",
             predictions_path="outputs/frame_gazelle/predictions.json",
+            head_observations_path="outputs/frame_gazelle/head_observations.json",
             run_config_path="outputs/frame_gazelle/run_config.json",
             rendered_path=None,
         )
@@ -324,6 +325,7 @@ class RuntimeCliTest(unittest.TestCase):
         self.assertEqual(config.output_dir, "outputs")
         self.assertEqual(config.head_source, "none")
         self.assertIn("predictions:", stdout.getvalue())
+        self.assertIn("head_observations: outputs/frame_gazelle/head_observations.json", stdout.getvalue())
 
     def test_video_input_route_calls_pipeline(self):
         result = SimpleNamespace(
@@ -378,6 +380,7 @@ class RuntimeCliTest(unittest.TestCase):
         result = SimpleNamespace(
             output_dir="outputs/frame_gazelle",
             predictions_path="outputs/frame_gazelle/predictions.json",
+            head_observations_path="outputs/frame_gazelle/head_observations.json",
             run_config_path="outputs/frame_gazelle/run_config.json",
             rendered_path="outputs/frame_gazelle/rendered.png",
         )

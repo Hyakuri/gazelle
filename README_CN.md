@@ -174,7 +174,7 @@ python main.py `
   --model gazelle_dinov2_vitb14_inout
 ```
 
-该命令会构建 Gazelle 模型和 DINOv2 backbone。如果所选 Gazelle checkpoint 或 DINOv2 权重尚未缓存，运行时可能访问网络并下载它们。命令会创建类似 `outputs/frame_gazelle/` 的单图输出目录，并写入 `predictions.json` 和 `run_config.json`。图片输入不会打开摄像头，也不会写入视频 JSONL；视频输入由下方的视频推理路径处理。
+该命令会加载图片、创建输出目录、收集 head observation，并写入类似 `outputs/frame_gazelle/` 的单图输出目录，其中包含 `head_observations.json`、`predictions.json` 和 `run_config.json`。只有当 head provider 返回至少一个 head 时才会构建 Gazelle 模型和 DINOv2 backbone；如果所选 Gazelle checkpoint 或 DINOv2 权重尚未缓存，该预测路径可能访问网络并下载它们。图片输入不会打开摄像头，也不会写入视频 JSONL；视频输入由下方的视频推理路径处理。
 
 使用 `--overwrite` 时，runtime 会在写入新结果前清理对应图片的输出目录，因此旧的 heatmap 或 rendered image 不会残留。
 
@@ -223,15 +223,17 @@ pose 选项会分别准备 `pose_landmarker_lite.task`、`pose_landmarker_full.t
 
 `--head-source mediapipe` 现已接入 runtime head provider 工厂。provider 会组合已准备的资源、MediaPipe backend、head/pose fusion；视频还会使用 ByteTrack 跟踪和 500 ms 的短时遮挡桥接。图片 ID 确定且从零开始，视频 ID 来自 ByteTrack。传给 Gazelle 的 MediaPipe head bbox 始终是归一化且非 `None`。
 
-这仍是分阶段集成：依赖/环境声明以及 rich observation 结果到 pipeline 输出的接线留待后续任务。最终推荐的端到端配置尚未完成，本文档不宣称已经进行了真实的 MediaPipe、tracker 或 Gazelle 验证。
+这仍是分阶段集成：依赖/环境声明以及视频 observation 调度留待后续任务。最终推荐的端到端配置尚未完成，本文档不宣称已经进行了真实的 MediaPipe、tracker 或 Gazelle 验证。
 
-### 独立 Head Observation Schema（分阶段输出）
+### 独立 Head Observation Schema
 
 `gazelle.runtime.perception.outputs` 提供 `head_frame_to_json_dict(...)`，用于序列化单个独立 provider 结果。对于图片输出，`write_head_observations_json(output_path, **frame_kwargs)` 会创建父目录，并写入恰好一个带缩进且末尾换行的 JSON 文档。视频输出则把每个 `head_frame_to_json_dict(...)` record 传给现有的 `JsonlWriter.write(...)`，每帧写一行紧凑 JSONL。record 恰好包含 `frame_index`、`timestamp_ms`、`status`、`width`、`height`、`provider`、`timings_ms` 和 `people` 字段。结果存在 head 时 `status` 为 `"ok"`，否则为 `"no_head"`。`timings_ms` 保留 provider 的 timing 名称及有限的毫秒数值。
 
 每个人包含 `person_id`、`head_bbox_normalized` 和 `confidence`。head bbox 归一化到 `[0, 1]`，并保留 runtime bbox tuple 的顺序。rich MediaPipe perception 还会在适用时包含 face bbox、`state`、`view_state`、`observed`、`tracking`、face keypoint、pose-head landmark、facial transformation matrix，以及 yaw/pitch/roll head-pose evidence。rich perception 必须与 `result.heads` 一一对应且顺序相同，并在 person ID、head bbox 和可选 confidence 上一致。整数字段只接受数值上为整数的类型，并输出为 JSON integer；boolean 和 perception enum 必须使用其精确 contract 类型。所有数值输出都必须有限，且绝不嵌入 tensor。
 
-出于隐私和输出体积考虑，默认省略全部 478 个 face landmark。只有 `save_face_landmarks=True` 时才会包含它们。这只是独立 schema 边界：后续图片/视频任务才会将 observation 文件接入 pipeline 输出，因此当前 CLI 运行尚不会生成这一新的 observation artifact。
+每次单图运行都会在 gaze 调度前写入这份独立 record 到 `head_observations.json`，与 `--head-source` 无关。该文件包含所选 provider、provider timing 字段、归一化的 head bbox，并且没有 head 时 `status="no_head"`。在这种 `no_head` 情况下，pipeline 会跳过 Gazelle predictor 构建，仍写入空的既有 prediction 输出和 run config，并正常结束。视频 observation 调度仍留待后续任务。
+
+出于隐私和输出体积考虑，默认省略全部 478 个 face landmark。传入 `--save-face-landmarks` 后才会在 `head_observations.json` 中包含它们。
 
 单图推理会读取 `frame_index=0` 的 head 数据。JSON 使用 runtime head provider 的内部 record 格式，`bbox_format` 可以是 `normalized` 或 `pixel`，`heads` 中包含 `person_id`、`bbox` 和可选 `confidence`。
 
@@ -261,7 +263,7 @@ python main.py `
   --save-rendered
 ```
 
-默认情况下，单图推理只写入 `predictions.json` 和 `run_config.json`；只有传入 `--save-rendered` 时才会写可视化图片。默认文件名是 `rendered.png`。可以用 `--rendered-name` 指定 `.png`、`.jpg` 或 `.jpeg` 文件名，用 `--heatmap-alpha` 控制 heatmap 透明度。可视化 overlay 可以包含 heatmap、需要显式开启的 head bbox、在存在 bbox 时从 head bbox 中心指向 gaze peak 的箭头、gaze target peak 位置的红色 X、稳定的 per-person 颜色，以及包含 `person_id`、可选 `inout_score` 和 `heatmap_peak_value` 的 label。head bbox 默认不绘制；如果 bbox 可用并希望显示它，请传入 `--head-box`。可以用 `--no-heatmap`、`--no-gaze-arrow`、`--no-gaze-peak` 或 `--no-labels` 关闭对应绘制元素。可以用 `--draw-heatmap-contour` 绘制 heatmap 高响应区域轮廓，用 `--heatmap-contour-quantile` 设置阈值，并用 `--heatmap-contour-width` 设置轮廓线宽。渲染不会改变 `predictions.json`，`heatmap_peak_value` 也不是校准后的概率。
+默认情况下，单图推理会写入 `head_observations.json`、`predictions.json` 和 `run_config.json`；只有传入 `--save-rendered` 时才会写可视化图片。默认文件名是 `rendered.png`。可以用 `--rendered-name` 指定 `.png`、`.jpg` 或 `.jpeg` 文件名，用 `--heatmap-alpha` 控制 heatmap 透明度。可视化 overlay 可以包含 heatmap、需要显式开启的 head bbox、在存在 bbox 时从 head bbox 中心指向 gaze peak 的箭头、gaze target peak 位置的红色 X、稳定的 per-person 颜色，以及包含 `person_id`、可选 `inout_score` 和 `heatmap_peak_value` 的 label。head bbox 默认不绘制；如果 bbox 可用并希望显示它，请传入 `--head-box`。可以用 `--no-heatmap`、`--no-gaze-arrow`、`--no-gaze-peak` 或 `--no-labels` 关闭对应绘制元素。可以用 `--draw-heatmap-contour` 绘制 heatmap 高响应区域轮廓，用 `--heatmap-contour-quantile` 设置阈值，并用 `--heatmap-contour-width` 设置轮廓线宽。渲染不会改变 `predictions.json`，`heatmap_peak_value` 也不是校准后的概率。
 
 gaze arrow 只是从 head bbox 中心到预测 gaze peak 的可视化，不是 face keypoint、eye keypoint、head pose，也不是真实眼睛方向向量。gaze peak 会画成红色 X；heatmap 和可选 contour 用于展示 gaze target 的高响应区域。
 

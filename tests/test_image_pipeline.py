@@ -11,6 +11,7 @@ from PIL import Image
 from gazelle.runtime.config import RuntimeConfig
 from gazelle.runtime.contracts import GazePrediction
 from gazelle.runtime.heads import JsonHeadProvider, NoneHeadProvider, StaticHeadProvider
+from gazelle.runtime.perception.contracts import HeadFrameResult
 from gazelle.runtime.perception.provider import MediaPipeHeadProvider
 from gazelle.runtime.pipeline import (
     _safe_clear_output_dir,
@@ -47,6 +48,29 @@ class FakePredictor:
                 )
             )
         return predictions
+
+
+class FakeHeadProvider:
+    def __init__(self, result, error=None):
+        self.result = result
+        self.error = error
+        self.entered = 0
+        self.exited = []
+        self.frame_result_calls = []
+
+    def __enter__(self):
+        self.entered += 1
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.exited.append(exc_type)
+        return False
+
+    def get_frame_result(self, frame, frame_index, timestamp_ms, image_width, image_height):
+        self.frame_result_calls.append((frame_index, timestamp_ms, image_width, image_height))
+        if self.error is not None:
+            raise self.error
+        return self.result
 
 
 def write_test_image(path, mode="RGB"):
@@ -182,6 +206,7 @@ class ImagePipelineTest(unittest.TestCase):
             config = make_config(input_path=str(image_path), output_dir=str(Path(tmpdir) / "outputs"))
 
             result = run_image_pipeline(config, predictor_factory=lambda config: fake)
+            self.assertTrue(result.head_observations_path.exists())
 
         self.assertEqual(len(fake.calls), 1)
         self.assertEqual(fake.calls[0][1][0].bbox, None)
@@ -210,6 +235,137 @@ class ImagePipelineTest(unittest.TestCase):
             self.assertFalse((existing_output / "run_config.json").exists())
             self.assertFalse((existing_output / "heatmaps").exists())
 
+    def test_run_image_pipeline_existing_output_dir_rejects_before_provider_construction(self):
+        with TemporaryDirectory() as tmpdir:
+            image_path = Path(tmpdir) / "frame.png"
+            write_test_image(image_path)
+            output_dir = Path(tmpdir) / "outputs"
+            (output_dir / "frame_gazelle").mkdir(parents=True)
+            config = make_config(input_path=str(image_path), output_dir=str(output_dir))
+
+            with unittest.mock.patch(
+                "gazelle.runtime.pipeline.build_head_provider_from_config"
+            ) as mock_provider:
+                with self.assertRaises(FileExistsError):
+                    run_image_pipeline(config, predictor_factory=lambda _config: FakePredictor())
+
+        mock_provider.assert_not_called()
+
+    def test_run_image_pipeline_writes_observations_and_closes_provider_on_success(self):
+        with TemporaryDirectory() as tmpdir:
+            image_path = Path(tmpdir) / "frame.png"
+            write_test_image(image_path)
+            config = make_config(
+                input_path=str(image_path),
+                output_dir=str(Path(tmpdir) / "outputs"),
+                head_source="mediapipe",
+            )
+            provider = FakeHeadProvider(
+                HeadFrameResult(
+                    heads=(
+                        StaticHeadProvider(
+                            bboxes=((0.1, 0.2, 0.3, 0.4),),
+                            person_ids=(8,),
+                        ).get_heads(None, 0, 0.0, 10, 8)[0],
+                    ),
+                    timings_ms={"provider": 1.5},
+                )
+            )
+
+            with unittest.mock.patch(
+                "gazelle.runtime.pipeline.build_head_provider_from_config", return_value=provider
+            ):
+                result = run_image_pipeline(config, predictor_factory=lambda _config: FakePredictor())
+            observation = json.loads(result.head_observations_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(provider.entered, 1)
+        self.assertEqual(provider.exited, [None])
+        self.assertEqual(provider.frame_result_calls, [(0, 0.0, 10, 8)])
+        self.assertEqual(result.head_result, provider.result)
+        self.assertEqual(observation["provider"], "mediapipe")
+        self.assertEqual(observation["timings_ms"], {"provider": 1.5})
+        self.assertEqual(observation["people"][0]["person_id"], 8)
+
+    def test_run_image_pipeline_closes_provider_when_prediction_fails(self):
+        with TemporaryDirectory() as tmpdir:
+            image_path = Path(tmpdir) / "frame.png"
+            write_test_image(image_path)
+            config = make_config(input_path=str(image_path), output_dir=str(Path(tmpdir) / "outputs"))
+            provider = FakeHeadProvider(
+                HeadFrameResult(
+                    heads=StaticHeadProvider(
+                        bboxes=((0.1, 0.2, 0.3, 0.4),),
+                    ).get_heads(None, 0, 0.0, 10, 8)
+                )
+            )
+
+            with unittest.mock.patch(
+                "gazelle.runtime.pipeline.build_head_provider_from_config", return_value=provider
+            ):
+                with self.assertRaisesRegex(RuntimeError, "prediction failed"):
+                    run_image_pipeline(
+                        config,
+                        predictor_factory=lambda _config: (_ for _ in ()).throw(
+                            RuntimeError("prediction failed")
+                        ),
+                    )
+
+        self.assertEqual(provider.exited, [RuntimeError])
+
+    def test_run_image_pipeline_no_head_writes_outputs_without_constructing_predictor(self):
+        with TemporaryDirectory() as tmpdir:
+            image_path = Path(tmpdir) / "frame.png"
+            write_test_image(image_path)
+            config = make_config(
+                input_path=str(image_path),
+                output_dir=str(Path(tmpdir) / "outputs"),
+                head_source="json",
+            )
+            provider = FakeHeadProvider(HeadFrameResult(heads=(), timings_ms={"provider": 0.5}))
+
+            def predictor_factory(_config):
+                raise AssertionError("predictor should not be constructed without heads")
+
+            with unittest.mock.patch(
+                "gazelle.runtime.pipeline.build_head_provider_from_config", return_value=provider
+            ):
+                result = run_image_pipeline(config, predictor_factory=predictor_factory)
+            observation = json.loads(result.head_observations_path.read_text(encoding="utf-8"))
+            predictions = json.loads(result.predictions_path.read_text(encoding="utf-8"))
+            run_config = json.loads(result.run_config_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(result.predictions, ())
+        self.assertEqual(result.heads, ())
+        self.assertEqual(observation["status"], "no_head")
+        self.assertEqual(predictions["people"], [])
+        self.assertEqual(run_config["head_source"], "json")
+
+    def test_run_image_pipeline_preserves_head_order_and_builds_predictor_once(self):
+        with TemporaryDirectory() as tmpdir:
+            image_path = Path(tmpdir) / "frame.png"
+            write_test_image(image_path)
+            config = make_config(input_path=str(image_path), output_dir=str(Path(tmpdir) / "outputs"))
+            heads = StaticHeadProvider(
+                bboxes=((0.5, 0.5, 0.8, 0.8), (0.1, 0.2, 0.3, 0.4)),
+                person_ids=(9, 3),
+            ).get_heads(None, 0, 0.0, 10, 8)
+            provider = FakeHeadProvider(HeadFrameResult(heads=heads))
+            predictor = FakePredictor()
+            factory_calls = []
+
+            def predictor_factory(received_config):
+                factory_calls.append(received_config)
+                return predictor
+
+            with unittest.mock.patch(
+                "gazelle.runtime.pipeline.build_head_provider_from_config", return_value=provider
+            ):
+                result = run_image_pipeline(config, predictor_factory=predictor_factory)
+
+        self.assertEqual(factory_calls, [config])
+        self.assertEqual(tuple(head.person_id for head in predictor.calls[0][1]), (9, 3))
+        self.assertEqual(tuple(prediction.person_id for prediction in result.predictions), (9, 3))
+
     def test_run_image_pipeline_static_head_source(self):
         with TemporaryDirectory() as tmpdir:
             image_path = Path(tmpdir) / "frame.png"
@@ -224,6 +380,7 @@ class ImagePipelineTest(unittest.TestCase):
             )
 
             result = run_image_pipeline(config, predictor_factory=lambda config: fake)
+            self.assertTrue(result.head_observations_path.exists())
 
         self.assertEqual(fake.calls[0][1][0].person_id, 9)
         self.assertEqual(result.predictions[0].person_id, 9)
@@ -251,6 +408,7 @@ class ImagePipelineTest(unittest.TestCase):
             )
 
             result = run_image_pipeline(config, predictor_factory=lambda config: fake)
+            self.assertTrue(result.head_observations_path.exists())
 
         self.assertEqual(result.heads[0].person_id, 4)
         self.assertEqual(result.heads[0].bbox, (0.1, 0.25, 0.5, 0.75))
