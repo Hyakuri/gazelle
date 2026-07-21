@@ -1,6 +1,6 @@
 import importlib
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from numbers import Integral, Real
 from typing import Optional, Tuple
 
@@ -57,6 +57,41 @@ def _nonnegative_int(value: object, *, name: str, error_type=ValueError) -> int:
     return int(value)
 
 
+def _tracker_person_id(value: object) -> Optional[int]:
+    if not isinstance(value, Integral) or isinstance(value, (bool, np.bool_)):
+        raise RuntimeError("tracker output person_id must be -1 or a non-negative integer")
+    person_id = int(value)
+    if person_id < -1:
+        raise RuntimeError("tracker output person_id must be -1 or a non-negative integer")
+    return None if person_id == -1 else person_id
+
+
+def _confidence(value: object) -> float:
+    if (
+        not isinstance(value, Real)
+        or isinstance(value, (bool, np.bool_))
+        or not math.isfinite(float(value))
+        or not 0.0 <= float(value) <= 1.0
+    ):
+        raise ValueError("confidence must be a finite clipped value from 0 through 1")
+    return float(value)
+
+
+def _normalized_box_copy(value: object) -> Tuple[float, float, float, float]:
+    try:
+        coordinates = tuple(value)
+    except TypeError as exc:
+        raise ValueError("head_bbox must contain four finite normalized coordinates") from exc
+    if len(coordinates) != 4 or any(
+        not isinstance(coordinate, Real)
+        or isinstance(coordinate, (bool, np.bool_))
+        or not math.isfinite(float(coordinate))
+        for coordinate in coordinates
+    ):
+        raise ValueError("head_bbox must contain four finite normalized coordinates")
+    return tuple(float(coordinate) for coordinate in coordinates)
+
+
 class ByteTrackHeadTracker:
     def __init__(
         self,
@@ -77,6 +112,7 @@ class ByteTrackHeadTracker:
         self._supervision = supervision_module
         self._tracker = None
         self._first_frame_by_person = {}
+        self._last_frame_index: Optional[int] = None
         self._last_timestamp_ms: Optional[float] = None
         self._closed = False
 
@@ -162,9 +198,9 @@ class ByteTrackHeadTracker:
         candidates: Tuple[HeadCandidate, ...],
         *,
         frame_index: int,
-    ) -> Tuple[TrackedHeadCandidate, ...]:
+    ):
         if not candidates:
-            return ()
+            return (), dict(self._first_frame_by_person)
         try:
             tracker_ids = tuple(tracked.tracker_id)
             candidate_indexes = tuple(tracked.data["candidate_index"])
@@ -177,15 +213,11 @@ class ByteTrackHeadTracker:
                 "Invalid tracker output: tracker IDs and candidate indexes differ in length"
             )
 
-        mapped = []
+        parsed_rows = []
         seen_people = set()
         seen_candidates = set()
         for raw_person_id, raw_candidate_index in zip(tracker_ids, candidate_indexes):
-            person_id = _nonnegative_int(
-                raw_person_id,
-                name="tracker output person_id",
-                error_type=RuntimeError,
-            )
+            person_id = _tracker_person_id(raw_person_id)
             candidate_index = _nonnegative_int(
                 raw_candidate_index,
                 name="tracker output candidate_index",
@@ -193,11 +225,20 @@ class ByteTrackHeadTracker:
             )
             if candidate_index >= len(candidates):
                 raise RuntimeError("Invalid tracker output: candidate_index is out of range")
-            if person_id in seen_people or candidate_index in seen_candidates:
-                raise RuntimeError("Invalid tracker output: duplicate person ID or candidate index")
-            seen_people.add(person_id)
+            if candidate_index in seen_candidates:
+                raise RuntimeError("Invalid tracker output: duplicate candidate index")
             seen_candidates.add(candidate_index)
-            first_frame = self._first_frame_by_person.setdefault(person_id, frame_index)
+            if person_id is None:
+                continue
+            if person_id in seen_people:
+                raise RuntimeError("Invalid tracker output: duplicate person ID")
+            seen_people.add(person_id)
+            parsed_rows.append((candidate_index, person_id))
+
+        next_first_frames = dict(self._first_frame_by_person)
+        mapped = []
+        for candidate_index, person_id in parsed_rows:
+            first_frame = next_first_frames.setdefault(person_id, frame_index)
             mapped.append(
                 (
                     candidate_index,
@@ -208,7 +249,32 @@ class ByteTrackHeadTracker:
                     ),
                 )
             )
-        return tuple(item for _, item in sorted(mapped, key=lambda entry: entry[0]))
+        result = tuple(item for _, item in sorted(mapped, key=lambda entry: entry[0]))
+        return result, next_first_frames
+
+    @staticmethod
+    def _cleanup_backend(tracker) -> None:
+        close = getattr(tracker, "close", None)
+        if callable(close):
+            close()
+            return
+        reset = getattr(tracker, "reset", None)
+        if callable(reset):
+            reset()
+
+    def _invalidate_tracker(self, original_error: Exception) -> None:
+        tracker = self._tracker
+        self._tracker = None
+        self._first_frame_by_person.clear()
+        if tracker is None:
+            return
+        try:
+            self._cleanup_backend(tracker)
+        except Exception as cleanup_error:
+            if hasattr(original_error, "add_note"):
+                original_error.add_note(
+                    f"Backend cleanup also failed: {cleanup_error!r}"
+                )
 
     def update(
         self,
@@ -225,6 +291,8 @@ class ByteTrackHeadTracker:
         if self._last_timestamp_ms is not None and timestamp_ms < self._last_timestamp_ms:
             raise ValueError("timestamp_ms must be monotonic")
         frame_index = _nonnegative_int(frame_index, name="frame_index")
+        if self._last_frame_index is not None and frame_index <= self._last_frame_index:
+            raise ValueError("frame_index must increase strictly")
         candidates = tuple(candidates)
         tracker = self._ensure_tracker()
         detections = self._build_detections(
@@ -232,12 +300,18 @@ class ByteTrackHeadTracker:
             image_width=image_width,
             image_height=image_height,
         )
-        tracked = tracker.update(detections)
-        result = self._map_tracked_candidates(
-            tracked,
-            candidates,
-            frame_index=frame_index,
-        )
+        try:
+            tracked = tracker.update(detections)
+            result, next_first_frames = self._map_tracked_candidates(
+                tracked,
+                candidates,
+                frame_index=frame_index,
+            )
+        except Exception as exc:
+            self._invalidate_tracker(exc)
+            raise
+        self._first_frame_by_person = next_first_frames
+        self._last_frame_index = frame_index
         self._last_timestamp_ms = timestamp_ms
         return result
 
@@ -245,19 +319,23 @@ class ByteTrackHeadTracker:
         if self._closed:
             raise RuntimeError("ByteTrackHeadTracker is closed")
         tracker = self._tracker
-        try:
-            if tracker is not None:
-                reset = getattr(tracker, "reset", None)
-                if callable(reset):
-                    reset()
-                else:
-                    close = getattr(tracker, "close", None)
-                    if callable(close):
-                        close()
-                    self._tracker = None
-        finally:
-            self._first_frame_by_person.clear()
-            self._last_timestamp_ms = None
+        self._first_frame_by_person.clear()
+        self._last_frame_index = None
+        self._last_timestamp_ms = None
+        if tracker is None:
+            return
+        reset = getattr(tracker, "reset", None)
+        if callable(reset):
+            try:
+                reset()
+            except Exception:
+                self._tracker = None
+                raise
+            return
+        self._tracker = None
+        close = getattr(tracker, "close", None)
+        if callable(close):
+            close()
 
     def close(self) -> None:
         if self._closed:
@@ -266,16 +344,11 @@ class ByteTrackHeadTracker:
         tracker = self._tracker
         self._tracker = None
         self._first_frame_by_person.clear()
+        self._last_frame_index = None
         self._last_timestamp_ms = None
         if tracker is None:
             return
-        close = getattr(tracker, "close", None)
-        if callable(close):
-            close()
-            return
-        reset = getattr(tracker, "reset", None)
-        if callable(reset):
-            reset()
+        self._cleanup_backend(tracker)
 
 
 class ShortOcclusionBridge:
@@ -339,6 +412,44 @@ class ShortOcclusionBridge:
             missed_ms=missed_ms,
         )
 
+    @staticmethod
+    def _stage_tracked_candidate(
+        tracked: TrackedHeadCandidate,
+        *,
+        timestamp_ms: float,
+    ):
+        if not isinstance(tracked, TrackedHeadCandidate):
+            raise ValueError("tracked_candidates must contain TrackedHeadCandidate values")
+        person_id = _nonnegative_int(tracked.person_id, name="person_id")
+        track_age_frames = _nonnegative_int(
+            tracked.track_age_frames,
+            name="track_age_frames",
+        )
+        candidate = tracked.candidate
+        if not isinstance(candidate, HeadCandidate):
+            raise ValueError("tracked candidate must contain a HeadCandidate")
+        confidence = _confidence(candidate.confidence)
+        if not isinstance(candidate.state, HeadPerceptionState):
+            raise ValueError("candidate state must be a HeadPerceptionState")
+        head_bbox = _normalized_box_copy(candidate.head_bbox)
+        staged_candidate = replace(
+            candidate,
+            head_bbox=head_bbox,
+            confidence=confidence,
+        )
+        staged_tracked = TrackedHeadCandidate(
+            person_id=person_id,
+            candidate=staged_candidate,
+            track_age_frames=track_age_frames,
+        )
+        state = _BridgeState(
+            head_bbox=head_bbox,
+            confidence=confidence,
+            track_age_frames=track_age_frames,
+            last_observed_timestamp_ms=timestamp_ms,
+        )
+        return person_id, staged_tracked, state
+
     def update(
         self,
         tracked_candidates: Tuple[TrackedHeadCandidate, ...],
@@ -349,31 +460,32 @@ class ShortOcclusionBridge:
         if self._last_timestamp_ms is not None and timestamp_ms < self._last_timestamp_ms:
             raise ValueError("timestamp_ms must be monotonic")
         tracked_candidates = tuple(tracked_candidates)
-        observed_ids = tuple(tracked.person_id for tracked in tracked_candidates)
-        if len(set(observed_ids)) != len(observed_ids):
-            raise ValueError("tracked_candidates must contain unique person IDs")
-
-        perceptions = []
+        staged = []
+        observed_ids = set()
         for tracked in tracked_candidates:
-            person_id = _nonnegative_int(tracked.person_id, name="person_id")
-            candidate = tracked.candidate
-            self._states[person_id] = _BridgeState(
-                head_bbox=tuple(float(value) for value in candidate.head_bbox),
-                confidence=float(candidate.confidence),
-                track_age_frames=tracked.track_age_frames,
-                last_observed_timestamp_ms=timestamp_ms,
+            person_id, staged_tracked, state = self._stage_tracked_candidate(
+                tracked,
+                timestamp_ms=timestamp_ms,
             )
-            perceptions.append(self._observed_perception(tracked))
+            if person_id in observed_ids:
+                raise ValueError("tracked_candidates must contain unique person IDs")
+            observed_ids.add(person_id)
+            staged.append((person_id, staged_tracked, state))
 
-        observed_set = set(observed_ids)
-        for person_id in sorted(tuple(self._states)):
-            if person_id in observed_set:
+        next_states = dict(self._states)
+        perceptions = []
+        for person_id, staged_tracked, state in staged:
+            next_states[person_id] = state
+            perceptions.append(self._observed_perception(staged_tracked))
+
+        for person_id in sorted(tuple(next_states)):
+            if person_id in observed_ids:
                 continue
-            state = self._states[person_id]
+            state = next_states[person_id]
             missed_ms = timestamp_ms - state.last_observed_timestamp_ms
             confidence = state.confidence * math.exp(-missed_ms / _DECAY_TIME_MS)
             if missed_ms > self._max_gap_ms or confidence < self._min_confidence:
-                del self._states[person_id]
+                del next_states[person_id]
                 continue
             perceptions.append(
                 self._tracked_only_perception(
@@ -383,7 +495,7 @@ class ShortOcclusionBridge:
                     missed_ms=missed_ms,
                 )
             )
-            self._states[person_id] = _BridgeState(
+            next_states[person_id] = _BridgeState(
                 head_bbox=state.head_bbox,
                 confidence=state.confidence,
                 track_age_frames=state.track_age_frames,
@@ -391,6 +503,7 @@ class ShortOcclusionBridge:
                 missed_frames=state.missed_frames + 1,
             )
 
+        self._states = next_states
         self._last_timestamp_ms = timestamp_ms
         return tuple(perceptions)
 
