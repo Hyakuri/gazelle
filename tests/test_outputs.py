@@ -6,6 +6,18 @@ import unittest
 import torch
 
 from gazelle.runtime.contracts import GazePrediction, HeadObservation
+from gazelle.runtime.perception.contracts import (
+    HeadFrameResult,
+    HeadPerception,
+    HeadPerceptionState,
+    HeadPoseAngles,
+    HeadViewState,
+    NormalizedLandmark,
+)
+from gazelle.runtime.perception.outputs import (
+    head_frame_to_json_dict,
+    write_head_observations_json,
+)
 from gazelle.runtime.outputs import (
     JsonlWriter,
     append_jsonl,
@@ -28,7 +40,146 @@ def make_prediction(person_id=1, bbox=(0.1, 0.2, 0.3, 0.4), inout_score=0.88):
     )
 
 
+def make_rich_head_result():
+    face_landmarks = tuple(
+        NormalizedLandmark(x=index / 1000.0, y=index / 2000.0, z=-index / 3000.0)
+        for index in range(478)
+    )
+    perception = HeadPerception(
+        person_id=7,
+        head_bbox=(0.1, 0.2, 0.3, 0.4),
+        face_bbox=(0.11, 0.21, 0.29, 0.39),
+        confidence=0.91,
+        state=HeadPerceptionState.FACE_POSE,
+        view_state=HeadViewState.FRONTAL,
+        observed=True,
+        track_age_frames=12,
+        missed_frames=1,
+        missed_ms=33.3,
+        face_keypoints=(
+            NormalizedLandmark(x=0.2, y=0.3),
+            NormalizedLandmark(x=0.4, y=0.5, visibility=0.6),
+        ),
+        pose_head_landmarks=(
+            NormalizedLandmark(x=0.6, y=0.7, presence=0.8),
+            NormalizedLandmark(x=0.8, y=0.9, z=0.1),
+        ),
+        facial_transformation_matrix=((1.0, 2.0), (3.0, 4.0)),
+        head_pose=HeadPoseAngles(yaw_deg=1.5, pitch_deg=-2.5, roll_deg=3.5),
+        face_landmarks=face_landmarks,
+    )
+    return HeadFrameResult(
+        heads=(HeadObservation(person_id=7, bbox=(0.1, 0.2, 0.3, 0.4), confidence=0.91),),
+        perceptions=(perception,),
+        timings_ms={"face": 1.25, "pose": 2.5},
+    )
+
+
 class OutputsTest(unittest.TestCase):
+    def test_head_frame_serializes_minimal_provider_heads(self):
+        record = head_frame_to_json_dict(
+            frame_index=1,
+            timestamp_ms=33.3,
+            image_width=640,
+            image_height=480,
+            provider="static",
+            result=HeadFrameResult(
+                heads=(HeadObservation(person_id=4, bbox=(0.1, 0.2, 0.3, 0.4), confidence=0.8),),
+                timings_ms={"provider": 1.0},
+            ),
+        )
+
+        self.assertEqual(record["frame_index"], 1)
+        self.assertEqual(record["timestamp_ms"], 33.3)
+        self.assertEqual(record["status"], "ok")
+        self.assertEqual(record["width"], 640)
+        self.assertEqual(record["height"], 480)
+        self.assertEqual(record["provider"], "static")
+        self.assertEqual(record["timings_ms"], {"provider": 1.0})
+        self.assertEqual(
+            record["people"],
+            [{"person_id": 4, "head_bbox_normalized": [0.1, 0.2, 0.3, 0.4], "confidence": 0.8}],
+        )
+
+    def test_head_frame_serializes_rich_perception_without_face_landmarks_by_default(self):
+        rich_result = make_rich_head_result()
+
+        record = head_frame_to_json_dict(
+            frame_index=2,
+            timestamp_ms=66.6,
+            image_width=640,
+            image_height=480,
+            provider="mediapipe",
+            result=rich_result,
+            save_face_landmarks=False,
+        )
+
+        person = record["people"][0]
+        self.assertEqual(person["person_id"], 7)
+        self.assertEqual(person["head_bbox_normalized"], [0.1, 0.2, 0.3, 0.4])
+        self.assertEqual(person["face_bbox_normalized"], [0.11, 0.21, 0.29, 0.39])
+        self.assertEqual(person["state"], "face_pose")
+        self.assertEqual(person["view_state"], "frontal")
+        self.assertTrue(person["observed"])
+        self.assertEqual(person["tracking"], {"track_age_frames": 12, "missed_frames": 1, "missed_ms": 33.3})
+        self.assertEqual(person["face_keypoints"][1], {"x": 0.4, "y": 0.5, "visibility": 0.6})
+        self.assertEqual(person["pose_head_landmarks"][0], {"x": 0.6, "y": 0.7, "presence": 0.8})
+        self.assertEqual(person["facial_transformation_matrix"], [[1.0, 2.0], [3.0, 4.0]])
+        self.assertEqual(person["head_pose"], {"yaw_deg": 1.5, "pitch_deg": -2.5, "roll_deg": 3.5})
+        self.assertNotIn("face_landmarks", person)
+
+    def test_head_frame_includes_all_face_landmarks_only_when_enabled(self):
+        record = head_frame_to_json_dict(
+            frame_index=2,
+            timestamp_ms=66.6,
+            image_width=640,
+            image_height=480,
+            provider="mediapipe",
+            result=make_rich_head_result(),
+            save_face_landmarks=True,
+        )
+
+        landmarks = record["people"][0]["face_landmarks"]
+        self.assertEqual(len(landmarks), 478)
+        self.assertEqual(landmarks[0], {"x": 0.0, "y": 0.0, "z": 0.0})
+        self.assertEqual(landmarks[-1], {"x": 0.477, "y": 0.2385, "z": -0.159})
+
+    def test_head_frame_serializes_no_head_and_reuses_jsonl_writer(self):
+        result = HeadFrameResult(heads=(), timings_ms={"provider": 0.5})
+        with TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "heads.jsonl"
+            with JsonlWriter(output_path) as writer:
+                record = write_head_observations_json(
+                    writer,
+                    frame_index=3,
+                    timestamp_ms=100.0,
+                    image_width=320,
+                    image_height=240,
+                    provider="mediapipe",
+                    result=result,
+                )
+            payload = json.loads(output_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(record, payload)
+        self.assertEqual(payload["status"], "no_head")
+        self.assertEqual(payload["people"], [])
+        self.assertEqual(payload["timings_ms"], {"provider": 0.5})
+
+    def test_head_frame_rejects_non_finite_serialized_values(self):
+        result = HeadFrameResult(
+            heads=(HeadObservation(person_id=1, bbox=(0.1, float("nan"), 0.3, 0.4), confidence=0.8),),
+        )
+
+        with self.assertRaisesRegex(ValueError, "finite"):
+            head_frame_to_json_dict(
+                frame_index=0,
+                timestamp_ms=0.0,
+                image_width=10,
+                image_height=8,
+                provider="static",
+                result=result,
+            )
+
     def test_prediction_to_json_dict(self):
         record = prediction_to_json_dict(make_prediction(), heatmap_path="heatmaps/person_1.pt")
 

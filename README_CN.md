@@ -225,6 +225,14 @@ pose 选项会分别准备 `pose_landmarker_lite.task`、`pose_landmarker_full.t
 
 这仍是分阶段集成：依赖/环境声明以及 rich observation 结果到 pipeline 输出的接线留待后续任务。最终推荐的端到端配置尚未完成，本文档不宣称已经进行了真实的 MediaPipe、tracker 或 Gazelle 验证。
 
+### 独立 Head Observation Schema（分阶段输出）
+
+`gazelle.runtime.perception.outputs` 提供 `head_frame_to_json_dict(...)`，用于序列化单个独立 provider 结果；`write_head_observations_json(...)` 通过现有 `JsonlWriter` 追加该 record。record 包含 `frame_index`、`timestamp_ms`、`status`、`width`、`height`、`provider`、`timings_ms` 和 `people` 字段。结果存在 head 时 `status` 为 `"ok"`，否则为 `"no_head"`。`timings_ms` 保留 provider 的 timing 名称及有限的毫秒数值。
+
+每个人包含 `person_id`、`head_bbox_normalized` 和 `confidence`。head bbox 归一化到 `[0, 1]`，并保留 runtime bbox tuple 的顺序。rich MediaPipe perception 还会在适用时包含 face bbox、`state`、`view_state`、`observed`、`tracking`、face keypoint、pose-head landmark、facial transformation matrix，以及 yaw/pitch/roll head-pose evidence。serializer 只输出有限的 JSON 数字，绝不嵌入 tensor。
+
+出于隐私和输出体积考虑，默认省略全部 478 个 face landmark。只有 `save_face_landmarks=True` 时才会包含它们。这只是独立 schema 边界：后续图片/视频任务才会将 observation 文件接入 pipeline 输出，因此当前 CLI 运行尚不会生成这一新的 observation artifact。
+
 单图推理会读取 `frame_index=0` 的 head 数据。JSON 使用 runtime head provider 的内部 record 格式，`bbox_format` 可以是 `normalized` 或 `pixel`，`heads` 中包含 `person_id`、`bbox` 和可选 `confidence`。
 
 `--head-source none` 不提供 bbox。因此渲染时无法绘制 head bbox，也无法计算从 head center 到 gaze peak 的箭头。如果需要 bbox / arrow，请使用 `--head-source static` 或 `--head-source json` 并提供 bbox。

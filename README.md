@@ -216,6 +216,14 @@ Default unit tests use fake downloaders and do not access the network. The pinne
 
 This remains a staged integration: dependency/environment declaration and rich observation results in pipeline outputs are deferred to later tasks. The final recommended end-to-end setup is not complete, and this documentation does not claim real MediaPipe, tracker, or Gazelle validation.
 
+### Independent Head Observation Schema (Staged Output)
+
+`gazelle.runtime.perception.outputs` provides `head_frame_to_json_dict(...)` for one independent provider result and `write_head_observations_json(...)` for appending that record through the existing `JsonlWriter`. The record has `frame_index`, `timestamp_ms`, `status`, `width`, `height`, `provider`, `timings_ms`, and `people` fields. `status` is `"ok"` when the result has heads and `"no_head"` otherwise. `timings_ms` retains provider timing names and finite millisecond values.
+
+Each person has `person_id`, `head_bbox_normalized`, and `confidence`. Head boxes are normalized to `[0, 1]` and retain the runtime bbox tuple ordering. Rich MediaPipe perceptions additionally include applicable face bbox, `state`, `view_state`, `observed`, `tracking`, face keypoints, pose-head landmarks, facial transformation matrix, and yaw/pitch/roll head-pose evidence. The serializer emits finite JSON numbers only and never embeds tensors.
+
+For privacy and output size, all 478 face landmarks are omitted by default. They are included only when `save_face_landmarks=True`. This is an independent schema boundary only: later image/video tasks will wire observation files into pipeline outputs, so current CLI runs do not yet emit this new observation artifact.
+
 For single-image inference, JSON head data is read from `frame_index=0`. The JSON format is the same internal head record format used by the runtime head providers, with `bbox_format` set to `normalized` or `pixel` and `heads` containing `person_id`, `bbox`, and optional `confidence`.
 
 `--head-source none` does not provide a bbox. Rendered head boxes and head-center-to-gaze-peak arrows require a bbox, so they cannot be drawn in `none` mode. Use `--head-source static` or `--head-source json` with bbox data when bbox-dependent overlays are needed.
