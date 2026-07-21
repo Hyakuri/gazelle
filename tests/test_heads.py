@@ -32,6 +32,12 @@ class ClosingProvider(HeadProvider):
         self.close_count += 1
 
 
+class FailingClosingProvider(ClosingProvider):
+    def close(self):
+        super().close()
+        raise RuntimeError("close failed")
+
+
 class HeadProvidersTest(unittest.TestCase):
     def test_default_frame_result_wraps_existing_provider(self):
         provider = RecordingProvider()
@@ -47,6 +53,30 @@ class HeadProvidersTest(unittest.TestCase):
 
         with provider as entered_provider:
             self.assertIs(entered_provider, provider)
+
+        self.assertEqual(provider.close_count, 1)
+
+    def test_head_provider_preserves_body_error_when_close_also_fails(self):
+        provider = FailingClosingProvider()
+        body_error = ValueError("body failed")
+
+        with self.assertRaises(ValueError) as raised:
+            with provider:
+                raise body_error
+
+        self.assertIs(raised.exception, body_error)
+        self.assertEqual(provider.close_count, 1)
+        self.assertIn(
+            "provider cleanup also failed: RuntimeError('close failed')",
+            getattr(raised.exception, "__notes__", ()),
+        )
+
+    def test_head_provider_raises_close_error_without_body_error(self):
+        provider = FailingClosingProvider()
+
+        with self.assertRaisesRegex(RuntimeError, "close failed"):
+            with provider:
+                pass
 
         self.assertEqual(provider.close_count, 1)
 

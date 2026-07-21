@@ -37,7 +37,14 @@ class HeadProvider(ABC):
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        self.close()
+        try:
+            self.close()
+        except BaseException as cleanup_error:
+            if exc_value is None:
+                raise
+            add_note = getattr(exc_value, "add_note", None)
+            if callable(add_note):
+                add_note("provider cleanup also failed: {!r}".format(cleanup_error))
         return False
 
 

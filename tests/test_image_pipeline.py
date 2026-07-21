@@ -9,9 +9,15 @@ import torch
 from PIL import Image
 
 from gazelle.runtime.config import RuntimeConfig
-from gazelle.runtime.contracts import GazePrediction
-from gazelle.runtime.heads import JsonHeadProvider, NoneHeadProvider, StaticHeadProvider
-from gazelle.runtime.perception.contracts import HeadFrameResult
+from gazelle.runtime.contracts import GazePrediction, HeadObservation
+from gazelle.runtime.heads import HeadProvider, JsonHeadProvider, NoneHeadProvider, StaticHeadProvider
+from gazelle.runtime.perception.contracts import (
+    HeadFrameResult,
+    HeadPerception,
+    HeadPerceptionState,
+    HeadViewState,
+    NormalizedLandmark,
+)
 from gazelle.runtime.perception.provider import MediaPipeHeadProvider
 from gazelle.runtime.pipeline import (
     _safe_clear_output_dir,
@@ -71,6 +77,50 @@ class FakeHeadProvider:
         if self.error is not None:
             raise self.error
         return self.result
+
+
+class FailingCloseHeadProvider(HeadProvider):
+    def __init__(self, result):
+        self.result = result
+        self.close_count = 0
+
+    def get_heads(self, frame, frame_index, timestamp_ms, image_width, image_height):
+        return self.result.heads
+
+    def get_frame_result(self, frame, frame_index, timestamp_ms, image_width, image_height):
+        return self.result
+
+    def close(self):
+        self.close_count += 1
+        raise RuntimeError("close failed")
+
+
+def make_rich_head_result():
+    face_landmarks = tuple(
+        NormalizedLandmark(x=index / 1000.0, y=index / 2000.0, z=-index / 3000.0)
+        for index in range(478)
+    )
+    head = HeadObservation(
+        person_id=7,
+        bbox=(0.1, 0.2, 0.3, 0.4),
+        confidence=0.91,
+    )
+    perception = HeadPerception(
+        person_id=7,
+        head_bbox=head.bbox,
+        face_bbox=(0.11, 0.21, 0.29, 0.39),
+        confidence=0.91,
+        state=HeadPerceptionState.FACE_POSE,
+        view_state=HeadViewState.FRONTAL,
+        observed=True,
+        face_keypoints=(NormalizedLandmark(x=0.2, y=0.3),),
+        face_landmarks=face_landmarks,
+    )
+    return HeadFrameResult(
+        heads=(head,),
+        perceptions=(perception,),
+        timings_ms={"face": 1.25, "pose": 2.5},
+    )
 
 
 def write_test_image(path, mode="RGB"):
@@ -312,6 +362,36 @@ class ImagePipelineTest(unittest.TestCase):
 
         self.assertEqual(provider.exited, [RuntimeError])
 
+    def test_run_image_pipeline_preserves_prediction_error_when_close_also_fails(self):
+        with TemporaryDirectory() as tmpdir:
+            image_path = Path(tmpdir) / "frame.png"
+            write_test_image(image_path)
+            config = make_config(input_path=str(image_path), output_dir=str(Path(tmpdir) / "outputs"))
+            provider = FailingCloseHeadProvider(
+                HeadFrameResult(
+                    heads=(HeadObservation(person_id=0, bbox=None, confidence=None),)
+                )
+            )
+            prediction_error = ValueError("prediction failed")
+
+            with unittest.mock.patch(
+                "gazelle.runtime.pipeline.build_head_provider_from_config", return_value=provider
+            ):
+                with self.assertRaises(ValueError) as raised:
+                    run_image_pipeline(
+                        config,
+                        predictor_factory=lambda _config: (_ for _ in ()).throw(
+                            prediction_error
+                        ),
+                    )
+
+        self.assertIs(raised.exception, prediction_error)
+        self.assertEqual(provider.close_count, 1)
+        self.assertIn(
+            "provider cleanup also failed: RuntimeError('close failed')",
+            getattr(raised.exception, "__notes__", ()),
+        )
+
     def test_run_image_pipeline_no_head_writes_outputs_without_constructing_predictor(self):
         with TemporaryDirectory() as tmpdir:
             image_path = Path(tmpdir) / "frame.png"
@@ -339,6 +419,77 @@ class ImagePipelineTest(unittest.TestCase):
         self.assertEqual(observation["status"], "no_head")
         self.assertEqual(predictions["people"], [])
         self.assertEqual(run_config["head_source"], "json")
+
+    def test_run_image_pipeline_no_head_keeps_optional_outputs_coherent(self):
+        with TemporaryDirectory() as tmpdir:
+            image_path = Path(tmpdir) / "frame.png"
+            write_test_image(image_path)
+            config = make_config(
+                input_path=str(image_path),
+                output_dir=str(Path(tmpdir) / "outputs"),
+                head_source="mediapipe",
+                save_heatmaps=True,
+                save_rendered=True,
+            )
+            provider = FakeHeadProvider(HeadFrameResult(heads=()))
+
+            def predictor_factory(_config):
+                raise AssertionError("predictor should not be constructed without heads")
+
+            with unittest.mock.patch(
+                "gazelle.runtime.pipeline.build_head_provider_from_config", return_value=provider
+            ):
+                result = run_image_pipeline(config, predictor_factory=predictor_factory)
+            observation = json.loads(result.head_observations_path.read_text(encoding="utf-8"))
+            predictions = json.loads(result.predictions_path.read_text(encoding="utf-8"))
+            with Image.open(image_path) as original, Image.open(result.rendered_path) as rendered:
+                rendered_matches_input = rendered.convert("RGB").tobytes() == original.convert("RGB").tobytes()
+            heatmap_files = tuple((result.output_dir / "heatmaps").iterdir())
+
+        self.assertEqual(result.predictions, ())
+        self.assertEqual(result.heatmap_paths, ())
+        self.assertEqual(heatmap_files, ())
+        self.assertEqual(observation["status"], "no_head")
+        self.assertEqual(predictions["people"], [])
+        self.assertTrue(rendered_matches_input)
+
+    def test_run_image_pipeline_rich_mediapipe_landmarks_follow_opt_in(self):
+        rich_result = make_rich_head_result()
+        people_by_flag = {}
+
+        with TemporaryDirectory() as tmpdir:
+            image_path = Path(tmpdir) / "frame.png"
+            write_test_image(image_path)
+            for save_face_landmarks in (False, True):
+                with self.subTest(save_face_landmarks=save_face_landmarks):
+                    provider = FakeHeadProvider(rich_result)
+                    config = make_config(
+                        input_path=str(image_path),
+                        output_dir=str(Path(tmpdir) / "outputs_{}".format(save_face_landmarks)),
+                        head_source="mediapipe",
+                        save_face_landmarks=save_face_landmarks,
+                    )
+                    with unittest.mock.patch(
+                        "gazelle.runtime.pipeline.build_head_provider_from_config",
+                        return_value=provider,
+                    ):
+                        result = run_image_pipeline(
+                            config,
+                            predictor_factory=lambda _config: FakePredictor(),
+                        )
+                    observation = json.loads(
+                        result.head_observations_path.read_text(encoding="utf-8")
+                    )
+                    people_by_flag[save_face_landmarks] = observation["people"][0]
+
+        self.assertEqual(people_by_flag[False]["state"], "face_pose")
+        self.assertEqual(people_by_flag[False]["face_keypoints"], [{"x": 0.2, "y": 0.3}])
+        self.assertNotIn("face_landmarks", people_by_flag[False])
+        self.assertEqual(len(people_by_flag[True]["face_landmarks"]), 478)
+        self.assertEqual(
+            people_by_flag[True]["face_landmarks"][-1],
+            {"x": 0.477, "y": 0.2385, "z": -0.159},
+        )
 
     def test_run_image_pipeline_preserves_head_order_and_builds_predictor_once(self):
         with TemporaryDirectory() as tmpdir:
