@@ -3,6 +3,7 @@ import pickle
 import subprocess
 import sys
 import unittest
+import warnings
 from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -193,6 +194,112 @@ class ByteTrackHeadTrackerTest(unittest.TestCase):
             text=True,
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_lazy_trackers_import_suppresses_upstream_target_none_warning(self):
+        warning_message = (
+            "target=None is deprecated since `v0.8`; use `TargetMode.NOTIFY` instead. "
+            "Will be removed in `v1.0`."
+        )
+        tracker_factory = RecordingFactory(FakeTracker())
+
+        def import_trackers(module_name):
+            self.assertEqual(module_name, "trackers")
+            warnings.warn_explicit(
+                warning_message,
+                FutureWarning,
+                filename="trackers/core/botsort/tracker.py",
+                lineno=1,
+                module="trackers.core.botsort.tracker",
+            )
+            return SimpleNamespace(ByteTrackTracker=tracker_factory)
+
+        adapter = ByteTrackHeadTracker(
+            source_fps=30.0,
+            supervision_module=FAKE_SUPERVISION,
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            with patch("importlib.import_module", side_effect=import_trackers):
+                self.assertIs(adapter._load_tracker_factory(), tracker_factory)
+
+    def test_lazy_trackers_import_does_not_suppress_unrelated_future_warning(self):
+        def import_trackers(module_name):
+            self.assertEqual(module_name, "trackers")
+            warnings.warn_explicit(
+                "unrelated tracker migration warning",
+                FutureWarning,
+                filename="trackers/core/botsort/tracker.py",
+                lineno=1,
+                module="trackers.core.botsort.tracker",
+            )
+            return SimpleNamespace(ByteTrackTracker=RecordingFactory(FakeTracker()))
+
+        adapter = ByteTrackHeadTracker(
+            source_fps=30.0,
+            supervision_module=FAKE_SUPERVISION,
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            with patch("importlib.import_module", side_effect=import_trackers):
+                with self.assertRaisesRegex(
+                    FutureWarning,
+                    "unrelated tracker migration warning",
+                ):
+                    adapter._load_tracker_factory()
+
+    def test_lazy_trackers_import_does_not_suppress_extended_target_none_warning(self):
+        warning_message = (
+            "target=None is deprecated since `v0.8`; use `TargetMode.NOTIFY` instead. "
+            "Will be removed in `v1.0`. Additional migration detail."
+        )
+
+        def import_trackers(module_name):
+            self.assertEqual(module_name, "trackers")
+            warnings.warn_explicit(
+                warning_message,
+                FutureWarning,
+                filename="trackers/core/botsort/tracker.py",
+                lineno=1,
+                module="trackers.core.botsort.tracker",
+            )
+            return SimpleNamespace(ByteTrackTracker=RecordingFactory(FakeTracker()))
+
+        adapter = ByteTrackHeadTracker(
+            source_fps=30.0,
+            supervision_module=FAKE_SUPERVISION,
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            with patch("importlib.import_module", side_effect=import_trackers):
+                with self.assertRaisesRegex(FutureWarning, "Additional migration detail"):
+                    adapter._load_tracker_factory()
+
+    def test_lazy_trackers_import_limits_suppression_to_upstream_modules(self):
+        warning_message = (
+            "target=None is deprecated since `v0.8`; use `TargetMode.NOTIFY` instead. "
+            "Will be removed in `v1.0`."
+        )
+
+        def import_trackers(module_name):
+            self.assertEqual(module_name, "trackers")
+            warnings.warn_explicit(
+                warning_message,
+                FutureWarning,
+                filename="application.py",
+                lineno=1,
+                module="application",
+            )
+            return SimpleNamespace(ByteTrackTracker=RecordingFactory(FakeTracker()))
+
+        adapter = ByteTrackHeadTracker(
+            source_fps=30.0,
+            supervision_module=FAKE_SUPERVISION,
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            with patch("importlib.import_module", side_effect=import_trackers):
+                with self.assertRaisesRegex(FutureWarning, "target=None"):
+                    adapter._load_tracker_factory()
 
     def test_constructs_tracker_with_exact_configuration_and_pixel_detections(self):
         adapter, fake, factory = make_tracker(source_fps=29.97)
@@ -943,10 +1050,50 @@ class ShortOcclusionBridgeTest(unittest.TestCase):
         self.assertFalse(missing[0].observed)
         self.assertEqual(missing[0].head_bbox, candidate(3).head_bbox)
         self.assertIsNone(missing[0].face_bbox)
-        self.assertEqual(missing[0].view_state, HeadViewState.UNKNOWN)
+        self.assertEqual(missing[0].view_state, HeadViewState.FRONTAL)
         self.assertAlmostEqual(missing[0].confidence, 0.8 * math.exp(-1.0))
         self.assertEqual(missing[0].missed_frames, 1)
         self.assertEqual(missing[0].missed_ms, 500.0)
+
+    def test_bridge_retains_view_state_but_clears_unobserved_evidence(self):
+        face_keypoint = NormalizedLandmark(x=0.2, y=0.3, z=0.4)
+        pose_landmark = NormalizedLandmark(x=0.5, y=0.6, z=0.7)
+        face_landmark = NormalizedLandmark(x=0.7, y=0.8, z=0.9)
+        observed_candidate = HeadCandidate(
+            source_index=4,
+            head_bbox=(0.1, 0.2, 0.4, 0.6),
+            face_bbox=(0.15, 0.25, 0.35, 0.50),
+            confidence=0.93,
+            state=HeadPerceptionState.FACE_POSE,
+            view_state=HeadViewState.PROFILE,
+            observed=True,
+            face_keypoints=(face_keypoint,),
+            pose_head_landmarks=(pose_landmark,),
+            facial_transformation_matrix=((1.0, 0.0), (0.0, 1.0)),
+            head_pose=HeadPoseAngles(yaw_deg=12.0, pitch_deg=-3.0, roll_deg=1.5),
+            face_landmarks=(face_landmark,),
+        )
+        bridge = ShortOcclusionBridge(max_gap_ms=500.0)
+        bridge.update(
+            (
+                TrackedHeadCandidate(
+                    person_id=9,
+                    candidate=observed_candidate,
+                    track_age_frames=7,
+                ),
+            ),
+            timestamp_ms=100.0,
+        )
+
+        missing = bridge.update((), timestamp_ms=200.0)[0]
+
+        self.assertEqual(missing.view_state, HeadViewState.PROFILE)
+        self.assertIsNone(missing.face_bbox)
+        self.assertEqual(missing.face_keypoints, ())
+        self.assertEqual(missing.pose_head_landmarks, ())
+        self.assertIsNone(missing.facial_transformation_matrix)
+        self.assertIsNone(missing.head_pose)
+        self.assertEqual(missing.face_landmarks, ())
 
     def test_bridge_expires_after_500_ms(self):
         bridge = ShortOcclusionBridge(max_gap_ms=500.0)
@@ -1124,6 +1271,24 @@ class ShortOcclusionBridgeTest(unittest.TestCase):
                     pickle.dumps(vars(bridge), protocol=pickle.HIGHEST_PROTOCOL),
                     before,
                 )
+
+    def test_invalid_view_state_leaves_bridge_state_unchanged(self):
+        bridge = ShortOcclusionBridge()
+        bridge.update((tracked_candidate(3),), timestamp_ms=100.0)
+        before = pickle.dumps(vars(bridge), protocol=pickle.HIGHEST_PROTOCOL)
+        invalid = TrackedHeadCandidate(
+            person_id=4,
+            candidate=replace(candidate(4), view_state="profile"),
+            track_age_frames=1,
+        )
+
+        with self.assertRaisesRegex(ValueError, "view_state"):
+            bridge.update((invalid,), timestamp_ms=200.0)
+
+        self.assertEqual(
+            pickle.dumps(vars(bridge), protocol=pickle.HIGHEST_PROTOCOL),
+            before,
+        )
 
     def test_invalid_person_id_or_bbox_leaves_bridge_state_unchanged(self):
         invalid_candidates = (

@@ -12,11 +12,13 @@ import torch
 from gazelle.runtime.model_registry import CheckpointCandidate, ModelSpec
 from gazelle.runtime.resources import (
     CandidateValidationResult,
+    RuntimeCheckpointResolution,
     ensure_checkpoint,
     load_checkpoint_state_dict,
     prepare_runtime_resources,
     resolve_cache_paths,
     resolve_checkpoint_candidate,
+    resolve_runtime_checkpoint,
     validate_gazelle_state_dict,
 )
 
@@ -229,6 +231,33 @@ class ResourcesTest(unittest.TestCase):
 
             self.assertEqual(observed_xformers_disabled, ["1"])
 
+    def test_prepare_runtime_resources_rejects_xformers_initialized_process(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            checkpoint = Path(tmpdir) / "user.pt"
+            torch.save(valid_state_dict(), checkpoint)
+            fake_module = types.ModuleType("gazelle.model")
+            fake_module.get_gazelle_model = lambda name: (_ for _ in ()).throw(
+                AssertionError("model construction should be rejected")
+            )
+            dinov2_attention = types.ModuleType("dinov2.layers.attention")
+            dinov2_attention.XFORMERS_AVAILABLE = True
+            config = SimpleNamespace(
+                model="gazelle_dinov2_vitb14_inout",
+                cache_dir=tmpdir,
+                checkpoint=str(checkpoint),
+                force_download=False,
+            )
+
+            with patch.dict(
+                sys.modules,
+                {
+                    "gazelle.model": fake_module,
+                    "dinov2.layers.attention": dinov2_attention,
+                },
+            ):
+                with self.assertRaisesRegex(RuntimeError, "already initialized.*xFormers"):
+                    prepare_runtime_resources(config)
+
     def test_prepare_runtime_resources_downloads_registered_checkpoint_with_mocked_model(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             fake_module = types.ModuleType("gazelle.model")
@@ -254,6 +283,114 @@ class ResourcesTest(unittest.TestCase):
                 Path(tmpdir) / "checkpoints" / "gazelle_dinov2_vitb14_inout.pt",
             )
             self.assertTrue(prepared.checkpoint_path.exists())
+
+    def test_resolve_runtime_checkpoint_uses_local_checkpoint_without_model_construction(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            checkpoint = Path(tmpdir) / "user.pt"
+            checkpoint.write_bytes(b"checkpoint")
+            paths = resolve_cache_paths(tmpdir)
+            config = SimpleNamespace(
+                model="gazelle_dinov2_vitb14_inout",
+                cache_dir=tmpdir,
+                checkpoint=str(checkpoint),
+                force_download=True,
+            )
+            fake_module = types.ModuleType("gazelle.model")
+            fake_module.get_gazelle_model = lambda name: (_ for _ in ()).throw(
+                AssertionError("model should not be constructed")
+            )
+
+            with patch.dict(sys.modules, {"gazelle.model": fake_module}):
+                with patch(
+                    "gazelle.runtime.resources.ensure_checkpoint",
+                    side_effect=AssertionError("registered checkpoint should not be resolved"),
+                ):
+                    with patch("gazelle.runtime.resources.torch.hub.set_dir") as set_hub_dir:
+                        resolved = resolve_runtime_checkpoint(config)
+
+            self.assertIsInstance(resolved, RuntimeCheckpointResolution)
+            self.assertEqual(resolved.model_name, config.model)
+            self.assertEqual(resolved.checkpoint_path, checkpoint)
+            self.assertEqual(resolved.cache_paths, paths)
+            self.assertEqual(resolved.checkpoint_source, "local")
+            self.assertIsNone(resolved.checkpoint_candidate)
+            self.assertTrue(paths.checkpoints_dir.is_dir())
+            self.assertTrue(paths.torch_hub_dir.is_dir())
+            set_hub_dir.assert_called_once_with(str(paths.torch_hub_dir))
+
+    def test_resolve_runtime_checkpoint_downloads_single_registered_candidate_without_model_construction(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            candidate = CheckpointCandidate(
+                "registry",
+                "model.pt",
+                "https://example.invalid/model.pt",
+            )
+            spec = ModelSpec(
+                "gazelle_dinov2_vitb14_inout",
+                "backbone",
+                True,
+                (448, 448),
+                (candidate,),
+            )
+            paths = resolve_cache_paths(tmpdir)
+            checkpoint = paths.checkpoints_dir / candidate.filename
+            config = SimpleNamespace(
+                model=spec.name,
+                cache_dir=tmpdir,
+                checkpoint=None,
+                force_download=True,
+            )
+            fake_module = types.ModuleType("gazelle.model")
+            fake_module.get_gazelle_model = lambda name: (_ for _ in ()).throw(
+                AssertionError("model should not be constructed")
+            )
+
+            with patch.dict(sys.modules, {"gazelle.model": fake_module}):
+                with patch("gazelle.runtime.resources.get_model_spec", return_value=spec):
+                    with patch(
+                        "gazelle.runtime.resources.ensure_checkpoint",
+                        return_value=checkpoint,
+                    ) as ensure_registered:
+                        resolved = resolve_runtime_checkpoint(config)
+
+            ensure_registered.assert_called_once_with(
+                candidate,
+                paths,
+                force_download=True,
+            )
+            self.assertEqual(resolved.checkpoint_path, checkpoint)
+            self.assertEqual(resolved.checkpoint_source, candidate.source)
+            self.assertIs(resolved.checkpoint_candidate, candidate)
+
+    def test_resolve_runtime_checkpoint_rejects_no_registered_candidate(self):
+        spec = ModelSpec("model", "backbone", False, (448, 448), ())
+        config = SimpleNamespace(
+            model=spec.name,
+            cache_dir=None,
+            checkpoint=None,
+            force_download=False,
+        )
+
+        with patch("gazelle.runtime.resources.get_model_spec", return_value=spec):
+            with self.assertRaisesRegex(ValueError, "exactly one checkpoint candidate.*found 0"):
+                resolve_runtime_checkpoint(config)
+
+    def test_resolve_runtime_checkpoint_rejects_multiple_registered_candidates(self):
+        candidates = (
+            CheckpointCandidate("first", "first.pt", "https://example.invalid/first.pt"),
+            CheckpointCandidate("second", "second.pt", "https://example.invalid/second.pt"),
+        )
+        spec = ModelSpec("model", "backbone", False, (448, 448), candidates)
+        config = SimpleNamespace(
+            model=spec.name,
+            cache_dir=None,
+            checkpoint=None,
+            force_download=False,
+        )
+
+        with patch("gazelle.runtime.resources.get_model_spec", return_value=spec):
+            with self.assertRaisesRegex(ValueError, "exactly one checkpoint candidate.*found 2"):
+                resolve_runtime_checkpoint(config)
 
     def test_resolve_checkpoint_candidate_selects_single_success(self):
         readme = CheckpointCandidate("README", "readme.pt", "https://example.invalid/readme.pt")

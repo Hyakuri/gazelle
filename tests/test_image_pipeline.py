@@ -796,15 +796,16 @@ class ImagePipelineTest(unittest.TestCase):
 
         self.assertEqual(fake.calls, [])
 
-    def test_build_real_predictor_disables_xformers_during_cpu_prepare(self):
+    def test_build_real_predictor_resolves_checkpoint_without_preparing_resources(self):
         with TemporaryDirectory() as tmpdir:
             observed = []
             config = make_config(cache_dir=tmpdir, device="cpu")
-            prepared = SimpleNamespace(checkpoint_path=Path(tmpdir) / "model.pt")
+            checkpoint_path = Path(tmpdir) / "model.pt"
+            resolved = SimpleNamespace(checkpoint_path=checkpoint_path)
 
-            def fake_prepare_runtime_resources(config):
-                observed.append(("prepare", os.environ.get("XFORMERS_DISABLED")))
-                return prepared
+            def fake_resolve_runtime_checkpoint(received_config):
+                observed.append(("resolve", received_config))
+                return resolved
 
             def fake_from_checkpoint(model_name, checkpoint_path, device, cache_dir):
                 observed.append(("from_checkpoint", os.environ.get("XFORMERS_DISABLED"), device))
@@ -812,23 +813,33 @@ class ImagePipelineTest(unittest.TestCase):
 
             with unittest.mock.patch.dict(os.environ, {}, clear=True):
                 with unittest.mock.patch(
-                    "gazelle.runtime.resources.prepare_runtime_resources",
-                    side_effect=fake_prepare_runtime_resources,
+                    "gazelle.runtime.resources.resolve_runtime_checkpoint",
+                    side_effect=fake_resolve_runtime_checkpoint,
                 ):
                     with unittest.mock.patch(
-                        "gazelle.runtime.predictor.GazellePredictor.from_checkpoint",
-                        side_effect=fake_from_checkpoint,
+                        "gazelle.runtime.resources.prepare_runtime_resources",
+                        side_effect=AssertionError("prepare_runtime_resources should not be called"),
                     ):
-                        predictor = _build_real_predictor(config)
+                        with unittest.mock.patch(
+                            "gazelle.runtime.predictor.GazellePredictor.from_checkpoint",
+                            side_effect=fake_from_checkpoint,
+                        ) as from_checkpoint:
+                            predictor = _build_real_predictor(config)
 
                 self.assertIsNone(os.environ.get("XFORMERS_DISABLED"))
 
         self.assertEqual(predictor, "predictor")
+        from_checkpoint.assert_called_once_with(
+            config.model,
+            checkpoint_path,
+            device="cpu",
+            cache_dir=config.cache_dir,
+        )
         self.assertEqual(
             observed,
             [
-                ("prepare", "1"),
-                ("from_checkpoint", "1", "cpu"),
+                ("resolve", config),
+                ("from_checkpoint", None, "cpu"),
             ],
         )
 

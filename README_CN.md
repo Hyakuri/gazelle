@@ -231,9 +231,11 @@ pose 选项会分别准备 `pose_landmarker_lite.task`、`pose_landmarker_full.t
 
 `--head-source mediapipe` 现已接入 runtime head provider 工厂。provider 会组合已准备的资源、MediaPipe backend、head/pose fusion；视频还会使用 ByteTrack 跟踪和 500 ms 的短时遮挡桥接。图片 ID 确定且从零开始，视频 ID 来自 ByteTrack。传给 Gazelle 的 MediaPipe head bbox 始终是归一化且非 `None`。
 
+该集成刻意保持较小的模型边界：fusion/tracking 会生成有序的 `HeadObservation(person_id, bbox, confidence)` tuple，交给 `GazellePredictor.predict_frame(...)`；同时生成顺序对齐的 `HeadPerception` tuple，用于 observation sidecar 和渲染。只有归一化 head bbox、person ID 和可选 confidence 会跨过 predictor 边界；face bbox、face mesh、face keypoint、pose landmark、head pose 和 tracking state 都不会加入 Gazelle tensor input。Gazelle 会按相同人员顺序返回 heatmap、gaze peak、peak value 和可选 in/out score。这样既能利用 face/pose evidence 改进 head 定位，也能保持原始 Gazelle 模型 contract 不变。
+
 当前 `environment.yml` 中声明的依赖集合已经用真实 MediaPipe 0.10.35、通过 `trackers==2.5.0.post0` 接入的生产 ByteTrack、Gazelle/DINOv2 CUDA 单图推理，以及一段短视频渲染流程完成验证。因此，本文档现在将这个 NumPy 2.4.6 环境视为当前分阶段 runtime 的推荐端到端配置。这里不宣称已经验证可选的 Ultralytics YOLO 模型推理或导出能力。
 
-验证过程中仍可能看到两个非致命提示：`trackers` 关于 `target=None` 的弃用警告，以及部分 DINOv2 路径上的 xFormers-disabled 性能提示。它们属于已知限制说明，不表示结果错误。
+runtime 会在延迟导入 ByteTrack 时精确过滤 upstream `trackers` 的 `target=None` 弃用 warning，其他 `FutureWarning` 仍会正常显示。常规 CUDA 图片/视频推理会先解析 checkpoint 而不构建 DINOv2，然后只构建一次启用 xFormers 的 predictor。如果可选 Triton 不存在，并且用户没有设置 xFormers Triton override，模型构建期间会临时使用官方 `XFORMERS_FORCE_DISABLE_TRITON=1` 开关；这只跳过无效的 Triton 探测，不会关闭其他 xFormers operator，也不会修改 Conda 环境。`--prepare-only` 为了 strict-load 校验仍会有意关闭 xFormers，因此该路径上仍可能看到 DINOv2 非致命的 xFormers-disabled/not-available 状态 warning。由于 DINOv2 会在首次 import 时缓存 backend 选择，长生命周期 Python 进程若随后请求不兼容的 CPU/prepare-only 与启用 xFormers 的 CUDA 构建，现在会明确失败，而不是静默复用错误 backend；切换 backend mode 时应启动新进程。
 
 ### 独立 Head Observation Schema
 
@@ -241,7 +243,7 @@ pose 选项会分别准备 `pose_landmarker_lite.task`、`pose_landmarker_full.t
 
 每个人包含 `person_id`、`head_bbox_normalized` 和 `confidence`。head bbox 归一化到 `[0, 1]`，并保留 runtime bbox tuple 的顺序。rich MediaPipe perception 还会在适用时包含 face bbox、`state`、`view_state`、`observed`、`tracking`、face keypoint、pose-head landmark、facial transformation matrix，以及 yaw/pitch/roll head-pose evidence。rich perception 必须与 `result.heads` 一一对应且顺序相同，并在 person ID、head bbox 和可选 confidence 上一致。整数字段只接受数值上为整数的类型，并输出为 JSON integer；boolean 和 perception enum 必须使用其精确 contract 类型。所有数值输出都必须有限，且绝不嵌入 tensor。
 
-每次单图运行都会在 gaze 调度前写入这份独立 record 到 `head_observations.json`，与 `--head-source` 无关。每个视频帧也会先写独立 observation 行，再写 gaze 行。这些输出包含所选 provider、provider timing 字段、归一化的 head bbox，并且没有 head 时 `status="no_head"`。视频中的 `tracked_only` perception 只要仍带有 head bbox，就可以继续用于 Gazelle。
+每次单图运行都会在 gaze 调度前写入这份独立 record 到 `head_observations.json`，与 `--head-source` 无关。每个视频帧也会先写独立 observation 行，再写 gaze 行。这些输出包含所选 provider、provider timing 字段、归一化的 head bbox，并且没有 head 时 `status="no_head"`。视频中的 `tracked_only` perception 只要仍带有 head bbox，就可以继续用于 Gazelle。遮挡桥接期间会把最后观测到的 `view_state` 作为 stale metadata 保留（`observed=false`、`missed_ms` 为正数），但当前帧的 face bbox、landmark、transformation matrix 和数值 head pose 仍保持为空。
 
 出于隐私和输出体积考虑，默认省略全部 478 个 face landmark。传入 `--save-face-landmarks` 后才会在图片 `head_observations.json` 或视频 `head_observations.jsonl` 中包含它们；这会显著增加输出体积，并保留更多生物特征细节。
 
@@ -423,7 +425,7 @@ python main.py `
   --overwrite
 ```
 
-这些命令会构建真实 Gazelle predictor 和 DINOv2 backbone，加载 Gazelle checkpoint，执行推理，并写出输出目录。如果 `models/checkpoints` 或 `models/torch_hub` 为空，首次运行可能下载 Gazelle checkpoint、DINOv2 PyTorch Hub 仓库和 DINOv2 权重；再次运行相同命令时应复用缓存。CPU smoke test 可以使用 `--device cpu`；在 CPU 上构建 DINOv2 时，runtime 会临时关闭 xFormers，避免本地 CUDA-only xFormers wheel 强制使用不支持的 CPU attention kernel。
+这些命令会在每次图片运行中构建一次真实 Gazelle predictor 和 DINOv2 backbone，或在视频首个可用帧上构建一次，随后加载 Gazelle checkpoint、执行推理并写出输出目录。checkpoint 解析本身不会构建 DINOv2。如果 `models/checkpoints` 或 `models/torch_hub` 为空，首次运行可能下载 Gazelle checkpoint、DINOv2 PyTorch Hub 仓库和 DINOv2 权重；再次运行相同命令时应复用缓存。CPU smoke test 可以使用 `--device cpu`；在 CPU 上构建 DINOv2 时，runtime 会临时关闭 xFormers，避免本地 CUDA-only xFormers wheel 强制使用不支持的 CPU attention kernel。CUDA 构建会保持 xFormers 启用，并只在 Triton 不可用时跳过可选 Triton 探测。重复的 programmatic 构建可以复用该进程已经选择的 backend，但在不兼容的 CPU/prepare-only 与启用 xFormers 的 CUDA mode 之间切换时必须启动新进程。
 
 ### 编程式单帧 Predictor
 

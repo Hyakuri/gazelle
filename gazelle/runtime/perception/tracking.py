@@ -1,5 +1,6 @@
 import importlib
 import math
+import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from numbers import Integral, Real
@@ -23,6 +24,11 @@ _TRACKER_CONFIGURATION = {
     "lost_track_buffer": 15,
 }
 _DECAY_TIME_MS = 500.0
+_TRACKERS_TARGET_NONE_WARNING = (
+    r"target=None is deprecated since `v0\.8`; use `TargetMode\.NOTIFY` instead\. "
+    r"Will be removed in `v1\.0`\.\Z"
+)
+_TRACKERS_WARNING_MODULES = r"trackers\.core\.(?:botsort|sort)\.tracker\Z"
 
 
 @dataclass(frozen=True)
@@ -36,6 +42,7 @@ class TrackedHeadCandidate:
 class _BridgeState:
     head_bbox: Tuple[float, float, float, float]
     confidence: float
+    view_state: HeadViewState
     track_age_frames: int
     last_observed_timestamp_ms: float
     missed_frames: int = 0
@@ -138,7 +145,14 @@ class ByteTrackHeadTracker:
         if self._tracker_factory is not None:
             return self._tracker_factory
         try:
-            module = importlib.import_module("trackers")
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message=_TRACKERS_TARGET_NONE_WARNING,
+                    category=FutureWarning,
+                    module=_TRACKERS_WARNING_MODULES,
+                )
+                module = importlib.import_module("trackers")
         except (ImportError, ModuleNotFoundError) as exc:
             raise RuntimeError(
                 "ByteTrack head tracking requires the optional 'trackers' package"
@@ -481,7 +495,7 @@ class ShortOcclusionBridge:
             face_bbox=None,
             confidence=confidence,
             state=HeadPerceptionState.TRACKED_ONLY,
-            view_state=HeadViewState.UNKNOWN,
+            view_state=state.view_state,
             observed=False,
             track_age_frames=state.track_age_frames + state.missed_frames + 1,
             missed_frames=state.missed_frames + 1,
@@ -507,6 +521,8 @@ class ShortOcclusionBridge:
         confidence = _confidence(candidate.confidence)
         if not isinstance(candidate.state, HeadPerceptionState):
             raise ValueError("candidate state must be a HeadPerceptionState")
+        if not isinstance(candidate.view_state, HeadViewState):
+            raise ValueError("candidate view_state must be a HeadViewState")
         head_bbox = _normalized_box_copy(candidate.head_bbox)
         staged_candidate = replace(
             candidate,
@@ -521,6 +537,7 @@ class ShortOcclusionBridge:
         state = _BridgeState(
             head_bbox=head_bbox,
             confidence=confidence,
+            view_state=candidate.view_state,
             track_age_frames=track_age_frames,
             last_observed_timestamp_ms=timestamp_ms,
         )
@@ -574,6 +591,7 @@ class ShortOcclusionBridge:
             next_states[person_id] = _BridgeState(
                 head_bbox=state.head_bbox,
                 confidence=state.confidence,
+                view_state=state.view_state,
                 track_age_frames=state.track_age_frames,
                 last_observed_timestamp_ms=state.last_observed_timestamp_ms,
                 missed_frames=state.missed_frames + 1,

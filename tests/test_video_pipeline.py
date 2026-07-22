@@ -175,6 +175,56 @@ def make_config(**overrides):
 
 
 class VideoPipelineTest(unittest.TestCase):
+    def test_video_pipeline_preserves_ordered_head_observations_for_predictor(self):
+        heads = (
+            HeadObservation(7, (0.55, 0.15, 0.85, 0.65), 0.91),
+            HeadObservation(3, (0.10, 0.20, 0.35, 0.70), 0.82),
+        )
+        perceptions = tuple(
+            HeadPerception(
+                person_id=head.person_id,
+                head_bbox=head.bbox,
+                face_bbox=None,
+                confidence=head.confidence,
+                state=HeadPerceptionState.FACE_ONLY,
+                view_state=HeadViewState.FRONTAL,
+                observed=True,
+            )
+            for head in heads
+        )
+        frame = SimpleNamespace(index=0, timestamp_ms=0.0, image=object())
+        reader = FakeVideoReader(fps=5.0, frames=(frame,))
+        provider = FakeHeadProvider(
+            lambda frame_index: HeadFrameResult(
+                heads=heads,
+                perceptions=perceptions,
+            )
+        )
+        predictor = FakePredictor()
+
+        with TemporaryDirectory() as tmpdir:
+            config = make_config(
+                input_path=str(Path(tmpdir) / "clip.mp4"),
+                output_dir=str(Path(tmpdir) / "outputs"),
+            )
+            with patch("gazelle.runtime.pipeline.VideoFrameReader", return_value=reader):
+                with patch(
+                    "gazelle.runtime.pipeline.build_head_provider_from_config",
+                    return_value=provider,
+                ):
+                    run_video_pipeline(
+                        config,
+                        predictor_factory=lambda config: predictor,
+                    )
+
+        predictor_heads = predictor.calls[0][1]
+        self.assertEqual(
+            tuple((head.person_id, head.bbox) for head in predictor_heads),
+            tuple((head.person_id, head.bbox) for head in heads),
+        )
+        self.assertTrue(all(isinstance(head, HeadObservation) for head in predictor_heads))
+        self.assertTrue(all(not isinstance(head, HeadPerception) for head in predictor_heads))
+
     def test_video_renderer_receives_perceptions_only_for_ok_frames(self):
         perceptions = tuple(
             HeadPerception(
