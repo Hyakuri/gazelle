@@ -24,21 +24,29 @@ When adding user-facing features, scripts, CLI arguments, environment requiremen
 
 ## Installation
 
-The current runtime work in this fork is validated against the existing local Conda environment named `Gazelle`. Prefer that environment when developing or running the staged CLI:
+`environment.yml` is the current recommended Gazelle environment. It documents the validated NumPy 2.4.6 stack for this fork, including Python 3.11, PyTorch 2.6.0 + CUDA 12.6 wheels, xFormers 0.0.29.post3, MediaPipe 0.10.35, production ByteTrack dependencies (`trackers==2.5.0.post0`, `supervision==0.29.1`), and `ultralytics==8.4.104` for the validated dependency transaction.
+
+`environment_1.0.yml` preserves the previous NumPy 1.26.4 configuration as a rollback/reference copy of the earlier Gazelle environment definition. Both files declare the Conda environment name `Gazelle`, so only create one environment with that name at a time.
+
+For the current workflow, keep using the validated `Gazelle` environment:
 
 ```powershell
 conda activate Gazelle
 pip install -e .
 ```
 
-The repository `environment.yml` is aligned to the locally verified runtime environment: Python 3.11, PyTorch 2.6.0 + CUDA 12.6 wheels, TorchVision 0.21.0 + CUDA 12.6, TorchAudio 2.6.0 + CUDA 12.6, OpenCV 4.11.0, and xFormers 0.0.29. The original upstream Gazelle environment file is no longer the primary baseline for this fork's runtime pipeline. If you already have a working `Gazelle` environment, activate it instead of downgrading packages to match older upstream settings.
-
-On a fresh machine, `environment.yml` documents the expected package set:
+On a fresh machine, create the current environment from `environment.yml`:
 
 ```powershell
 conda env create -f environment.yml
 conda activate Gazelle
 pip install -e .
+```
+
+If you need the legacy NumPy 1.26.4 definition alongside the current environment for comparison or rollback, override the name when you create it:
+
+```powershell
+conda env create -f environment_1.0.yml --name Gazelle-1.0
 ```
 
 After activating `Gazelle`, these commands validate the CLI and prepare the default local model cache:
@@ -214,7 +222,9 @@ Default unit tests use fake downloaders and do not access the network. The pinne
 
 `--head-source mediapipe` is now wired into the runtime head-provider factory. The provider composes prepared resources, the MediaPipe backend, head/pose fusion, video ByteTrack tracking, and the 500 ms short-occlusion bridge. Image IDs are deterministic and start at zero; video IDs come from ByteTrack. Gazelle receives normalized, non-`None` MediaPipe head bboxes.
 
-This remains a staged integration: dependency/environment declaration is deferred. The final recommended end-to-end setup is not complete, and this documentation does not claim real MediaPipe, tracker, or Gazelle validation.
+The current `environment.yml` dependency set has been validated with real MediaPipe 0.10.35, production ByteTrack via `trackers==2.5.0.post0`, Gazelle/DINOv2 CUDA image inference, and a short rendered video pipeline. This repository now treats that NumPy 2.4.6 environment as the recommended end-to-end setup for the staged runtime work. Optional Ultralytics YOLO model inference and export have not been validated and are not claimed here.
+
+During validation, the pipeline still surfaced a non-fatal `trackers` deprecation warning related to `target=None`, and some DINOv2 paths may emit an xFormers-disabled performance warning. Those warnings are noted as limitations rather than correctness failures.
 
 ### Independent Head Observation Schema
 

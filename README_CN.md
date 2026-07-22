@@ -30,21 +30,29 @@
 
 ## 安装方式
 
-当前 fork 的 runtime pipeline 以本地已经验证过的 Conda 环境 `Gazelle` 为推荐环境。开发或运行当前分阶段 CLI 时，优先激活这个环境：
+`environment.yml` 是当前推荐使用的 Gazelle 环境定义，记录了这次已经验证的 NumPy 2.4.6 依赖栈，包括 Python 3.11、PyTorch 2.6.0 + CUDA 12.6 wheels、xFormers 0.0.29.post3、MediaPipe 0.10.35，以及生产 ByteTrack 依赖 `trackers==2.5.0.post0`、`supervision==0.29.1`，并保留了本次验证事务中的 `ultralytics==8.4.104`。
+
+`environment_1.0.yml` 保留了之前的 NumPy 1.26.4 配置，可用于回滚或对照。两个 YAML 文件里的环境名都声明为 `Gazelle`，因此同一时间只应创建一个名为 `Gazelle` 的环境。
+
+当前正常工作流仍然是激活已经验证过的 `Gazelle` 环境：
 
 ```powershell
 conda activate Gazelle
 pip install -e .
 ```
 
-仓库中的 `environment.yml` 已对齐本地验证环境：Python 3.11、PyTorch 2.6.0 + CUDA 12.6 wheels、TorchVision 0.21.0 + CUDA 12.6、TorchAudio 2.6.0 + CUDA 12.6、OpenCV 4.11.0，以及 xFormers 0.0.29。原始 upstream Gazelle 的旧环境配置不再作为本 fork 当前 runtime pipeline 的主要依据。如果你已经有可运行的本地 `Gazelle` 环境，请优先激活它，不要为了匹配旧 upstream 设置而降级当前环境。
-
-如果是在一台全新机器上配置，`environment.yml` 记录了当前预期的包版本：
+如果是在全新机器上配置当前推荐环境，请使用 `environment.yml`：
 
 ```powershell
 conda env create -f environment.yml
 conda activate Gazelle
 pip install -e .
+```
+
+如果你需要把旧版 NumPy 1.26.4 环境作为并行对照保留下来，请在创建 `environment_1.0.yml` 时显式覆盖环境名：
+
+```powershell
+conda env create -f environment_1.0.yml --name Gazelle-1.0
 ```
 
 激活 `Gazelle` 后，建议先运行以下命令验证 CLI，并准备默认本地模型缓存：
@@ -223,7 +231,9 @@ pose 选项会分别准备 `pose_landmarker_lite.task`、`pose_landmarker_full.t
 
 `--head-source mediapipe` 现已接入 runtime head provider 工厂。provider 会组合已准备的资源、MediaPipe backend、head/pose fusion；视频还会使用 ByteTrack 跟踪和 500 ms 的短时遮挡桥接。图片 ID 确定且从零开始，视频 ID 来自 ByteTrack。传给 Gazelle 的 MediaPipe head bbox 始终是归一化且非 `None`。
 
-这仍是分阶段集成：依赖/环境声明留待后续任务。最终推荐的端到端配置尚未完成，本文档不宣称已经进行了真实的 MediaPipe、tracker 或 Gazelle 验证。
+当前 `environment.yml` 中声明的依赖集合已经用真实 MediaPipe 0.10.35、通过 `trackers==2.5.0.post0` 接入的生产 ByteTrack、Gazelle/DINOv2 CUDA 单图推理，以及一段短视频渲染流程完成验证。因此，本文档现在将这个 NumPy 2.4.6 环境视为当前分阶段 runtime 的推荐端到端配置。这里不宣称已经验证可选的 Ultralytics YOLO 模型推理或导出能力。
+
+验证过程中仍可能看到两个非致命提示：`trackers` 关于 `target=None` 的弃用警告，以及部分 DINOv2 路径上的 xFormers-disabled 性能提示。它们属于已知限制说明，不表示结果错误。
 
 ### 独立 Head Observation Schema
 
