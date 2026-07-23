@@ -1,6 +1,8 @@
 # Gaze-LLE
 #### CVPR 2025 Highlight
 
+有关完整的 runtime 环境设置、全部 CLI 选项、输入/输出 schema 以及可运行的图像/视频工作流，请参阅[项目使用指南](docs/USAGE_CN.md)。
+
 [English README](README.md)
 
 [Gaze-LLE: Gaze Target Estimation via Large-Scale Learned Encoders](https://arxiv.org/abs/2412.09586)

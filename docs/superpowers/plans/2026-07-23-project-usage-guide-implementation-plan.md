@@ -296,4 +296,3 @@ Post an English section followed by `---` and a concise Chinese section. Include
 - both commits:
   `Document project usage guide design` and
   `Add comprehensive project usage guides`.
-
