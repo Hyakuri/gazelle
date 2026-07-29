@@ -10,7 +10,7 @@ import numpy as np
 import torch
 
 from gazelle.runtime.config import RuntimeConfig
-from gazelle.runtime.contracts import GazePrediction, HeadObservation
+from gazelle.runtime.contracts import GazePrediction, GazeStatus, HeadObservation
 from gazelle.runtime.media import VideoFrameReader
 from gazelle.runtime.pipeline import build_head_provider_from_config, run_video_pipeline
 from gazelle.runtime.perception.contracts import (
@@ -18,6 +18,9 @@ from gazelle.runtime.perception.contracts import (
     HeadPerception,
     HeadPerceptionState,
     HeadViewState,
+    ReferenceRay2D,
+    ReferenceRayProjectionStatus,
+    ReferenceRaySource,
 )
 from gazelle.runtime.perception.provider import MediaPipeHeadProvider
 
@@ -189,6 +192,14 @@ class VideoPipelineTest(unittest.TestCase):
                 state=HeadPerceptionState.FACE_ONLY,
                 view_state=HeadViewState.FRONTAL,
                 observed=True,
+                face_pose_reference_ray=ReferenceRay2D(
+                    source=ReferenceRaySource.FACE_POSE,
+                    origin=(0.5, 0.3),
+                    direction=(1.0, 0.0),
+                    endpoint=(0.9, 0.3),
+                    confidence=head.confidence,
+                    projection_status=ReferenceRayProjectionStatus.AVAILABLE,
+                ),
             )
             for head in heads
         )
@@ -225,7 +236,7 @@ class VideoPipelineTest(unittest.TestCase):
         self.assertTrue(all(isinstance(head, HeadObservation) for head in predictor_heads))
         self.assertTrue(all(not isinstance(head, HeadPerception) for head in predictor_heads))
 
-    def test_video_renderer_receives_perceptions_only_for_ok_frames(self):
+    def test_video_renderer_receives_perceptions_on_skipped_and_no_head_frames(self):
         perceptions = tuple(
             HeadPerception(
                 person_id=index,
@@ -288,11 +299,13 @@ class VideoPipelineTest(unittest.TestCase):
                                 predictor_factory=lambda config: FakePredictor(),
                             )
 
-        self.assertEqual(len(render_calls), 1)
+        self.assertEqual(len(render_calls), 3)
         self.assertEqual(render_calls[0][2], (perceptions[0],))
+        self.assertEqual(render_calls[1][2], (perceptions[1],))
+        self.assertEqual(render_calls[2][2], ())
         self.assertIs(writer.images[0], rendered_marker)
-        self.assertIs(writer.images[1], frames[1].image)
-        self.assertIs(writer.images[2], frames[2].image)
+        self.assertIs(writer.images[1], rendered_marker)
+        self.assertIs(writer.images[2], rendered_marker)
 
     def test_perception_runs_on_every_frame_when_frame_step_is_two(self):
         with TemporaryDirectory() as tmpdir:
@@ -639,7 +652,7 @@ class VideoPipelineTest(unittest.TestCase):
         self.assertEqual(len(head_rows), 2)
         self.assertEqual(len(gaze_rows), 2)
 
-    def test_tracked_only_head_can_run_gazelle(self):
+    def test_tracked_only_head_preserves_continuity_without_running_gazelle(self):
         head = HeadObservation(9, (0.2, 0.2, 0.5, 0.6), 0.8)
         perception = HeadPerception(
             person_id=9,
@@ -651,6 +664,8 @@ class VideoPipelineTest(unittest.TestCase):
             observed=False,
             missed_frames=1,
             missed_ms=200.0,
+            gaze_eligible=False,
+            gaze_status=GazeStatus.TRACKED_NO_GAZE,
         )
         provider = FakeHeadProvider(
             lambda frame_index: HeadFrameResult(heads=(head,), perceptions=(perception,))
@@ -672,9 +687,9 @@ class VideoPipelineTest(unittest.TestCase):
             head_rows = read_jsonl(result.head_observations_jsonl_path)
             gaze_rows = read_jsonl(result.predictions_jsonl_path)
 
-        self.assertEqual(len(predictor.calls), 1)
+        self.assertEqual(len(predictor.calls), 0)
         self.assertEqual(head_rows[0]["people"][0]["state"], "tracked_only")
-        self.assertEqual(gaze_rows[0]["status"], "ok")
+        self.assertEqual(gaze_rows[0]["status"], "no_gaze")
 
     def test_build_head_provider_mediapipe_video_uses_source_fps_for_tracker(self):
         backend = SimpleNamespace(close=lambda: None)

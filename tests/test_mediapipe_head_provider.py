@@ -80,6 +80,27 @@ class FakeTracker:
             raise self.close_error
 
 
+class SequencedTracker:
+    def __init__(self, person_ids):
+        self._person_ids = iter(person_ids)
+
+    def update(self, candidates, **kwargs):
+        person_id = next(self._person_ids)
+        candidates = tuple(candidates)
+        if person_id is None or not candidates:
+            return ()
+        return (
+            TrackedHeadCandidate(
+                person_id=person_id,
+                candidate=candidates[0],
+                track_age_frames=1,
+            ),
+        )
+
+    def close(self):
+        return None
+
+
 class FakeTrackerFactory:
     def __init__(self, tracker):
         self.tracker = tracker
@@ -214,6 +235,34 @@ class MediaPipeHeadProviderTest(unittest.TestCase):
         self.assertFalse(bridged.perceptions[0].observed)
         self.assertIn("tracking", observed.timings_ms)
         self.assertEqual(tracker.calls[0][1]["image_width"], 100)
+
+    def test_single_person_post_bridge_arbitration_prunes_stale_identity(self):
+        backend = FakeBackend(
+            [
+                SimpleNamespace(faces=(), poses=(), timings_ms={}),
+                SimpleNamespace(faces=(), poses=(), timings_ms={}),
+                SimpleNamespace(faces=(), poses=(), timings_ms={}),
+            ]
+        )
+        provider = MediaPipeHeadProvider.create(
+            make_config(max_heads=1),
+            media_type="video",
+            source_fps=25.0,
+            backend_factory=lambda config, *, media_type: backend,
+            tracker_factory=lambda source_fps: SequencedTracker((1, 2, None)),
+        )
+
+        with patch(
+            "gazelle.runtime.perception.provider.build_head_candidates",
+            side_effect=((make_candidate(),), (make_candidate(confidence=0.6),), ()),
+        ):
+            first = provider.get_frame_result("first", 0, 0.0, 100, 80)
+            replacement = provider.get_frame_result("replacement", 1, 100.0, 100, 80)
+            bridged = provider.get_frame_result("missing", 2, 200.0, 100, 80)
+
+        self.assertEqual(tuple(item.person_id for item in first.perceptions), (1,))
+        self.assertEqual(tuple(item.person_id for item in replacement.perceptions), (2,))
+        self.assertEqual(tuple(item.person_id for item in bridged.perceptions), (2,))
 
     def test_empty_fusion_result_is_empty_and_get_heads_remains_compatible(self):
         backend = FakeBackend(

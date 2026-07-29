@@ -7,7 +7,7 @@ import unittest
 
 import torch
 
-from gazelle.runtime.contracts import GazePrediction, HeadObservation
+from gazelle.runtime.contracts import GazePrediction, GazeStatus, HeadObservation
 from gazelle.runtime.perception.contracts import (
     HeadFrameResult,
     HeadPerception,
@@ -15,6 +15,10 @@ from gazelle.runtime.perception.contracts import (
     HeadPoseAngles,
     HeadViewState,
     NormalizedLandmark,
+    PoseHeadKeypoints,
+    ReferenceRay2D,
+    ReferenceRayProjectionStatus,
+    ReferenceRaySource,
 )
 from gazelle.runtime.perception.outputs import (
     head_frame_to_json_dict,
@@ -78,6 +82,66 @@ def make_rich_head_result():
 
 
 class OutputsTest(unittest.TestCase):
+    def test_head_frame_serializes_named_pose_keypoints_reference_rays_and_eligibility(self):
+        landmark = NormalizedLandmark(x=0.5, y=0.4, visibility=0.9)
+        ray = ReferenceRay2D(
+            source=ReferenceRaySource.FACE_POSE,
+            origin=(0.5, 0.4),
+            direction=(1.0, 0.0),
+            endpoint=(0.8, 0.4),
+            confidence=0.9,
+            projection_status=ReferenceRayProjectionStatus.AVAILABLE,
+        )
+        perception = HeadPerception(
+            person_id=4,
+            head_bbox=(0.2, 0.2, 0.6, 0.7),
+            face_bbox=(0.25, 0.25, 0.55, 0.60),
+            confidence=0.9,
+            state=HeadPerceptionState.FACE_POSE,
+            view_state=HeadViewState.PROFILE,
+            observed=True,
+            pose_head_keypoints=PoseHeadKeypoints(nose=landmark),
+            face_pose_reference_ray=ray,
+            gaze_eligible=False,
+            gaze_status=GazeStatus.REJECTED_LOW_QUALITY,
+        )
+        result = HeadFrameResult(
+            heads=(HeadObservation(4, perception.head_bbox, 0.9),),
+            perceptions=(perception,),
+        )
+
+        record = head_frame_to_json_dict(
+            frame_index=0,
+            timestamp_ms=0.0,
+            image_width=640,
+            image_height=480,
+            provider="mediapipe",
+            result=result,
+        )
+
+        person = record["people"][0]
+        self.assertEqual(person["pose_head_keypoints"]["nose"]["x"], 0.5)
+        self.assertEqual(
+            person["face_pose_reference_ray"]["source"],
+            "face_pose",
+        )
+        self.assertEqual(
+            person["face_pose_reference_ray"]["projection_status"],
+            "available",
+        )
+        self.assertFalse(person["gaze_eligible"])
+        self.assertEqual(person["gaze_status"], "rejected_low_quality")
+
+    def test_prediction_json_includes_final_gaze_status(self):
+        prediction = replace(
+            make_prediction(),
+            gaze_status=GazeStatus.OUT_OF_FRAME,
+        )
+
+        record = prediction_to_json_dict(prediction)
+
+        self.assertEqual(record["gaze_status"], "out_of_frame")
+
     def test_head_frame_serializes_minimal_provider_heads(self):
         record = head_frame_to_json_dict(
             frame_index=1,

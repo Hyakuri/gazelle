@@ -9,8 +9,12 @@ import numpy as np
 import torch
 from PIL import Image, ImageDraw, ImageFont
 
+from gazelle.runtime.contracts import GazeStatus
 from gazelle.runtime.geometry import normalized_bbox_to_pixel
-from gazelle.runtime.perception.contracts import HeadPerceptionState
+from gazelle.runtime.perception.contracts import (
+    HeadPerceptionState,
+    ReferenceRayProjectionStatus,
+)
 
 
 SUPPORTED_RENDERED_SUFFIXES = (".png", ".jpg", ".jpeg")
@@ -19,6 +23,8 @@ FACE_BOX_COLOR = (0, 220, 255)
 FACE_KEYPOINT_COLOR = (255, 215, 0)
 POSE_HEAD_POINT_COLOR = (255, 64, 192)
 FACE_MESH_COLOR = (64, 255, 128)
+FACE_POSE_RAY_COLOR = (0, 160, 255)
+POSE_HEAD_RAY_COLOR = (255, 128, 0)
 TRACKED_ONLY_ALPHA = 112
 
 
@@ -36,6 +42,8 @@ class RenderOptions:
     draw_pose_head_points: bool = False
     draw_face_mesh: bool = False
     draw_track_state: bool = True
+    draw_face_pose_ray: bool = False
+    draw_pose_head_ray: bool = False
     heatmap_contour_quantile: float = 0.90
     heatmap_contour_width: Optional[int] = None
     arrow_width: Optional[int] = None
@@ -278,6 +286,8 @@ def draw_gaze_peak_x(
 
 def build_prediction_label(prediction) -> str:
     label = "id={}".format(prediction.person_id)
+    if prediction.gaze_status is not GazeStatus.VALID:
+        label = "{} gaze={}".format(label, prediction.gaze_status.value)
     if prediction.inout_score is not None:
         label = "{} inout={:.2f}".format(label, float(prediction.inout_score))
     if prediction.heatmap_peak_value is not None:
@@ -333,7 +343,10 @@ def draw_prediction(
         ymax = _clamp(ymax, 0.0, float(image_height - 1))
         draw_context.rectangle((xmin, ymin, xmax, ymax), outline=color, width=line_width)
 
-    if options.draw_gaze_arrow:
+    if (
+        prediction.gaze_status is GazeStatus.VALID
+        and options.draw_gaze_arrow
+    ):
         draw_gaze_arrow(
             draw_context,
             bbox=prediction.bbox,
@@ -344,7 +357,10 @@ def draw_prediction(
             width=arrow_width,
         )
 
-    if options.draw_gaze_peak:
+    if (
+        prediction.gaze_status is GazeStatus.VALID
+        and options.draw_gaze_peak
+    ):
         draw_gaze_peak_x(
             draw_context,
             gaze_peak=prediction.gaze_peak,
@@ -435,6 +451,54 @@ def _draw_landmark_points(
         )
 
 
+def _draw_reference_ray(
+    draw_context,
+    ray,
+    *,
+    image_width: int,
+    image_height: int,
+    color,
+    width: int,
+) -> None:
+    origin = normalized_point_to_pixel(
+        ray.origin,
+        image_width,
+        image_height,
+    )
+    marker_radius = max(2, width + 1)
+    if (
+        ray.projection_status is ReferenceRayProjectionStatus.AVAILABLE
+        and ray.endpoint is not None
+    ):
+        endpoint = normalized_point_to_pixel(
+            ray.endpoint,
+            image_width,
+            image_height,
+        )
+        draw_context.line(origin + endpoint, fill=color, width=width)
+        draw_context.ellipse(
+            (
+                endpoint[0] - marker_radius,
+                endpoint[1] - marker_radius,
+                endpoint[0] + marker_radius,
+                endpoint[1] + marker_radius,
+            ),
+            outline=color,
+            width=max(1, width),
+        )
+        return
+    draw_context.ellipse(
+        (
+            origin[0] - marker_radius,
+            origin[1] - marker_radius,
+            origin[0] + marker_radius,
+            origin[1] + marker_radius,
+        ),
+        outline=color,
+        width=max(1, width),
+    )
+
+
 def draw_perception_overlay(
     rendered: Image.Image,
     perception,
@@ -508,6 +572,26 @@ def draw_perception_overlay(
             radius=max(1, line_width),
         )
 
+    if options.draw_face_pose_ray and perception.face_pose_reference_ray is not None:
+        _draw_reference_ray(
+            draw,
+            perception.face_pose_reference_ray,
+            image_width=image_width,
+            image_height=image_height,
+            color=FACE_POSE_RAY_COLOR + (alpha,),
+            width=max(1, line_width),
+        )
+
+    if options.draw_pose_head_ray and perception.pose_head_reference_ray is not None:
+        _draw_reference_ray(
+            draw,
+            perception.pose_head_reference_ray,
+            image_width=image_width,
+            image_height=image_height,
+            color=POSE_HEAD_RAY_COLOR + (alpha,),
+            width=max(1, line_width),
+        )
+
     if options.draw_track_state:
         x_anchor = int(head_bbox[0])
         y_anchor = min(image_height - 1, int(head_bbox[1]) + 2)
@@ -537,6 +621,8 @@ class PredictionRenderer:
 
         if perceptions:
             for prediction in predictions:
+                if prediction.gaze_status is not GazeStatus.VALID:
+                    continue
                 color = stable_color_for_person(prediction.person_id)
                 if self.options.draw_heatmap and prediction.heatmap is not None:
                     overlay = heatmap_to_overlay(
@@ -599,7 +685,11 @@ class PredictionRenderer:
 
         for prediction in predictions:
             color = stable_color_for_person(prediction.person_id)
-            if self.options.draw_heatmap and prediction.heatmap is not None:
+            if (
+                prediction.gaze_status is GazeStatus.VALID
+                and self.options.draw_heatmap
+                and prediction.heatmap is not None
+            ):
                 overlay = heatmap_to_overlay(
                     prediction.heatmap,
                     image_width=image_width,
@@ -608,7 +698,11 @@ class PredictionRenderer:
                     alpha=self.options.heatmap_alpha,
                 )
                 rendered = Image.alpha_composite(rendered.convert("RGBA"), overlay).convert("RGB")
-            if self.options.draw_heatmap_contour and prediction.heatmap is not None:
+            if (
+                prediction.gaze_status is GazeStatus.VALID
+                and self.options.draw_heatmap_contour
+                and prediction.heatmap is not None
+            ):
                 mask = heatmap_to_topk_mask(
                     prediction.heatmap,
                     quantile=self.options.heatmap_contour_quantile,

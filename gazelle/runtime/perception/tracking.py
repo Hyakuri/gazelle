@@ -476,9 +476,12 @@ class ShortOcclusionBridge:
             track_age_frames=tracked.track_age_frames,
             face_keypoints=candidate.face_keypoints,
             pose_head_landmarks=candidate.pose_head_landmarks,
+            pose_head_keypoints=candidate.pose_head_keypoints,
             facial_transformation_matrix=candidate.facial_transformation_matrix,
             head_pose=candidate.head_pose,
             face_landmarks=candidate.face_landmarks,
+            face_pose_reference_ray=candidate.face_pose_reference_ray,
+            pose_head_reference_ray=candidate.pose_head_reference_ray,
         )
 
     @staticmethod
@@ -604,6 +607,17 @@ class ShortOcclusionBridge:
     def reset(self) -> None:
         self._states.clear()
         self._last_timestamp_ms = None
+
+    def retain_person_ids(self, person_ids) -> None:
+        retained = {
+            _nonnegative_int(person_id, name="person_id")
+            for person_id in tuple(person_ids)
+        }
+        self._states = {
+            person_id: state
+            for person_id, state in self._states.items()
+            if person_id in retained
+        }
 
 
 __all__ = [

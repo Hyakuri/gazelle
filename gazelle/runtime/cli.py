@@ -162,6 +162,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="Do not draw MediaPipe person, state, and confidence labels.",
     )
     parser.add_argument(
+        "--face-pose-ray",
+        action="store_true",
+        help="Draw the uncalibrated 2D reference ray from MediaPipe face head pose.",
+    )
+    parser.add_argument(
+        "--pose-head-ray",
+        action="store_true",
+        help="Draw the independent 2D reference ray from MediaPipe pose head keypoints.",
+    )
+    parser.add_argument(
+        "--reference-ray-length",
+        type=float,
+        default=2.5,
+        help="Reference ray length as a positive multiple of the head-box diagonal.",
+    )
+    parser.add_argument(
+        "--gaze-inout-threshold",
+        type=float,
+        default=0.5,
+        help="Minimum Gazelle in/out score in [0, 1] for gaze overlay rendering.",
+    )
+    parser.add_argument(
         "--no-gaze-peak",
         action="store_true",
         help="Do not draw gaze peak markers in rendered output.",

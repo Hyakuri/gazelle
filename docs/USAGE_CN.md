@@ -48,7 +48,11 @@ python main.py --input assets\the_office.png `
   --face-box `
   --face-keypoints `
   --pose-head-points `
-  --face-mesh
+  --face-mesh `
+  --face-pose-ray `
+  --pose-head-ray `
+  --reference-ray-length 2.5 `
+  --gaze-inout-threshold 0.5
 ```
 
 下面的视频工作流明确是模板，因为仓库没有提交任何视频。执行前将 `USER_INPUT_PATH` 替换为确实存在的受支持视频；only the input path must be supplied（只需提供输入路径）。保留其余全部参数，即可维持 MediaPipe、ByteTrack、500 ms bridge、Gazelle、cache 选择和 rendering：
@@ -69,20 +73,25 @@ python main.py --input USER_INPUT_PATH `
   --face-box `
   --face-keypoints `
   --pose-head-points `
-  --face-mesh
+  --face-mesh `
+  --face-pose-ray `
+  --pose-head-ray `
+  --reference-ray-length 2.5 `
+  --gaze-inout-threshold 0.5
 ```
 
 ```text
 MediaPipe Face Detector / Face Landmarker / Pose Landmarker
-  -> fusion
+  -> fusion + 两条独立 face/pose 2D reference ray
   -> ByteTrack and 500 ms short-occlusion bridge for video
-  -> normalized HeadObservation
-  -> GazellePredictor
-  -> gaze heatmap / peak / in-out score
+  -> post-bridge max-head arbitration
+  -> normalized HeadObservation + conservative gaze eligibility
+  -> 仅 eligible head -> GazellePredictor
+  -> gaze heatmap / peak / in-out score + final gaze_status
   -> head_observations.jsonl / predictions.jsonl / rendered.mp4
 ```
 
-首次使用可能下载 Gazelle checkpoint、DINOv2 repository/weight 和 MediaPipe task asset；有效 cache entry 会被复用。图像 ID 从零开始，视频 ID 来自 ByteTrack。`GazellePredictor` 接收有序 `HeadObservation`，但 Gazelle model 只消费 `"images"` tensor 和 `"bboxes"` list。wrapper 保留 `person_id`，用于把 model result 关联回输出 person。`confidence` 留在 observation sidecar 中，且 is not model input。
+首次使用可能下载 Gazelle checkpoint、DINOv2 repository/weight 和 MediaPipe task asset；有效 cache entry 会被复用。图像 ID 从零开始，视频 ID 来自 ByteTrack。`GazellePredictor` 只接收有序且 eligible 的 `HeadObservation`，Gazelle model 仍只消费 `"images"` tensor 和 `"bboxes"` list。`tracked_only`、`pose_only`、背脸/遮挡及低质量 rejection 会保留在 observation/rendering 中，但不会运行 Gazelle。eligibility 要求 perception confidence 与 face-ray confidence 均至少为 `0.50`，model-boundary selector 会再次复核 state 与 quality。wrapper 保留 `person_id` 以关联结果；`confidence` 和两条 reference ray 都只属于 sidecar metadata，is not model input。
 
 ## 5. 支持的模型和媒体格式
 
@@ -130,6 +139,10 @@ MediaPipe Face Detector / Face Landmarker / Pose Landmarker
 | `--pose-head-points` | flag | `false` | MediaPipe rendering | 有数据时绘制 pose head/shoulder point。 |
 | `--face-mesh` | flag | `false` | MediaPipe rendering | 绘制当前内存 face landmarks；独立于 `--save-face-landmarks`。 |
 | `--no-track-state` | flag | `false` | MediaPipe rendering | track-state labels default on；此 flag 隐藏 person/state/confidence label，observation sidecar 仍保留 tracking state。 |
+| `--face-pose-ray` | flag | `false` | MediaPipe rendering | 绘制蓝色、无相机标定的 2D face head-pose reference ray；近轴向姿态只显示 origin marker。 |
+| `--pose-head-ray` | flag | `false` | MediaPipe rendering | 绘制橙色、由 Pose Landmarker nose/eye 或 nose/ear geometry 独立估计的 2D reference ray。 |
+| `--reference-ray-length` | finite float，大于 `0` | `2.5` | MediaPipe perception/rendering | 两条 ray 的长度均为 normalized head-box diagonal 的倍数，再 clipping 到画面边界。 |
+| `--gaze-inout-threshold` | finite float，范围 `[0, 1]` | `0.5` | Gazelle output/rendering | 低于阈值时标记 `out_of_frame` 并抑制 Gazelle heatmap/arrow/peak，但保留 prediction metadata 及可选 bbox/label。 |
 | `--no-gaze-peak` | flag | `false` | rendering | 只隐藏 gaze peak marker；prediction 不变。 |
 | `--no-gaze-arrow` | flag | `false` | rendering | 隐藏 head-center-to-peak arrow；arrow 还要求非 null bbox。 |
 | `--draw-heatmap-contour` | flag | `false` | rendering | 使用 quantile/width option 启用高响应 contour。 |
@@ -206,7 +219,7 @@ python main.py --input USER_INPUT_PATH --output-dir outputs --overwrite `
 
 只有 `--save-rendered` 才写渲染。提供 MediaPipe perception 时，每个有 head box 的 person 都绘制 **MediaPipe primary perception head box**：当前 observation 为实线，`tracked_only` 为虚线/半透明。**track-state labels default on**；`--no-track-state` 只关闭 person/state/confidence label，不改变 JSON/JSONL。
 
-`--head-box` 控制独立的 **Gazelle prediction bbox**，要求 prediction bbox 非 null。`--face-box`、`--face-keypoints`、`--pose-head-points`、`--face-mesh` 是辅助 MediaPipe opt-in，分别绘制 face box、最多六个 detector keypoint、pose head/shoulder point、当前内存 face mesh。heatmap、gaze peak、gaze arrow、普通 label 默认开启，对应 `--no-*` flag 关闭。`--draw-heatmap-contour --heatmap-contour-quantile 0.90 --heatmap-contour-width 3` 添加 contour。`skipped`/`no_head` video frame 仍会写入。
+`--head-box` 控制独立的 **Gazelle prediction bbox**，要求 prediction bbox 非 null。`--face-box`、`--face-keypoints`、`--pose-head-points`、`--face-mesh` 是辅助 MediaPipe opt-in。`--face-pose-ray` 绘制蓝色 Face Landmarker reference，`--pose-head-ray` 绘制橙色、独立计算的 Pose Landmarker reference。每条 reference ray 都是无相机标定的 2D head-direction diagnostic，不是真实 eye gaze，并以最终 fused head bbox 计算请求长度。face origin 优先使用双眼中点；仅在至少三个 finite current face keypoints 仍存在时才 fallback 到 face-box center。接近 camera axis 时只显示 origin ring，因为不存在可信的 image-plane line。heatmap、gaze peak、gaze arrow、普通 label 默认开启，对应 `--no-*` flag 关闭。只有 `gaze_status=valid` 才绘制 Gazelle heatmap、contour、arrow 和 peak；`out_of_frame` 仍可保留 bbox 和 status label。`skipped`/`no_head`/`no_gaze` video frame 仍会写入并可保留 MediaPipe overlay。
 
 ## 11. JSON/JSONL 输入示例
 
@@ -267,12 +280,17 @@ MediaPipe rich people 保留以上 field，并增加：
 | `state` | Required | enum string | `face_pose`、`face_only`、`pose_only` 或 `tracked_only`。 |
 | `view_state` | Required | enum string | `frontal`、`profile`、`back_or_occluded` 或 `unknown`。 |
 | `observed` | Required | boolean | 当前帧有 evidence 时为 `true`；bridge track 为 `false`。 |
+| `gaze_eligible` | Required | boolean | 当前 MediaPipe perception 是否允许送入 Gazelle；要求 current face state 且 perception/face-ray confidence 均至少为 `0.50`。 |
+| `gaze_status` | Conditional | enum string | 推理前 rejection reason：`unavailable_occluded`、`tracked_no_gaze` 或 `rejected_low_quality`。 |
 | `tracking` | Required | object | 包含 Required integer `track_age_frames`、Required integer `missed_frames`、Required finite-number `missed_ms`。 |
 | `face_bbox_normalized` | Conditional | number `[4]` | 当前 face bbox，顺序 `(xmin, ymin, xmax, ymax)`，clipping 到 `[0, 1]`。 |
 | `face_keypoints` | Conditional | landmark array | 存在时的 face-detector keypoint。 |
 | `pose_head_landmarks` | Conditional | landmark array | 存在时由 pose 得到的 head/shoulder landmark。 |
+| `pose_head_keypoints` | Conditional | named landmark object | 可靠的 `nose`、eye、ear、mouth 和 shoulder point；不依赖 filtered landmark order。 |
 | `facial_transformation_matrix` | Conditional | nested finite-number arrays | serializer preserves supplied row lengths。MediaPipe adapter 要求 at least three rows，且 at least three values in each of the first three rows；它 does not enforce rectangularity。 |
 | `head_pose` | Conditional | object | finite degree 值 `yaw_deg`、`pitch_deg`、`roll_deg`。 |
+| `face_pose_reference_ray` | Conditional | reference-ray object | 含 `source`、normalized origin/direction/endpoint、confidence、projection status 的 face reference。 |
+| `pose_head_reference_ray` | Conditional | reference-ray object | 使用相同 object shape 的独立 Pose Landmarker keypoint reference。 |
 | `face_landmarks` | Conditional | landmark array | 仅在数据可用且设置 `--save-face-landmarks` 时输出完整 face mesh。 |
 
 Landmark、matrix、head-pose value shape：
@@ -285,7 +303,7 @@ Landmark、matrix、head-pose value shape：
 | `facial_transformation_matrix` rows | Conditional | nested finite-number arrays | MediaPipe 通常提供 `4 x 4`，但 serializer preserves supplied row lengths；前三行之后的 row 可保留任意 supplied length。 |
 | `head_pose.yaw_deg`, `pitch_deg`, `roll_deg` | Required inside Conditional `head_pose` | finite number | 单位 degree 的 Euler-like head-pose angle。 |
 
-`track_age_frames` 是 track age；`missed_frames`、`missed_ms` 表示上次当前 observation 后连续 bridge reuse 的帧数和时间。因此 `tracked_only` 是 stale bridged box，不是 fresh detection。
+`track_age_frames` 是 track age；`missed_frames`、`missed_ms` 表示上次当前 observation 后连续 bridge reuse 的帧数和时间。因此 `tracked_only` 是 stale bridged box，不是 fresh detection，并且绝不会送入 Gazelle。单人模式在 bridge 后最多保留一个 identity，并裁掉被新 observation 替换的 stale bridge state。
 
 ### Prediction records
 
@@ -298,6 +316,7 @@ Landmark、matrix、head-pose value shape：
 | `gaze_peak_normalized` | Required, Nullable | number `[2]` 或 `null` | 有值时为 `[0, 1]` 中的 normalized gaze peak `[x, y]`。 |
 | `heatmap_peak_value` | Required, Nullable | finite number 或 `null` | prediction heatmap 的 peak value。 |
 | `inout_score` | Required, Nullable | finite number 或 `null` | 每种 model 都输出；非 in/out model 为 `null`。 |
+| `gaze_status` | Required | enum string | 应用 `--gaze-inout-threshold` 后为 `valid` 或 `out_of_frame`；null in/out score 仍为 `valid`。 |
 | `heatmap_path` | Conditional | string | 仅 image 且 `--save-heatmaps` 确实写入该 person tensor 时出现。 |
 
 图像 `predictions.json` 是一个 object：
@@ -314,7 +333,7 @@ Landmark、matrix、head-pose value shape：
 | Field | Presence | Type/shape | 含义 |
 | --- | --- | --- | --- |
 | `frame_index`, `timestamp_ms` | Required | integer；finite number | 与已写 observation frame 一致。 |
-| `status` | Required | enum string | `ok`、`no_head`、`skipped` 或 schema-supported `error`；`frame_step` 排除 frame 时 `skipped` 优先。 |
+| `status` | Required | enum string | `ok`、`no_head`、`no_gaze`、`skipped` 或 schema-supported `error`；`no_gaze` 表示有 head 但没有 eligible head，`frame_step` 排除 frame 时 `skipped` 优先。 |
 | `width`, `height` | Required | positive integer | frame pixel 尺寸。 |
 | `people` | Required | array | 除 `status` 为 `ok` 外均为空。 |
 | `inference_ms` | Conditional | finite number | Gazelle inference 已运行时输出。 |
@@ -322,7 +341,7 @@ Landmark、matrix、head-pose value shape：
 
 ### Run configuration
 
-`run_config.json` 先对已验证的 `RuntimeConfig` 执行 `dataclasses.asdict()`，因此 Python tuple 在 JSON 中成为 array。base object 始终含以下全部 40 个 key，包括值为 `null` 的 key。
+`run_config.json` 先对已验证的 `RuntimeConfig` 执行 `dataclasses.asdict()`，因此 Python tuple 在 JSON 中成为 array。base object 始终含以下全部 44 个 key，包括值为 `null` 的 key。
 
 #### Base RuntimeConfig fields
 
@@ -358,6 +377,10 @@ Landmark、matrix、head-pose value shape：
 | `draw_pose_head_points` | boolean (non-null) | 来自 `--pose-head-points` 的有效 positive pose-point state。 |
 | `draw_face_mesh` | boolean (non-null) | 来自 `--face-mesh` 的有效 positive face-mesh state。 |
 | `draw_track_state` | boolean (non-null) | 有效的 positive track-label state；只有 `--no-track-state` 使其为 false。 |
+| `draw_face_pose_ray` | boolean (non-null) | 来自 `--face-pose-ray` 的有效 positive face reference-ray state。 |
+| `draw_pose_head_ray` | boolean (non-null) | 来自 `--pose-head-ray` 的有效 positive pose reference-ray state。 |
+| `reference_ray_length` | number (non-null) | 来自 `--reference-ray-length` 的 positive finite head-box diagonal multiplier。 |
+| `gaze_inout_threshold` | number (non-null) | 来自 `--gaze-inout-threshold` 的 final Gazelle in/out rendering threshold，范围 `[0, 1]`。 |
 | `heatmap_contour_quantile` | number (non-null) | 来自 `--heatmap-contour-quantile` 的 finite contour threshold quantile，范围 `[0, 1]`。 |
 | `heatmap_contour_width` | integer or null (nullable) | 来自 `--heatmap-contour-width` 的 positive contour width；自动 width 时为 null。 |
 | `output_fps` | number or null (nullable) | 来自 `--output-fps` 的 positive finite fallback，未提供时为 null；video 会用 resolved writer/tracker FPS override。 |
@@ -369,7 +392,7 @@ Landmark、matrix、head-pose value shape：
 | `checkpoint` | string or null (nullable) | 来自 `--checkpoint` 的 local Gazelle checkpoint path；使用 registered resource 时为 null。 |
 | `force_download` | boolean (non-null) | `--force-download` 是否请求刷新 eligible registered resource。 |
 
-大多数 CLI name 通过把 hyphen 改为 underscore 得到 config name。显式 CLI-to-config rename 是 `--input` -> `input_path`、`--bbox` -> `bboxes`、`--person-id` -> `person_ids`。positive `draw_*` booleans 保存有效行为，而不是 negative flag 的拼写：`--no-heatmap` -> `draw_heatmap`、`--head-box` -> `draw_head_box`、`--no-gaze-peak` -> `draw_gaze_peak`、`--no-gaze-arrow` -> `draw_gaze_arrow`、`--draw-heatmap-contour` -> `draw_heatmap_contour`、`--no-labels` -> `draw_labels`、`--face-box` -> `draw_face_box`、`--face-keypoints` -> `draw_face_keypoints`、`--pose-head-points` -> `draw_pose_head_points`、`--face-mesh` -> `draw_face_mesh`、`--no-track-state` -> `draw_track_state`。`--no-*` mapping 会反转，因此 drawing 仍启用时 config value 为 `true`。
+大多数 CLI name 通过把 hyphen 改为 underscore 得到 config name。显式 CLI-to-config rename 是 `--input` -> `input_path`、`--bbox` -> `bboxes`、`--person-id` -> `person_ids`。positive `draw_*` booleans 保存有效行为，而不是 negative flag 的拼写：`--no-heatmap` -> `draw_heatmap`、`--head-box` -> `draw_head_box`、`--no-gaze-peak` -> `draw_gaze_peak`、`--no-gaze-arrow` -> `draw_gaze_arrow`、`--draw-heatmap-contour` -> `draw_heatmap_contour`、`--no-labels` -> `draw_labels`、`--face-box` -> `draw_face_box`、`--face-keypoints` -> `draw_face_keypoints`、`--pose-head-points` -> `draw_pose_head_points`、`--face-mesh` -> `draw_face_mesh`、`--no-track-state` -> `draw_track_state`、`--face-pose-ray` -> `draw_face_pose_ray`、`--pose-head-ray` -> `draw_pose_head_ray`。`--no-*` mapping 会反转，因此 drawing 仍启用时 config value 为 `true`。
 
 #### Image/video additions and overrides
 

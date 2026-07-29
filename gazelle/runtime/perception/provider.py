@@ -7,6 +7,10 @@ from gazelle.runtime.geometry import sanitize_normalized_bbox
 from gazelle.runtime.heads import HeadProvider
 from gazelle.runtime.perception.contracts import HeadFrameResult, HeadPerception
 from gazelle.runtime.perception.fusion import build_head_candidates
+from gazelle.runtime.perception.gaze_policy import (
+    annotate_gaze_eligibility,
+    arbitrate_perceptions,
+)
 
 
 def _create_default_backend(config, *, media_type: str):
@@ -73,9 +77,12 @@ def _image_perception(person_id: int, candidate) -> HeadPerception:
         observed=candidate.observed,
         face_keypoints=candidate.face_keypoints,
         pose_head_landmarks=candidate.pose_head_landmarks,
+        pose_head_keypoints=candidate.pose_head_keypoints,
         facial_transformation_matrix=candidate.facial_transformation_matrix,
         head_pose=candidate.head_pose,
         face_landmarks=candidate.face_landmarks,
+        face_pose_reference_ray=candidate.face_pose_reference_ray,
+        pose_head_reference_ray=candidate.pose_head_reference_ray,
     )
 
 
@@ -87,11 +94,13 @@ class MediaPipeHeadProvider(HeadProvider):
         max_heads: int,
         tracker=None,
         bridge=None,
+        reference_ray_length: float = 2.5,
     ):
         self._backend = backend
         self._max_heads = max_heads
         self._tracker = tracker
         self._bridge = bridge
+        self._reference_ray_length = reference_ray_length
         self._closed = False
 
     @classmethod
@@ -109,7 +118,11 @@ class MediaPipeHeadProvider(HeadProvider):
         factory = _create_default_backend if backend_factory is None else backend_factory
         backend = factory(config, media_type=media_type)
         if media_type == "image":
-            return cls(backend=backend, max_heads=config.max_heads)
+            return cls(
+                backend=backend,
+                max_heads=config.max_heads,
+                reference_ray_length=getattr(config, "reference_ray_length", 2.5),
+            )
 
         tracker_factory = _create_default_tracker if tracker_factory is None else tracker_factory
         try:
@@ -133,6 +146,7 @@ class MediaPipeHeadProvider(HeadProvider):
             max_heads=config.max_heads,
             tracker=tracker,
             bridge=bridge,
+            reference_ray_length=getattr(config, "reference_ray_length", 2.5),
         )
 
     def _assign_people(
@@ -145,9 +159,12 @@ class MediaPipeHeadProvider(HeadProvider):
         image_height: int,
     ) -> Tuple[HeadPerception, ...]:
         if self._tracker is None:
-            return tuple(
+            perceptions = tuple(
                 _image_perception(person_id, candidate)
                 for person_id, candidate in enumerate(candidates)
+            )
+            return annotate_gaze_eligibility(
+                arbitrate_perceptions(perceptions, max_heads=self._max_heads)
             )
         tracked = self._tracker.update(
             candidates,
@@ -156,7 +173,13 @@ class MediaPipeHeadProvider(HeadProvider):
             image_width=image_width,
             image_height=image_height,
         )
-        return self._bridge.update(tracked, timestamp_ms=timestamp_ms)
+        perceptions = self._bridge.update(tracked, timestamp_ms=timestamp_ms)
+        perceptions = arbitrate_perceptions(perceptions, max_heads=self._max_heads)
+        if self._max_heads == 1:
+            self._bridge.retain_person_ids(
+                tuple(perception.person_id for perception in perceptions)
+            )
+        return annotate_gaze_eligibility(perceptions)
 
     def get_frame_result(self, frame, frame_index, timestamp_ms, image_width, image_height):
         if self._closed:
@@ -176,6 +199,7 @@ class MediaPipeHeadProvider(HeadProvider):
                 faces=observed.faces,
                 poses=observed.poses,
                 max_heads=self._max_heads,
+                reference_ray_length=self._reference_ray_length,
             )
         )
         fusion_ms = (perf_counter() - fusion_start) * 1000.0

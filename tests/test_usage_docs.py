@@ -181,6 +181,10 @@ class UsageDocumentationTest(unittest.TestCase):
             "--face-keypoints",
             "--pose-head-points",
             "--face-mesh",
+            "--face-pose-ray",
+            "--pose-head-ray",
+            "--reference-ray-length",
+            "--gaze-inout-threshold",
         }
         for guide_path in (ENGLISH_GUIDE, CHINESE_GUIDE):
             section = self._section(guide_path, 4)
@@ -210,6 +214,10 @@ class UsageDocumentationTest(unittest.TestCase):
             self.assertTrue(config.draw_face_keypoints)
             self.assertTrue(config.draw_pose_head_points)
             self.assertTrue(config.draw_face_mesh)
+            self.assertTrue(config.draw_face_pose_ray)
+            self.assertTrue(config.draw_pose_head_ray)
+            self.assertEqual(2.5, config.reference_ray_length)
+            self.assertEqual(0.5, config.gaze_inout_threshold)
             self.assertIn("only the input path", section.lower())
 
     def test_examples_distinguish_tracked_input_from_user_templates(self):
@@ -273,6 +281,10 @@ class UsageDocumentationTest(unittest.TestCase):
             "--face-keypoints",
             "--pose-head-points",
             "--face-mesh",
+            "--face-pose-ray",
+            "--pose-head-ray",
+            "reference ray",
+            "gaze_status",
         )
         for guide_path in (ENGLISH_GUIDE, CHINESE_GUIDE):
             section = self._section(guide_path, 10)
@@ -305,8 +317,13 @@ class UsageDocumentationTest(unittest.TestCase):
             "face_bbox_normalized",
             "face_keypoints",
             "pose_head_landmarks",
+            "pose_head_keypoints",
             "facial_transformation_matrix",
             "head_pose",
+            "face_pose_reference_ray",
+            "pose_head_reference_ray",
+            "gaze_eligible",
+            "gaze_status",
             "face_landmarks",
             "x",
             "y",
@@ -328,6 +345,8 @@ class UsageDocumentationTest(unittest.TestCase):
             "gaze_peak_normalized",
             "heatmap_peak_value",
             "inout_score",
+            "out_of_frame",
+            "no_gaze",
             "heatmap_path",
             "inference_ms",
             "error",
@@ -348,7 +367,7 @@ class UsageDocumentationTest(unittest.TestCase):
 
     def test_base_run_config_tables_match_dataclass_fields(self):
         expected = [field.name for field in fields(RuntimeConfig)]
-        self.assertEqual(40, len(expected))
+        self.assertEqual(44, len(expected))
         english_rows = self._base_run_config_rows(ENGLISH_GUIDE)
         chinese_rows = self._base_run_config_rows(CHINESE_GUIDE)
         self.assertEqual(expected, [name for name, _, _ in english_rows])
@@ -372,6 +391,8 @@ class UsageDocumentationTest(unittest.TestCase):
             "`--pose-head-points` -> `draw_pose_head_points`",
             "`--face-mesh` -> `draw_face_mesh`",
             "`--no-track-state` -> `draw_track_state`",
+            "`--face-pose-ray` -> `draw_face_pose_ray`",
+            "`--pose-head-ray` -> `draw_pose_head_ray`",
         )
         for guide_path in (ENGLISH_GUIDE, CHINESE_GUIDE):
             section = self._section(guide_path, 12)

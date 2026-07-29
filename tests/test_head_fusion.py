@@ -8,7 +8,9 @@ from gazelle.runtime.perception.contracts import (
     HeadPoseAngles,
     HeadViewState,
     NormalizedLandmark,
+    PoseHeadKeypoints,
     PoseObservation,
+    ReferenceRayProjectionStatus,
 )
 from gazelle.runtime.perception.fusion import (
     HeadBoxFusionConfig,
@@ -111,6 +113,85 @@ class HeadFusionTest(unittest.TestCase):
         self.assertBBoxAlmostEqual(candidate.head_bbox, (0.36, 0.354, 0.64, 0.514))
         self.assertAlmostEqual(candidate.confidence, 0.9)
         self.assertEqual(candidate.view_state, HeadViewState.BACK_OR_OCCLUDED)
+
+    def test_pose_head_candidate_preserves_named_keypoints_and_builds_independent_ray(self):
+        points = [landmark(0.5, 0.5, 0.0, 0.0) for _ in range(13)]
+        points[0] = landmark(0.56, 0.47)
+        points[2] = landmark(0.46, 0.40)
+        points[5] = landmark(0.54, 0.40)
+        points[7] = landmark(0.44, 0.42)
+        points[8] = landmark(0.56, 0.42)
+        points[11] = landmark(0.35, 0.70)
+        points[12] = landmark(0.65, 0.70)
+
+        candidate = build_pose_head_candidate(make_pose(points))
+
+        self.assertIsInstance(candidate.pose_head_keypoints, PoseHeadKeypoints)
+        self.assertEqual(candidate.pose_head_keypoints.nose, points[0])
+        self.assertEqual(candidate.pose_head_keypoints.left_eye, points[2])
+        self.assertEqual(candidate.pose_head_keypoints.right_eye, points[5])
+        self.assertIsNotNone(candidate.pose_head_reference_ray)
+        self.assertEqual(
+            candidate.pose_head_reference_ray.projection_status,
+            ReferenceRayProjectionStatus.AVAILABLE,
+        )
+
+    def test_face_candidate_builds_face_pose_ray_without_pose_candidate(self):
+        face = FaceObservation(
+            bbox=(0.3, 0.3, 0.7, 0.7),
+            confidence=0.9,
+            keypoints=(
+                landmark(0.44, 0.40),
+                landmark(0.56, 0.40),
+                landmark(0.55, 0.50),
+            ),
+            head_pose=HeadPoseAngles(yaw_deg=25.0, pitch_deg=0.0, roll_deg=0.0),
+        )
+
+        candidate = build_head_candidates(faces=(face,), poses=(), max_heads=1)[0]
+
+        self.assertIsNotNone(candidate.face_pose_reference_ray)
+        self.assertIsNone(candidate.pose_head_reference_ray)
+
+    def test_fused_reference_ray_length_uses_final_head_bbox(self):
+        face = FaceObservation(
+            bbox=(0.45, 0.35, 0.55, 0.55),
+            confidence=0.9,
+            keypoints=(
+                landmark(0.47, 0.40),
+                landmark(0.53, 0.40),
+                landmark(0.53, 0.47),
+            ),
+            head_pose=HeadPoseAngles(yaw_deg=30.0, pitch_deg=0.0, roll_deg=0.0),
+        )
+        points = [landmark(0.5, 0.45) for _ in range(13)]
+        points[0] = landmark(0.56, 0.47)
+        points[2] = landmark(0.35, 0.40)
+        points[5] = landmark(0.65, 0.40)
+        points[7] = landmark(0.30, 0.43)
+        points[8] = landmark(0.70, 0.43)
+        points[11] = landmark(0.25, 0.75)
+        points[12] = landmark(0.75, 0.75)
+
+        candidate = build_head_candidates(
+            faces=(face,),
+            poses=(make_pose(points),),
+            max_heads=1,
+            reference_ray_length=0.25,
+        )[0]
+
+        ray = candidate.face_pose_reference_ray
+        self.assertEqual(candidate.state, HeadPerceptionState.FACE_POSE)
+        self.assertIsNotNone(ray)
+        expected_length = math.hypot(
+            candidate.head_bbox[2] - candidate.head_bbox[0],
+            candidate.head_bbox[3] - candidate.head_bbox[1],
+        ) * 0.25
+        actual_length = math.hypot(
+            ray.endpoint[0] - ray.origin[0],
+            ray.endpoint[1] - ray.origin[1],
+        )
+        self.assertAlmostEqual(actual_length, expected_length)
 
     def test_pose_head_uses_shoulders_when_head_landmarks_are_missing(self):
         points = [landmark(0.5, 0.5, 0.0, 0.0) for _ in range(13)]

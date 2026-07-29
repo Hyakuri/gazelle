@@ -3,7 +3,13 @@ import math
 from numbers import Real
 from pathlib import Path
 
-from gazelle.runtime.perception.contracts import HeadPerceptionState, HeadViewState
+from gazelle.runtime.contracts import GazeStatus
+from gazelle.runtime.perception.contracts import (
+    HeadPerceptionState,
+    HeadViewState,
+    ReferenceRayProjectionStatus,
+    ReferenceRaySource,
+)
 
 
 def _finite_float(value, field_name):
@@ -71,6 +77,60 @@ def _landmark_to_json_dict(landmark, field_name):
     return record
 
 
+def _pose_head_keypoints_to_json_dict(keypoints):
+    record = {}
+    for name in (
+        "nose",
+        "left_eye",
+        "right_eye",
+        "left_ear",
+        "right_ear",
+        "mouth_left",
+        "mouth_right",
+        "left_shoulder",
+        "right_shoulder",
+    ):
+        landmark = getattr(keypoints, name)
+        if landmark is not None:
+            record[name] = _landmark_to_json_dict(
+                landmark,
+                "pose_head_keypoints.{}".format(name),
+            )
+    return record
+
+
+def _reference_ray_to_json_dict(ray, field_name):
+    record = {
+        "source": _enum_value(
+            ray.source,
+            ReferenceRaySource,
+            "{}.source".format(field_name),
+        ),
+        "origin_normalized": _optional_float_list(
+            ray.origin,
+            "{}.origin_normalized".format(field_name),
+        ),
+        "direction_normalized": _optional_float_list(
+            ray.direction,
+            "{}.direction_normalized".format(field_name),
+        ),
+        "endpoint_normalized": _optional_float_list(
+            ray.endpoint,
+            "{}.endpoint_normalized".format(field_name),
+        ),
+        "confidence": _finite_float(
+            ray.confidence,
+            "{}.confidence".format(field_name),
+        ),
+        "projection_status": _enum_value(
+            ray.projection_status,
+            ReferenceRayProjectionStatus,
+            "{}.projection_status".format(field_name),
+        ),
+    }
+    return record
+
+
 def _perception_to_json_dict(perception, *, save_face_landmarks):
     record = {
         "person_id": _exact_int(perception.person_id, "person_id"),
@@ -82,6 +142,7 @@ def _perception_to_json_dict(perception, *, save_face_landmarks):
         "state": _enum_value(perception.state, HeadPerceptionState, "state"),
         "view_state": _enum_value(perception.view_state, HeadViewState, "view_state"),
         "observed": _exact_bool(perception.observed, "observed"),
+        "gaze_eligible": _exact_bool(perception.gaze_eligible, "gaze_eligible"),
         "tracking": {
             "track_age_frames": _exact_int(perception.track_age_frames, "track_age_frames"),
             "missed_frames": _exact_int(perception.missed_frames, "missed_frames"),
@@ -103,6 +164,11 @@ def _perception_to_json_dict(perception, *, save_face_landmarks):
             _landmark_to_json_dict(landmark, "pose_head_landmarks[{}]".format(index))
             for index, landmark in enumerate(perception.pose_head_landmarks)
         ]
+    pose_head_keypoints = _pose_head_keypoints_to_json_dict(
+        perception.pose_head_keypoints
+    )
+    if pose_head_keypoints:
+        record["pose_head_keypoints"] = pose_head_keypoints
     if perception.facial_transformation_matrix is not None:
         record["facial_transformation_matrix"] = [
             _optional_float_list(row, "facial_transformation_matrix[{}]".format(row_index))
@@ -114,6 +180,22 @@ def _perception_to_json_dict(perception, *, save_face_landmarks):
             "pitch_deg": _finite_float(perception.head_pose.pitch_deg, "head_pose.pitch_deg"),
             "roll_deg": _finite_float(perception.head_pose.roll_deg, "head_pose.roll_deg"),
         }
+    if perception.face_pose_reference_ray is not None:
+        record["face_pose_reference_ray"] = _reference_ray_to_json_dict(
+            perception.face_pose_reference_ray,
+            "face_pose_reference_ray",
+        )
+    if perception.pose_head_reference_ray is not None:
+        record["pose_head_reference_ray"] = _reference_ray_to_json_dict(
+            perception.pose_head_reference_ray,
+            "pose_head_reference_ray",
+        )
+    if perception.gaze_status is not None:
+        record["gaze_status"] = _enum_value(
+            perception.gaze_status,
+            GazeStatus,
+            "gaze_status",
+        )
     if save_face_landmarks and perception.face_landmarks:
         record["face_landmarks"] = [
             _landmark_to_json_dict(landmark, "face_landmarks[{}]".format(index))

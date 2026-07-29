@@ -214,6 +214,25 @@ class RuntimeCliTest(unittest.TestCase):
         self.assertTrue(config.draw_face_mesh)
         self.assertFalse(config.draw_track_state)
 
+    def test_parse_reference_ray_and_gaze_gate_config(self):
+        config = parse_runtime_config(
+            [
+                "--input",
+                "clip.mp4",
+                "--face-pose-ray",
+                "--pose-head-ray",
+                "--reference-ray-length",
+                "3.0",
+                "--gaze-inout-threshold",
+                "0.65",
+            ]
+        )
+
+        self.assertTrue(config.draw_face_pose_ray)
+        self.assertTrue(config.draw_pose_head_ray)
+        self.assertEqual(config.reference_ray_length, 3.0)
+        self.assertEqual(config.gaze_inout_threshold, 0.65)
+
     def test_parse_head_box_enabled(self):
         config = parse_runtime_config(["--input", "image.jpg", "--save-rendered", "--head-box"])
 
@@ -561,6 +580,32 @@ class RuntimeCliTest(unittest.TestCase):
                 self.assertEqual(cm.exception.code, 2)
                 self.assertIn("heatmap_contour_quantile", stderr.getvalue())
 
+    def test_invalid_reference_ray_length_rejected(self):
+        stderr = io.StringIO()
+        with redirect_stderr(stderr), self.assertRaises(SystemExit) as caught:
+            parse_runtime_config(
+                ["--input", "clip.mp4", "--reference-ray-length", "0"]
+            )
+
+        self.assertEqual(caught.exception.code, 2)
+        self.assertIn("reference_ray_length", stderr.getvalue())
+
+    def test_invalid_gaze_inout_threshold_rejected(self):
+        for threshold in ("-0.1", "1.1", "nan"):
+            with self.subTest(threshold=threshold):
+                stderr = io.StringIO()
+                with redirect_stderr(stderr), self.assertRaises(SystemExit) as caught:
+                    parse_runtime_config(
+                        [
+                            "--input",
+                            "clip.mp4",
+                            "--gaze-inout-threshold",
+                            threshold,
+                        ]
+                    )
+                self.assertEqual(caught.exception.code, 2)
+                self.assertIn("gaze_inout_threshold", stderr.getvalue())
+
     def test_parse_heatmap_contour_width(self):
         config = parse_runtime_config(
             ["--input", "image.jpg", "--draw-heatmap-contour", "--heatmap-contour-width", "4"]
@@ -594,6 +639,8 @@ class RuntimeCliTest(unittest.TestCase):
             {"frame_step": True},
             {"heatmap_contour_quantile": True},
             {"heatmap_contour_width": True},
+            {"reference_ray_length": True},
+            {"gaze_inout_threshold": True},
         ):
             with self.subTest(kwargs=kwargs):
                 with self.assertRaises(ValueError):

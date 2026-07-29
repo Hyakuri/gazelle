@@ -11,6 +11,10 @@ from gazelle.runtime.heads import (
     load_json_head_provider,
 )
 from gazelle.runtime.perception.contracts import HeadFrameResult
+from gazelle.runtime.perception.gaze_policy import (
+    apply_prediction_gaze_status,
+    select_gazelle_heads,
+)
 from gazelle.runtime.perception.outputs import (
     head_frame_to_json_dict,
     write_head_observations_json,
@@ -175,6 +179,8 @@ def _render_options_from_config(config) -> RenderOptions:
         draw_pose_head_points=config.draw_pose_head_points,
         draw_face_mesh=config.draw_face_mesh,
         draw_track_state=config.draw_track_state,
+        draw_face_pose_ray=config.draw_face_pose_ray,
+        draw_pose_head_ray=config.draw_pose_head_ray,
         heatmap_contour_quantile=config.heatmap_contour_quantile,
         heatmap_contour_width=config.heatmap_contour_width,
     )
@@ -256,13 +262,17 @@ def run_image_pipeline(config, predictor_factory: Optional[Callable[[object], ob
             result=head_result,
             save_face_landmarks=config.save_face_landmarks,
         )
-        if head_result.heads:
+        gazelle_heads = select_gazelle_heads(head_result)
+        if gazelle_heads:
             predictor = (
                 predictor_factory(config)
                 if predictor_factory is not None
                 else _build_real_predictor(config)
             )
-            predictions = tuple(predictor.predict_frame(image, head_result.heads))
+            predictions = apply_prediction_gaze_status(
+                predictor.predict_frame(image, gazelle_heads),
+                inout_threshold=config.gaze_inout_threshold,
+            )
         else:
             predictions = ()
 
@@ -276,7 +286,7 @@ def run_image_pipeline(config, predictor_factory: Optional[Callable[[object], ob
         rendered = renderer.render(
             image,
             predictions,
-            head_result.perceptions if head_result.heads else (),
+            head_result.perceptions,
         )
         rendered_path = output_dir / config.rendered_name
         save_rendered_image(rendered_path, rendered)
@@ -289,7 +299,7 @@ def run_image_pipeline(config, predictor_factory: Optional[Callable[[object], ob
         image_width=width,
         image_height=height,
         model_name=config.model,
-        heads=head_result.heads,
+        heads=gazelle_heads,
         predictions=predictions,
         heatmap_paths=heatmap_paths if config.save_heatmaps else None,
     )
@@ -389,11 +399,15 @@ def run_video_pipeline(config, predictor_factory: Optional[Callable[[object], ob
             )
 
             inference_ms = None
+            gazelle_heads = select_gazelle_heads(head_result)
             if frame.index % config.frame_step != 0:
                 status = "skipped"
                 predictions: Tuple[GazePrediction, ...] = ()
             elif not head_result.heads:
                 status = "no_head"
+                predictions = ()
+            elif not gazelle_heads:
+                status = "no_gaze"
                 predictions = ()
             else:
                 if predictor is None:
@@ -403,7 +417,10 @@ def run_video_pipeline(config, predictor_factory: Optional[Callable[[object], ob
                         else _build_real_predictor(config)
                     )
                 start_time = perf_counter()
-                predictions = tuple(predictor.predict_frame(frame.image, head_result.heads))
+                predictions = apply_prediction_gaze_status(
+                    predictor.predict_frame(frame.image, gazelle_heads),
+                    inout_threshold=config.gaze_inout_threshold,
+                )
                 inference_ms = (perf_counter() - start_time) * 1000.0
                 status = "ok"
 
@@ -419,10 +436,10 @@ def run_video_pipeline(config, predictor_factory: Optional[Callable[[object], ob
                 )
             )
             if writer is not None:
-                output_frame = (
-                    renderer.render(frame.image, predictions, head_result.perceptions)
-                    if status == "ok"
-                    else frame.image
+                output_frame = renderer.render(
+                    frame.image,
+                    predictions,
+                    head_result.perceptions,
                 )
                 writer.write(output_frame)
             frames_written += 1

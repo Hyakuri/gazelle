@@ -85,8 +85,9 @@ keypoints remain available.
 
 Yaw and pitch are projected into the image plane. The vector is normalized and
 extended by a configurable multiple of the normalized head-box diagonal, then
-clipped to the image boundary. Near-zero image-plane magnitude is classified
-as an axial projection.
+clipped to the image boundary. After face/pose fusion, both rays use the final
+fused head box for this length calculation. Near-zero image-plane magnitude is
+classified as an axial projection.
 
 ## Pose Reference Ray
 
@@ -103,7 +104,10 @@ ray by themselves. Missing or unreliable geometry produces no pose ray.
 
 MediaPipe perceptions are eligible for Gazelle only when they are current,
 face-observed, not classified as back/occluded, and contain a valid face
-reference observation. Other head providers retain their existing behavior.
+reference observation. Both perception confidence and face-reference
+confidence must be at least `0.50`. The final model-boundary selector repeats
+the state and quality checks rather than trusting the annotation flag alone.
+Other head providers retain their existing behavior.
 
 Pre-inference perception output uses:
 
@@ -152,4 +156,3 @@ Observation JSON/JSONL stores available ray data regardless of render flags.
 - Existing `render_predictions(...)` callers remain compatible.
 - Default tests remain offline and do not construct Gazelle, DINOv2, MediaPipe
   task models, or CUDA workloads.
-

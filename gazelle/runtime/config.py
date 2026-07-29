@@ -72,6 +72,19 @@ def validate_heatmap_contour_quantile(heatmap_contour_quantile) -> float:
     return quantile
 
 
+def validate_unit_interval(value, field_name: str) -> float:
+    if (
+        not isinstance(value, Real)
+        or isinstance(value, bool)
+        or not math.isfinite(float(value))
+    ):
+        raise ValueError("{} must be a finite real number".format(field_name))
+    value = float(value)
+    if not 0.0 <= value <= 1.0:
+        raise ValueError("{} must be between 0.0 and 1.0".format(field_name))
+    return value
+
+
 def validate_optional_positive_int(value, field_name: str):
     if value is None:
         return None
@@ -163,6 +176,10 @@ class RuntimeConfig:
     draw_pose_head_points: bool = False
     draw_face_mesh: bool = False
     draw_track_state: bool = True
+    draw_face_pose_ray: bool = False
+    draw_pose_head_ray: bool = False
+    reference_ray_length: float = 2.5
+    gaze_inout_threshold: float = 0.5
     heatmap_contour_quantile: float = 0.90
     heatmap_contour_width: Optional[int] = None
     output_fps: Optional[float] = None
@@ -183,6 +200,22 @@ class RuntimeConfig:
             self,
             "head_track_max_gap_ms",
             validate_positive_finite_float(self.head_track_max_gap_ms, "head_track_max_gap_ms"),
+        )
+        object.__setattr__(
+            self,
+            "reference_ray_length",
+            validate_positive_finite_float(
+                self.reference_ray_length,
+                "reference_ray_length",
+            ),
+        )
+        object.__setattr__(
+            self,
+            "gaze_inout_threshold",
+            validate_unit_interval(
+                self.gaze_inout_threshold,
+                "gaze_inout_threshold",
+            ),
         )
         object.__setattr__(self, "rendered_name", validate_rendered_name(self.rendered_name))
         object.__setattr__(self, "heatmap_alpha", validate_heatmap_alpha(self.heatmap_alpha))
@@ -247,6 +280,10 @@ class RuntimeConfig:
             draw_pose_head_points=args.pose_head_points,
             draw_face_mesh=args.face_mesh,
             draw_track_state=not args.no_track_state,
+            draw_face_pose_ray=args.face_pose_ray,
+            draw_pose_head_ray=args.pose_head_ray,
+            reference_ray_length=args.reference_ray_length,
+            gaze_inout_threshold=args.gaze_inout_threshold,
             heatmap_contour_quantile=args.heatmap_contour_quantile,
             heatmap_contour_width=args.heatmap_contour_width,
             output_fps=args.output_fps,

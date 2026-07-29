@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional, Tuple
 
-from gazelle.runtime.contracts import BBox, HeadObservation
+from gazelle.runtime.contracts import BBox, GazeStatus, HeadObservation
 
 
 class HeadPerceptionState(str, Enum):
@@ -20,6 +20,16 @@ class HeadViewState(str, Enum):
     UNKNOWN = "unknown"
 
 
+class ReferenceRaySource(str, Enum):
+    FACE_POSE = "face_pose"
+    POSE_HEAD = "pose_head"
+
+
+class ReferenceRayProjectionStatus(str, Enum):
+    AVAILABLE = "available"
+    AXIAL = "axial_projection"
+
+
 @dataclass(frozen=True)
 class HeadPoseAngles:
     yaw_deg: float
@@ -34,6 +44,29 @@ class NormalizedLandmark:
     z: Optional[float] = None
     visibility: Optional[float] = None
     presence: Optional[float] = None
+
+
+@dataclass(frozen=True)
+class PoseHeadKeypoints:
+    nose: Optional[NormalizedLandmark] = None
+    left_eye: Optional[NormalizedLandmark] = None
+    right_eye: Optional[NormalizedLandmark] = None
+    left_ear: Optional[NormalizedLandmark] = None
+    right_ear: Optional[NormalizedLandmark] = None
+    mouth_left: Optional[NormalizedLandmark] = None
+    mouth_right: Optional[NormalizedLandmark] = None
+    left_shoulder: Optional[NormalizedLandmark] = None
+    right_shoulder: Optional[NormalizedLandmark] = None
+
+
+@dataclass(frozen=True)
+class ReferenceRay2D:
+    source: ReferenceRaySource
+    origin: Tuple[float, float]
+    direction: Optional[Tuple[float, float]]
+    endpoint: Optional[Tuple[float, float]]
+    confidence: float
+    projection_status: ReferenceRayProjectionStatus
 
 
 @dataclass(frozen=True)
@@ -64,9 +97,12 @@ class HeadCandidate:
     observed: bool = True
     face_keypoints: Tuple[NormalizedLandmark, ...] = ()
     pose_head_landmarks: Tuple[NormalizedLandmark, ...] = ()
+    pose_head_keypoints: PoseHeadKeypoints = field(default_factory=PoseHeadKeypoints)
     facial_transformation_matrix: Optional[Tuple[Tuple[float, ...], ...]] = None
     head_pose: Optional[HeadPoseAngles] = None
     face_landmarks: Tuple[NormalizedLandmark, ...] = ()
+    face_pose_reference_ray: Optional[ReferenceRay2D] = None
+    pose_head_reference_ray: Optional[ReferenceRay2D] = None
 
 
 @dataclass(frozen=True)
@@ -83,9 +119,14 @@ class HeadPerception:
     missed_ms: float = 0.0
     face_keypoints: Tuple[NormalizedLandmark, ...] = ()
     pose_head_landmarks: Tuple[NormalizedLandmark, ...] = ()
+    pose_head_keypoints: PoseHeadKeypoints = field(default_factory=PoseHeadKeypoints)
     facial_transformation_matrix: Optional[Tuple[Tuple[float, ...], ...]] = None
     head_pose: Optional[HeadPoseAngles] = None
     face_landmarks: Tuple[NormalizedLandmark, ...] = ()
+    face_pose_reference_ray: Optional[ReferenceRay2D] = None
+    pose_head_reference_ray: Optional[ReferenceRay2D] = None
+    gaze_eligible: bool = True
+    gaze_status: Optional[GazeStatus] = None
 
 
 @dataclass(frozen=True)

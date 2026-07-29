@@ -1055,6 +1055,21 @@ class ShortOcclusionBridgeTest(unittest.TestCase):
         self.assertEqual(missing[0].missed_frames, 1)
         self.assertEqual(missing[0].missed_ms, 500.0)
 
+    def test_bridge_retain_person_ids_prunes_stale_single_person_identity(self):
+        bridge = ShortOcclusionBridge(max_gap_ms=500.0)
+        bridge.update(
+            (
+                tracked_candidate(1, confidence=0.95),
+                tracked_candidate(2, confidence=0.80),
+            ),
+            timestamp_ms=0.0,
+        )
+
+        bridge.retain_person_ids((2,))
+        missing = bridge.update((), timestamp_ms=100.0)
+
+        self.assertEqual(tuple(item.person_id for item in missing), (2,))
+
     def test_bridge_retains_view_state_but_clears_unobserved_evidence(self):
         face_keypoint = NormalizedLandmark(x=0.2, y=0.3, z=0.4)
         pose_landmark = NormalizedLandmark(x=0.5, y=0.6, z=0.7)

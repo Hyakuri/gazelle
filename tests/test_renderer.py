@@ -8,19 +8,24 @@ import numpy as np
 import torch
 from PIL import Image, ImageDraw
 
-from gazelle.runtime.contracts import GazePrediction
+from gazelle.runtime.contracts import GazePrediction, GazeStatus
 from gazelle.runtime.perception.contracts import (
     HeadPerception,
     HeadPerceptionState,
     HeadViewState,
     NormalizedLandmark,
+    ReferenceRay2D,
+    ReferenceRayProjectionStatus,
+    ReferenceRaySource,
 )
 from gazelle.runtime.renderer import (
     FACE_BOX_COLOR,
     FACE_KEYPOINT_COLOR,
     FACE_MESH_COLOR,
+    FACE_POSE_RAY_COLOR,
     PEAK_MARKER_COLOR,
     POSE_HEAD_POINT_COLOR,
+    POSE_HEAD_RAY_COLOR,
     PredictionRenderer,
     RenderOptions,
     build_prediction_label,
@@ -106,6 +111,8 @@ class RendererTest(unittest.TestCase):
         self.assertFalse(options.draw_pose_head_points)
         self.assertFalse(options.draw_face_mesh)
         self.assertTrue(options.draw_track_state)
+        self.assertFalse(options.draw_face_pose_ray)
+        self.assertFalse(options.draw_pose_head_ray)
         self.assertEqual(options.heatmap_contour_quantile, 0.90)
         self.assertIsNone(options.heatmap_contour_width)
 
@@ -160,6 +167,59 @@ class RendererTest(unittest.TestCase):
                     image, (), (perception,)
                 )
                 self.assertNotEqual(rendered.tobytes(), baseline.tobytes())
+
+    def test_two_independent_reference_rays_use_distinct_colors(self):
+        image = Image.new("RGB", (101, 101), color=(20, 20, 20))
+        face_ray = ReferenceRay2D(
+            source=ReferenceRaySource.FACE_POSE,
+            origin=(0.5, 0.5),
+            direction=(1.0, 0.0),
+            endpoint=(0.8, 0.5),
+            confidence=0.9,
+            projection_status=ReferenceRayProjectionStatus.AVAILABLE,
+        )
+        pose_ray = ReferenceRay2D(
+            source=ReferenceRaySource.POSE_HEAD,
+            origin=(0.5, 0.5),
+            direction=(0.0, 1.0),
+            endpoint=(0.5, 0.8),
+            confidence=0.8,
+            projection_status=ReferenceRayProjectionStatus.AVAILABLE,
+        )
+        perception = replace(
+            make_perception(),
+            face_pose_reference_ray=face_ray,
+            pose_head_reference_ray=pose_ray,
+        )
+        options = RenderOptions(
+            draw_heatmap=False,
+            draw_gaze_peak=False,
+            draw_gaze_arrow=False,
+            draw_labels=False,
+            draw_track_state=False,
+            draw_face_pose_ray=True,
+            draw_pose_head_ray=True,
+        )
+
+        rendered = PredictionRenderer(options).render(image, (), (perception,))
+
+        self.assertEqual(rendered.getpixel((65, 50)), FACE_POSE_RAY_COLOR)
+        self.assertEqual(rendered.getpixel((50, 65)), POSE_HEAD_RAY_COLOR)
+
+    def test_out_of_frame_prediction_suppresses_gazelle_geometry(self):
+        image = Image.new("RGB", (64, 64), color=(20, 20, 20))
+        prediction = replace(
+            make_prediction(),
+            gaze_status=GazeStatus.OUT_OF_FRAME,
+        )
+        options = RenderOptions(
+            draw_head_box=False,
+            draw_labels=False,
+        )
+
+        rendered = PredictionRenderer(options).render(image, (prediction,))
+
+        self.assertEqual(rendered.tobytes(), image.tobytes())
 
     def test_track_state_label_changes_pixels(self):
         image = Image.new("RGB", (96, 64), color=(20, 20, 20))

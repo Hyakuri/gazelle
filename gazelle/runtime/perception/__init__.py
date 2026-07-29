@@ -7,7 +7,11 @@ from gazelle.runtime.perception.contracts import (
     HeadPoseAngles,
     HeadViewState,
     NormalizedLandmark,
+    PoseHeadKeypoints,
     PoseObservation,
+    ReferenceRay2D,
+    ReferenceRayProjectionStatus,
+    ReferenceRaySource,
 )
 
 __all__ = [
@@ -19,7 +23,11 @@ __all__ = [
     "HeadPoseAngles",
     "HeadViewState",
     "NormalizedLandmark",
+    "PoseHeadKeypoints",
     "PoseObservation",
+    "ReferenceRay2D",
+    "ReferenceRayProjectionStatus",
+    "ReferenceRaySource",
     "MediaPipeHeadProvider",
 ]
 

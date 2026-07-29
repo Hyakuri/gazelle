@@ -11,7 +11,12 @@ from gazelle.runtime.perception.contracts import (
     HeadPerceptionState,
     HeadViewState,
     NormalizedLandmark,
+    PoseHeadKeypoints,
     PoseObservation,
+)
+from gazelle.runtime.perception.reference_rays import (
+    estimate_face_pose_reference_ray,
+    estimate_pose_head_reference_ray,
 )
 
 
@@ -133,31 +138,67 @@ def expand_face_to_head_bbox(face_bbox, config: HeadBoxFusionConfig = HeadBoxFus
     )
 
 
-def _build_face_head_candidate(face: FaceObservation, source_index: int, config: HeadBoxFusionConfig):
+def _build_face_head_candidate(
+    face: FaceObservation,
+    source_index: int,
+    config: HeadBoxFusionConfig,
+    reference_ray_length: float,
+):
     try:
         face_bbox = sanitize_normalized_bbox(face.bbox, clip=True)
         head_bbox = expand_face_to_head_bbox(face_bbox, config)
     except ValueError:
         return None
+    confidence = _clipped_confidence(face.confidence)
     return HeadCandidate(
         source_index=source_index,
         head_bbox=head_bbox,
         face_bbox=face_bbox,
-        confidence=_clipped_confidence(face.confidence),
+        confidence=confidence,
         state=HeadPerceptionState.FACE_ONLY,
         view_state=_face_view_state(face),
         face_keypoints=tuple(face.keypoints),
         facial_transformation_matrix=face.transformation_matrix,
         head_pose=face.head_pose,
         face_landmarks=tuple(face.landmarks),
+        face_pose_reference_ray=estimate_face_pose_reference_ray(
+            head_bbox=head_bbox,
+            face_bbox=face_bbox,
+            face_keypoints=face.keypoints,
+            head_pose=face.head_pose,
+            confidence=confidence,
+            length_multiplier=reference_ray_length,
+        ),
+    )
+
+
+def _pose_head_keypoints(landmarks, config: HeadBoxFusionConfig) -> PoseHeadKeypoints:
+    def reliable(index):
+        if index >= len(landmarks):
+            return None
+        landmark = landmarks[index]
+        return landmark if _is_reliable(landmark, config) else None
+
+    return PoseHeadKeypoints(
+        nose=reliable(0),
+        left_eye=reliable(2),
+        right_eye=reliable(5),
+        left_ear=reliable(7),
+        right_ear=reliable(8),
+        mouth_left=reliable(9),
+        mouth_right=reliable(10),
+        left_shoulder=reliable(11),
+        right_shoulder=reliable(12),
     )
 
 
 def build_pose_head_candidate(
     pose: PoseObservation,
     config: HeadBoxFusionConfig = HeadBoxFusionConfig(),
+    reference_ray_length: float = 2.5,
 ) -> Optional[HeadCandidate]:
     landmarks = tuple(pose.landmarks)
+    named_keypoints = _pose_head_keypoints(landmarks, config)
     head_landmarks = tuple(
         landmark
         for landmark in landmarks[:11]
@@ -221,14 +262,22 @@ def build_pose_head_candidate(
     head_bbox = _sanitize_or_none(raw_bbox)
     if head_bbox is None:
         return None
+    confidence = _landmark_quality(used_landmarks)
     return HeadCandidate(
         source_index=pose.pose_index,
         head_bbox=head_bbox,
         face_bbox=None,
-        confidence=_landmark_quality(used_landmarks),
+        confidence=confidence,
         state=HeadPerceptionState.POSE_ONLY,
         view_state=HeadViewState.BACK_OR_OCCLUDED,
         pose_head_landmarks=tuple(used_landmarks),
+        pose_head_keypoints=named_keypoints,
+        pose_head_reference_ray=estimate_pose_head_reference_ray(
+            head_bbox=head_bbox,
+            keypoints=named_keypoints,
+            confidence=confidence,
+            length_multiplier=reference_ray_length,
+        ),
     )
 
 
@@ -264,12 +313,27 @@ def fuse_head_candidates(
     face_candidate: HeadCandidate,
     pose_candidate: HeadCandidate,
     config: HeadBoxFusionConfig = HeadBoxFusionConfig(),
+    reference_ray_length: float = 2.5,
 ) -> HeadCandidate:
     face_candidate = _sanitized_candidate(face_candidate)
     pose_candidate = _sanitized_candidate(pose_candidate)
     if not associate_face_pose(face_candidate, pose_candidate, config):
         return face_candidate if face_candidate.confidence >= pose_candidate.confidence else pose_candidate
     head_bbox = _fused_bbox(face_candidate.head_bbox, pose_candidate.head_bbox)
+    face_pose_reference_ray = estimate_face_pose_reference_ray(
+        head_bbox=head_bbox,
+        face_bbox=face_candidate.face_bbox,
+        face_keypoints=face_candidate.face_keypoints,
+        head_pose=face_candidate.head_pose,
+        confidence=face_candidate.confidence,
+        length_multiplier=reference_ray_length,
+    )
+    pose_head_reference_ray = estimate_pose_head_reference_ray(
+        head_bbox=head_bbox,
+        keypoints=pose_candidate.pose_head_keypoints,
+        confidence=pose_candidate.confidence,
+        length_multiplier=reference_ray_length,
+    )
     return HeadCandidate(
         source_index=face_candidate.source_index,
         head_bbox=head_bbox,
@@ -279,9 +343,12 @@ def fuse_head_candidates(
         view_state=face_candidate.view_state,
         face_keypoints=face_candidate.face_keypoints,
         pose_head_landmarks=pose_candidate.pose_head_landmarks,
+        pose_head_keypoints=pose_candidate.pose_head_keypoints,
         facial_transformation_matrix=face_candidate.facial_transformation_matrix,
         head_pose=face_candidate.head_pose,
         face_landmarks=face_candidate.face_landmarks,
+        face_pose_reference_ray=face_pose_reference_ray,
+        pose_head_reference_ray=pose_head_reference_ray,
     )
 
 
@@ -318,18 +385,32 @@ def build_head_candidates(
     poses: Tuple[PoseObservation, ...],
     max_heads: int,
     config: HeadBoxFusionConfig = HeadBoxFusionConfig(),
+    reference_ray_length: float = 2.5,
 ) -> Tuple[HeadCandidate, ...]:
     max_heads = _validate_max_heads(max_heads)
     face_candidates = tuple(
         candidate
         for index, face in enumerate(faces)
-        for candidate in (_build_face_head_candidate(face, index, config),)
+        for candidate in (
+            _build_face_head_candidate(
+                face,
+                index,
+                config,
+                reference_ray_length,
+            ),
+        )
         if candidate is not None
     )
     pose_candidates = tuple(
         candidate
         for pose in poses
-        for candidate in (build_pose_head_candidate(pose, config),)
+        for candidate in (
+            build_pose_head_candidate(
+                pose,
+                config,
+                reference_ray_length,
+            ),
+        )
         if candidate is not None
     )
 
@@ -341,7 +422,14 @@ def build_head_candidates(
             enumerate(pose_candidates), key=lambda item: (item[1].confidence, -item[0]), default=(None, None)
         )[1]
         if face_candidate is not None and pose_candidate is not None:
-            return (fuse_head_candidates(face_candidate, pose_candidate, config),)
+            return (
+                fuse_head_candidates(
+                    face_candidate,
+                    pose_candidate,
+                    config,
+                    reference_ray_length,
+                ),
+            )
         return _sort_candidates(
             tuple(candidate for candidate in (face_candidate, pose_candidate) if candidate is not None)
         )[:1]
@@ -364,7 +452,14 @@ def build_head_candidates(
     for _, _, face_index, pose_order in sorted(pairs):
         if face_index in used_faces or pose_order in used_poses:
             continue
-        fused.append(fuse_head_candidates(face_candidates[face_index], pose_candidates[pose_order], config))
+        fused.append(
+            fuse_head_candidates(
+                face_candidates[face_index],
+                pose_candidates[pose_order],
+                config,
+                reference_ray_length,
+            )
+        )
         used_faces.add(face_index)
         used_poses.add(pose_order)
 
