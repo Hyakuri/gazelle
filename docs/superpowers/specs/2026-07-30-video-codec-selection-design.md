@@ -194,4 +194,3 @@ Coverage includes:
 - `yuv420p` and fast-start output;
 - the unchanged no-audio policy;
 - representative PowerShell commands.
-

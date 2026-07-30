@@ -22,6 +22,20 @@ IMPLEMENTATION_PLAN = (
     / "plans"
     / "2026-07-23-project-usage-guide-implementation-plan.md"
 )
+VIDEO_CODEC_DESIGN = (
+    REPOSITORY_ROOT
+    / "docs"
+    / "superpowers"
+    / "specs"
+    / "2026-07-30-video-codec-selection-design.md"
+)
+VIDEO_CODEC_PLAN = (
+    REPOSITORY_ROOT
+    / "docs"
+    / "superpowers"
+    / "plans"
+    / "2026-07-30-video-codec-selection-implementation-plan.md"
+)
 
 
 class UsageDocumentationTest(unittest.TestCase):
@@ -479,9 +493,17 @@ class UsageDocumentationTest(unittest.TestCase):
                 self.assertNotIn(claim, section, "{} retains an overstrong matrix claim".format(guide_path))
 
     def test_implementation_plan_has_one_final_newline(self):
-        content = self._read(IMPLEMENTATION_PLAN)
-        self.assertTrue(content.endswith("\n"))
-        self.assertFalse(content.endswith("\n\n"))
+        for plan_path in (
+            IMPLEMENTATION_PLAN,
+            VIDEO_CODEC_DESIGN,
+            VIDEO_CODEC_PLAN,
+        ):
+            content = self._read(plan_path)
+            self.assertTrue(content.endswith("\n"))
+            self.assertFalse(
+                content.endswith("\n\n"),
+                "{} has an extra blank line at EOF".format(plan_path),
+            )
 
     def test_known_limitations_and_security_boundaries_are_documented(self):
         required = (

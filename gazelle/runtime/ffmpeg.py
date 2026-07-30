@@ -62,6 +62,16 @@ def _completed_output(completed) -> str:
     )
 
 
+def _attach_cleanup_note(primary_error, cleanup_error) -> None:
+    add_note = getattr(primary_error, "add_note", None)
+    if callable(add_note):
+        add_note(
+            "FFmpeg candidate cleanup also failed: {!r}".format(
+                cleanup_error
+            )
+        )
+
+
 def detect_ffmpeg_capabilities(
     *,
     executable_name: str = "ffmpeg",
@@ -163,6 +173,7 @@ def transcode_h264(
 
     candidate = TemporaryVideoPath.beside(final_path, "candidate")
     failures = []
+    primary_error = None
     try:
         for encoder in encoder_order:
             candidate.close()
@@ -208,5 +219,13 @@ def transcode_h264(
         raise RuntimeError(
             "FFmpeg H.264 encoding failed: {}".format("; ".join(failures))
         )
+    except BaseException as exc:
+        primary_error = exc
+        raise
     finally:
-        candidate.close()
+        try:
+            candidate.close()
+        except BaseException as cleanup_error:
+            if primary_error is None:
+                raise
+            _attach_cleanup_note(primary_error, cleanup_error)

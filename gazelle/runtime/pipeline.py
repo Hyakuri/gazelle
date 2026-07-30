@@ -475,9 +475,20 @@ def run_video_pipeline(config, predictor_factory: Optional[Callable[[object], ob
                 frames_written=frames_written,
             ),
         )
-        if writer is not None:
-            writer.close()
-            writer = None
+        completed_resources = (
+            ("gaze JSONL writer", gaze_jsonl_writer),
+            ("head observation JSONL writer", head_jsonl_writer),
+            ("video writer", writer),
+            ("provider", head_provider),
+            ("reader", reader),
+        )
+        gaze_jsonl_writer = None
+        head_jsonl_writer = None
+        writer = None
+        head_provider = None
+        reader = None
+        _close_video_resources(completed_resources, None)
+        predictor = None
         if rendered_source is not None:
             transcode_h264(
                 rendered_source.path,

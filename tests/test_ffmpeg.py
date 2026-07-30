@@ -3,6 +3,7 @@ import subprocess
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 from gazelle.runtime.ffmpeg import (
     FFmpegCapabilities,
@@ -287,6 +288,49 @@ class H264TranscodeTest(unittest.TestCase):
                     self.make_capabilities(),
                     runner=lambda *args, **kwargs: completed_process(),
                 )
+
+    def test_cleanup_failure_does_not_mask_encoding_failure(self):
+        with TemporaryDirectory() as temp_dir:
+            source_path = Path(temp_dir) / "source.mp4"
+            final_path = Path(temp_dir) / "rendered.mp4"
+            source_path.write_bytes(b"source")
+
+            class CleanupFailingCandidate:
+                def __init__(self):
+                    self.path = Path(temp_dir) / ".rendered.candidate.test.mp4"
+                    self.close_calls = 0
+
+                def close(self):
+                    self.close_calls += 1
+                    if self.close_calls > 1:
+                        raise PermissionError("candidate cleanup failed")
+
+            candidate = CleanupFailingCandidate()
+            with patch(
+                "gazelle.runtime.ffmpeg.TemporaryVideoPath.beside",
+                return_value=candidate,
+            ):
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "FFmpeg H.264 encoding failed",
+                ) as caught:
+                    transcode_h264(
+                        source_path,
+                        final_path,
+                        self.make_capabilities("libx264"),
+                        runner=lambda *args, **kwargs: completed_process(
+                            returncode=9,
+                            stderr="encoder failed",
+                        ),
+                    )
+
+        self.assertEqual(candidate.close_calls, 2)
+        self.assertTrue(
+            any(
+                "candidate cleanup failed" in note
+                for note in caught.exception.__notes__
+            )
+        )
 
 
 if __name__ == "__main__":

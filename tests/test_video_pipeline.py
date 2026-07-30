@@ -1236,6 +1236,92 @@ class VideoPipelineTest(unittest.TestCase):
 
         self.assertFalse(source_exists)
 
+    def test_avc1_closes_completed_pipeline_resources_before_transcode(self):
+        events = []
+
+        class EventReader(FakeVideoReader):
+            def close(self):
+                events.append("reader.close")
+                super().close()
+
+        class EventProvider(FakeHeadProvider):
+            def close(self):
+                events.append("provider.close")
+                super().close()
+
+        class EventWriter(FakeVideoWriter):
+            def __init__(self, path, width, height, fps):
+                super().__init__()
+                self.path = Path(path)
+                self.path.write_bytes(b"mp4v source")
+
+            def close(self):
+                events.append("video.close")
+                super().close()
+
+        class EventJsonlWriter(FakeJsonlWriter):
+            def close(self):
+                events.append(self.name)
+                super().close()
+
+        reader = EventReader(fps=5.0)
+        provider = EventProvider()
+        head_writer = EventJsonlWriter("head.close", events)
+        gaze_writer = EventJsonlWriter("gaze.close", events)
+
+        def transcode(source_path, final_path, capabilities):
+            events.append("transcode")
+            Path(final_path).write_bytes(b"h264")
+            return "libx264"
+
+        with TemporaryDirectory() as tmpdir:
+            config = make_config(
+                input_path=str(Path(tmpdir) / "clip.mp4"),
+                output_dir=str(Path(tmpdir) / "outputs"),
+                save_rendered=True,
+                video_codec="avc1",
+            )
+            with patch(
+                "gazelle.runtime.pipeline.detect_ffmpeg_capabilities",
+                return_value=object(),
+            ):
+                with patch(
+                    "gazelle.runtime.pipeline.VideoFrameReader",
+                    return_value=reader,
+                ):
+                    with patch(
+                        "gazelle.runtime.pipeline.build_head_provider_from_config",
+                        return_value=provider,
+                    ):
+                        with patch(
+                            "gazelle.runtime.pipeline.VideoFrameWriter",
+                            EventWriter,
+                        ):
+                            with patch(
+                                "gazelle.runtime.pipeline.JsonlWriter",
+                                side_effect=(head_writer, gaze_writer),
+                            ):
+                                with patch(
+                                    "gazelle.runtime.pipeline.transcode_h264",
+                                    side_effect=transcode,
+                                ):
+                                    run_video_pipeline(
+                                        config,
+                                        predictor_factory=lambda config: FakePredictor(),
+                                    )
+
+        self.assertEqual(events[-1], "transcode")
+        self.assertCountEqual(
+            events[:-1],
+            [
+                "gaze.close",
+                "head.close",
+                "video.close",
+                "provider.close",
+                "reader.close",
+            ],
+        )
+
     def test_run_video_pipeline_passes_enhanced_render_options(self):
         with TemporaryDirectory() as tmpdir:
             video_path = Path(tmpdir) / "clip.mp4"
