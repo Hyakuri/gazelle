@@ -948,6 +948,294 @@ class VideoPipelineTest(unittest.TestCase):
         self.assertTrue(rendered_exists)
         self.assertEqual(len(rendered_frames), result.frames_written)
 
+    def test_default_mp4v_writes_directly_without_ffmpeg(self):
+        reader = FakeVideoReader(fps=5.0)
+        provider = FakeHeadProvider()
+        writer = FakeVideoWriter()
+        with TemporaryDirectory() as tmpdir:
+            output_root = Path(tmpdir) / "outputs"
+            config = make_config(
+                input_path=str(Path(tmpdir) / "clip.mp4"),
+                output_dir=str(output_root),
+                save_rendered=True,
+            )
+            with patch(
+                "gazelle.runtime.pipeline.VideoFrameReader",
+                return_value=reader,
+            ):
+                with patch(
+                    "gazelle.runtime.pipeline.build_head_provider_from_config",
+                    return_value=provider,
+                ):
+                    with patch(
+                        "gazelle.runtime.pipeline.VideoFrameWriter",
+                        return_value=writer,
+                    ) as writer_factory:
+                        with patch(
+                            "gazelle.runtime.pipeline.detect_ffmpeg_capabilities"
+                        ) as detect_ffmpeg:
+                            with patch(
+                                "gazelle.runtime.pipeline.transcode_h264"
+                            ) as transcode:
+                                result = run_video_pipeline(
+                                    config,
+                                    predictor_factory=lambda config: FakePredictor(),
+                                )
+
+        writer_path = Path(writer_factory.call_args.args[0])
+        self.assertEqual(
+            writer_path,
+            output_root / "clip_gazelle" / "rendered.mp4",
+        )
+        self.assertEqual(result.rendered_video_path, writer_path)
+        self.assertEqual(writer.close_calls, 1)
+        detect_ffmpeg.assert_not_called()
+        transcode.assert_not_called()
+
+    def test_avc1_finalizes_temporary_source_after_writer_close(self):
+        events = []
+        reader = FakeVideoReader(fps=5.0)
+        provider = FakeHeadProvider()
+        created_writer = None
+
+        class SourceVideoWriter(FakeVideoWriter):
+            def __init__(self, path, width, height, fps):
+                super().__init__()
+                self.path = Path(path)
+                self.path.write_bytes(b"mp4v source")
+
+            def close(self):
+                events.append("writer.close")
+                super().close()
+
+        def build_writer(path, width, height, fps):
+            nonlocal created_writer
+            created_writer = SourceVideoWriter(path, width, height, fps)
+            return created_writer
+
+        capabilities = object()
+
+        def finalize(source_path, final_path, received_capabilities):
+            events.append("transcode")
+            self.assertTrue(Path(source_path).exists())
+            self.assertEqual(received_capabilities, capabilities)
+            Path(final_path).write_bytes(b"h264 output")
+            return "libx264"
+
+        with TemporaryDirectory() as tmpdir:
+            output_root = Path(tmpdir) / "outputs"
+            config = make_config(
+                input_path=str(Path(tmpdir) / "clip.mp4"),
+                output_dir=str(output_root),
+                save_rendered=True,
+                video_codec="avc1",
+            )
+            with patch(
+                "gazelle.runtime.pipeline.detect_ffmpeg_capabilities",
+                return_value=capabilities,
+            ) as detect_ffmpeg:
+                with patch(
+                    "gazelle.runtime.pipeline.VideoFrameReader",
+                    return_value=reader,
+                ):
+                    with patch(
+                        "gazelle.runtime.pipeline.build_head_provider_from_config",
+                        return_value=provider,
+                    ):
+                        with patch(
+                            "gazelle.runtime.pipeline.VideoFrameWriter",
+                            side_effect=build_writer,
+                        ):
+                            with patch(
+                                "gazelle.runtime.pipeline.transcode_h264",
+                                side_effect=finalize,
+                            ) as transcode:
+                                result = run_video_pipeline(
+                                    config,
+                                    predictor_factory=lambda config: FakePredictor(),
+                                )
+
+            formal_path = output_root / "clip_gazelle" / "rendered.mp4"
+            source_path = created_writer.path
+            source_exists = source_path.exists()
+            final_bytes = formal_path.read_bytes()
+
+        self.assertEqual(events, ["writer.close", "transcode"])
+        self.assertEqual(created_writer.close_calls, 1)
+        self.assertTrue(source_path.name.startswith(".rendered.source."))
+        self.assertNotEqual(source_path, formal_path)
+        self.assertFalse(source_exists)
+        self.assertEqual(final_bytes, b"h264 output")
+        self.assertEqual(result.rendered_video_path, formal_path)
+        detect_ffmpeg.assert_called_once_with()
+        transcode.assert_called_once()
+
+    def test_avc1_missing_ffmpeg_rejects_before_pipeline_construction(self):
+        factory_calls = []
+        config = make_config(
+            input_path="clip.mp4",
+            output_dir="outputs",
+            save_rendered=True,
+            video_codec="avc1",
+        )
+
+        with patch(
+            "gazelle.runtime.pipeline.detect_ffmpeg_capabilities",
+            side_effect=RuntimeError("FFmpeg unavailable"),
+        ):
+            with patch("gazelle.runtime.pipeline.VideoFrameReader") as reader:
+                with patch(
+                    "gazelle.runtime.pipeline.build_head_provider_from_config"
+                ) as provider:
+                    with self.assertRaisesRegex(RuntimeError, "FFmpeg unavailable"):
+                        run_video_pipeline(
+                            config,
+                            predictor_factory=lambda config: factory_calls.append(
+                                config
+                            ),
+                        )
+
+        reader.assert_not_called()
+        provider.assert_not_called()
+        self.assertEqual(factory_calls, [])
+
+    def test_avc1_without_rendered_output_does_not_probe_ffmpeg(self):
+        reader = FakeVideoReader(fps=5.0)
+        provider = FakeHeadProvider()
+        with TemporaryDirectory() as tmpdir:
+            config = make_config(
+                input_path=str(Path(tmpdir) / "clip.mp4"),
+                output_dir=str(Path(tmpdir) / "outputs"),
+                video_codec="avc1",
+                save_rendered=False,
+            )
+            with patch(
+                "gazelle.runtime.pipeline.VideoFrameReader",
+                return_value=reader,
+            ):
+                with patch(
+                    "gazelle.runtime.pipeline.build_head_provider_from_config",
+                    return_value=provider,
+                ):
+                    with patch(
+                        "gazelle.runtime.pipeline.detect_ffmpeg_capabilities"
+                    ) as detect_ffmpeg:
+                        result = run_video_pipeline(
+                            config,
+                            predictor_factory=lambda config: FakePredictor(),
+                        )
+
+        self.assertIsNone(result.rendered_video_path)
+        detect_ffmpeg.assert_not_called()
+
+    def test_avc1_processing_failure_removes_source_without_transcoding(self):
+        primary_error = RuntimeError("frame processing failed")
+        frame = SimpleNamespace(index=0, timestamp_ms=0.0, image=object())
+        reader = FakeVideoReader(fps=5.0, frames=(frame,))
+
+        def fail_result(frame_index):
+            raise primary_error
+
+        provider = FakeHeadProvider(fail_result)
+        source_paths = []
+
+        class SourceVideoWriter(FakeVideoWriter):
+            def __init__(self, path, width, height, fps):
+                super().__init__()
+                self.path = Path(path)
+                self.path.write_bytes(b"mp4v source")
+                source_paths.append(self.path)
+
+        with TemporaryDirectory() as tmpdir:
+            config = make_config(
+                input_path=str(Path(tmpdir) / "clip.mp4"),
+                output_dir=str(Path(tmpdir) / "outputs"),
+                save_rendered=True,
+                video_codec="avc1",
+            )
+            with patch(
+                "gazelle.runtime.pipeline.detect_ffmpeg_capabilities",
+                return_value=object(),
+            ):
+                with patch(
+                    "gazelle.runtime.pipeline.VideoFrameReader",
+                    return_value=reader,
+                ):
+                    with patch(
+                        "gazelle.runtime.pipeline.build_head_provider_from_config",
+                        return_value=provider,
+                    ):
+                        with patch(
+                            "gazelle.runtime.pipeline.VideoFrameWriter",
+                            SourceVideoWriter,
+                        ):
+                            with patch(
+                                "gazelle.runtime.pipeline.transcode_h264"
+                            ) as transcode:
+                                with self.assertRaises(RuntimeError) as caught:
+                                    run_video_pipeline(
+                                        config,
+                                        predictor_factory=lambda config: FakePredictor(),
+                                    )
+
+            source_exists = source_paths[0].exists()
+
+        self.assertIs(caught.exception, primary_error)
+        self.assertFalse(source_exists)
+        transcode.assert_not_called()
+
+    def test_avc1_transcode_failure_removes_temporary_source(self):
+        reader = FakeVideoReader(fps=5.0)
+        provider = FakeHeadProvider()
+        source_paths = []
+
+        class SourceVideoWriter(FakeVideoWriter):
+            def __init__(self, path, width, height, fps):
+                super().__init__()
+                self.path = Path(path)
+                self.path.write_bytes(b"mp4v source")
+                source_paths.append(self.path)
+
+        with TemporaryDirectory() as tmpdir:
+            config = make_config(
+                input_path=str(Path(tmpdir) / "clip.mp4"),
+                output_dir=str(Path(tmpdir) / "outputs"),
+                save_rendered=True,
+                video_codec="avc1",
+            )
+            with patch(
+                "gazelle.runtime.pipeline.detect_ffmpeg_capabilities",
+                return_value=object(),
+            ):
+                with patch(
+                    "gazelle.runtime.pipeline.VideoFrameReader",
+                    return_value=reader,
+                ):
+                    with patch(
+                        "gazelle.runtime.pipeline.build_head_provider_from_config",
+                        return_value=provider,
+                    ):
+                        with patch(
+                            "gazelle.runtime.pipeline.VideoFrameWriter",
+                            SourceVideoWriter,
+                        ):
+                            with patch(
+                                "gazelle.runtime.pipeline.transcode_h264",
+                                side_effect=RuntimeError("transcode failed"),
+                            ):
+                                with self.assertRaisesRegex(
+                                    RuntimeError,
+                                    "transcode failed",
+                                ):
+                                    run_video_pipeline(
+                                        config,
+                                        predictor_factory=lambda config: FakePredictor(),
+                                    )
+
+            source_exists = source_paths[0].exists()
+
+        self.assertFalse(source_exists)
+
     def test_run_video_pipeline_passes_enhanced_render_options(self):
         with TemporaryDirectory() as tmpdir:
             video_path = Path(tmpdir) / "clip.mp4"

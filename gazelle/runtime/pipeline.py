@@ -5,6 +5,11 @@ from time import perf_counter
 from typing import Callable, List, Optional, Tuple
 
 from gazelle.runtime.contracts import GazePrediction, HeadObservation
+from gazelle.runtime.ffmpeg import (
+    TemporaryVideoPath,
+    detect_ffmpeg_capabilities,
+    transcode_h264,
+)
 from gazelle.runtime.heads import (
     NoneHeadProvider,
     StaticHeadProvider,
@@ -330,9 +335,14 @@ def run_video_pipeline(config, predictor_factory: Optional[Callable[[object], ob
     if config.save_heatmaps:
         raise ValueError("video heatmap export is not implemented yet")
 
+    ffmpeg_capabilities = None
+    if config.save_rendered and config.video_codec == "avc1":
+        ffmpeg_capabilities = detect_ffmpeg_capabilities()
+
     reader = None
     head_provider = None
     writer = None
+    rendered_source = None
     head_jsonl_writer = None
     gaze_jsonl_writer = None
     primary_error = None
@@ -359,8 +369,16 @@ def run_video_pipeline(config, predictor_factory: Optional[Callable[[object], ob
         renderer = None
         if config.save_rendered:
             rendered_video_path = output_dir / config.output_video_name
+            if config.video_codec == "avc1":
+                rendered_source = TemporaryVideoPath.beside(
+                    rendered_video_path,
+                    "source",
+                )
+                writer_path = rendered_source.path
+            else:
+                writer_path = rendered_video_path
             writer = VideoFrameWriter(
-                rendered_video_path,
+                writer_path,
                 width=metadata.width,
                 height=metadata.height,
                 fps=video_fps,
@@ -457,6 +475,15 @@ def run_video_pipeline(config, predictor_factory: Optional[Callable[[object], ob
                 frames_written=frames_written,
             ),
         )
+        if writer is not None:
+            writer.close()
+            writer = None
+        if rendered_source is not None:
+            transcode_h264(
+                rendered_source.path,
+                rendered_video_path,
+                ffmpeg_capabilities,
+            )
     except BaseException as exc:
         primary_error = exc
         raise
@@ -466,6 +493,7 @@ def run_video_pipeline(config, predictor_factory: Optional[Callable[[object], ob
                 ("gaze JSONL writer", gaze_jsonl_writer),
                 ("head observation JSONL writer", head_jsonl_writer),
                 ("video writer", writer),
+                ("rendered video source", rendered_source),
                 ("provider", head_provider),
                 ("reader", reader),
             ),
