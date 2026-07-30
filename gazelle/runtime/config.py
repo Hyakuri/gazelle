@@ -11,6 +11,7 @@ from gazelle.runtime.model_registry import get_model_spec
 
 SUPPORTED_RENDERED_SUFFIXES = (".png", ".jpg", ".jpeg")
 SUPPORTED_VIDEO_OUTPUT_SUFFIXES = (".mp4",)
+SUPPORTED_VIDEO_CODECS = ("mp4v", "avc1")
 SUPPORTED_POSE_MODELS = ("lite", "full", "heavy")
 
 
@@ -142,6 +143,17 @@ def validate_output_video_name(output_video_name: str) -> str:
     return name
 
 
+def validate_video_codec(video_codec: str) -> str:
+    codec = str(video_codec).strip().lower()
+    if codec not in SUPPORTED_VIDEO_CODECS:
+        raise ValueError(
+            "video_codec must be one of: {}".format(
+                ", ".join(SUPPORTED_VIDEO_CODECS)
+            )
+        )
+    return codec
+
+
 @dataclass(frozen=True)
 class RuntimeConfig:
     """Validated CLI configuration for the Gazelle runtime."""
@@ -186,6 +198,7 @@ class RuntimeConfig:
     max_frames: Optional[int] = None
     frame_step: int = 1
     output_video_name: str = "rendered.mp4"
+    video_codec: str = "mp4v"
     device: str = "auto"
     cache_dir: Optional[str] = None
     checkpoint: Optional[str] = None
@@ -245,6 +258,11 @@ class RuntimeConfig:
             "output_video_name",
             validate_output_video_name(self.output_video_name),
         )
+        object.__setattr__(
+            self,
+            "video_codec",
+            validate_video_codec(self.video_codec),
+        )
         return self
 
     @classmethod
@@ -290,6 +308,7 @@ class RuntimeConfig:
             max_frames=args.max_frames,
             frame_step=args.frame_step,
             output_video_name=args.output_video_name,
+            video_codec=args.video_codec,
             device=args.device,
             cache_dir=args.cache_dir,
             checkpoint=args.checkpoint,

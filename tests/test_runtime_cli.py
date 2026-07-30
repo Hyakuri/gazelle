@@ -12,6 +12,7 @@ from gazelle.runtime.config import (
     validate_max_heads,
     validate_pose_model,
     validate_positive_finite_float,
+    validate_video_codec,
 )
 
 
@@ -284,6 +285,18 @@ class RuntimeCliTest(unittest.TestCase):
         self.assertEqual(config.max_frames, 10)
         self.assertEqual(config.frame_step, 2)
         self.assertEqual(config.output_video_name, "rendered.mp4")
+
+    def test_video_codec_defaults_to_mp4v(self):
+        config = parse_runtime_config(["--input", "clip.mp4"])
+
+        self.assertEqual(config.video_codec, "mp4v")
+
+    def test_parse_avc1_video_codec(self):
+        config = parse_runtime_config(
+            ["--input", "clip.mp4", "--video-codec", "avc1"]
+        )
+
+        self.assertEqual(config.video_codec, "avc1")
 
     def test_prepare_only_route_calls_resource_preparation(self):
         prepared = SimpleNamespace(
@@ -569,6 +582,23 @@ class RuntimeCliTest(unittest.TestCase):
                     parse_runtime_config(["--input", "clip.mp4", "--output-video-name", name])
                 self.assertEqual(cm.exception.code, 2)
                 self.assertIn("output_video_name", stderr.getvalue())
+
+    def test_invalid_video_codec_rejected(self):
+        stderr = io.StringIO()
+        with redirect_stderr(stderr), self.assertRaises(SystemExit) as caught:
+            parse_runtime_config(
+                ["--input", "clip.mp4", "--video-codec", "h264"]
+            )
+
+        self.assertEqual(caught.exception.code, 2)
+        self.assertIn("--video-codec", stderr.getvalue())
+
+    def test_runtime_config_rejects_invalid_video_codec(self):
+        with self.assertRaisesRegex(ValueError, "video_codec"):
+            RuntimeConfig(video_codec="h264").validate()
+
+        with self.assertRaisesRegex(ValueError, "video_codec"):
+            validate_video_codec("h264")
 
     def test_invalid_heatmap_contour_quantile_rejected(self):
         invalid_quantiles = ("-0.1", "1.1", "nan")

@@ -103,6 +103,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Rendered video file name written inside the per-video output directory.",
     )
     parser.add_argument(
+        "--video-codec",
+        choices=("mp4v", "avc1"),
+        default="mp4v",
+        help=(
+            "Rendered video codec. mp4v uses OpenCV directly; avc1 "
+            "finalizes H.264 through FFmpeg."
+        ),
+    )
+    parser.add_argument(
         "--output-fps",
         type=float,
         default=None,
