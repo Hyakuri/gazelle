@@ -13,6 +13,8 @@ from gazelle.runtime.media import SUPPORTED_VIDEO_SUFFIXES, detect_media_type
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 ENGLISH_GUIDE = REPOSITORY_ROOT / "docs" / "USAGE.md"
 CHINESE_GUIDE = REPOSITORY_ROOT / "docs" / "USAGE_CN.md"
+ENGLISH_README = REPOSITORY_ROOT / "README.md"
+CHINESE_README = REPOSITORY_ROOT / "README_CN.md"
 IMPLEMENTATION_PLAN = (
     REPOSITORY_ROOT
     / "docs"
@@ -176,6 +178,7 @@ class UsageDocumentationTest(unittest.TestCase):
             "--device",
             "--cache-dir",
             "--save-rendered",
+            "--video-codec",
             "--head-box",
             "--face-box",
             "--face-keypoints",
@@ -209,6 +212,7 @@ class UsageDocumentationTest(unittest.TestCase):
             self.assertEqual("cuda", config.device)
             self.assertEqual("models", config.cache_dir)
             self.assertTrue(config.save_rendered)
+            self.assertIn(config.video_codec, ("mp4v", "avc1"))
             self.assertTrue(config.draw_head_box)
             self.assertTrue(config.draw_face_box)
             self.assertTrue(config.draw_face_keypoints)
@@ -219,6 +223,39 @@ class UsageDocumentationTest(unittest.TestCase):
             self.assertEqual(2.5, config.reference_ray_length)
             self.assertEqual(0.5, config.gaze_inout_threshold)
             self.assertIn("only the input path", section.lower())
+
+    def test_video_codec_contract_is_documented_in_all_user_guides(self):
+        required_tokens = (
+            "--video-codec",
+            "mp4v",
+            "avc1",
+            "FFmpeg",
+            "h264_nvenc",
+            "libx264",
+            "yuv420p",
+            "+faststart",
+        )
+        for guide_path in (
+            ENGLISH_README,
+            CHINESE_README,
+            ENGLISH_GUIDE,
+            CHINESE_GUIDE,
+        ):
+            text = self._read(guide_path)
+            for token in required_tokens:
+                self.assertIn(
+                    token,
+                    text,
+                    "{} is missing video codec token {}".format(
+                        guide_path,
+                        token,
+                    ),
+                )
+
+        self.assertIn("no audio", self._read(ENGLISH_README).lower())
+        self.assertIn("no audio", self._read(ENGLISH_GUIDE).lower())
+        self.assertIn("无音频", self._read(CHINESE_README))
+        self.assertIn("无音频", self._read(CHINESE_GUIDE))
 
     def test_examples_distinguish_tracked_input_from_user_templates(self):
         tracked_asset = REPOSITORY_ROOT / "assets" / "the_office.png"
@@ -367,7 +404,7 @@ class UsageDocumentationTest(unittest.TestCase):
 
     def test_base_run_config_tables_match_dataclass_fields(self):
         expected = [field.name for field in fields(RuntimeConfig)]
-        self.assertEqual(44, len(expected))
+        self.assertEqual(45, len(expected))
         english_rows = self._base_run_config_rows(ENGLISH_GUIDE)
         chinese_rows = self._base_run_config_rows(CHINESE_GUIDE)
         self.assertEqual(expected, [name for name, _, _ in english_rows])

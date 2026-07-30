@@ -319,9 +319,22 @@ python main.py `
   --save-rendered
 ```
 
-This command streams frames from the input video and writes a per-video output directory such as `outputs/assembly_gazelle/`. It always writes `head_observations.jsonl`, `predictions.jsonl`, and `run_config.json`, with exactly one observation row and one gaze row per written frame. Gazelle and its DINOv2 backbone are constructed lazily on the first non-skipped frame that has at least one usable head, then reused; an all-skipped or all-`no_head` run does not construct them. If their weights are not already cached, that first prediction may download them. This is offline video processing, not real-time webcam processing. Audio is not preserved in rendered videos.
+This command streams frames from the input video and writes a per-video output directory such as `outputs/assembly_gazelle/`. It always writes `head_observations.jsonl`, `predictions.jsonl`, and `run_config.json`, with exactly one observation row and one gaze row per written frame. Gazelle and its DINOv2 backbone are constructed lazily on the first non-skipped frame that has at least one usable head, then reused; an all-skipped or all-`no_head` run does not construct them. If their weights are not already cached, that first prediction may download them. This is offline video processing, not real-time webcam processing. Rendered videos contain no audio.
 
-Pass `--save-rendered` to write a rendered `.mp4`; the default video output name is `rendered.mp4`, and `--output-video-name` can choose another `.mp4` file name. The same rendering flags used for images also apply to rendered videos, including `--face-box`, `--face-keypoints`, `--pose-head-points`, `--face-mesh`, and `--no-track-state` with the defaults described above.
+Pass `--save-rendered` to write a rendered `.mp4`; the default video output name is `rendered.mp4`, and `--output-video-name` can choose another `.mp4` file name. `--video-codec mp4v` is the default and preserves the direct OpenCV `VideoWriter` behavior without requiring FFmpeg. The same rendering flags used for images also apply to rendered videos, including `--face-box`, `--face-keypoints`, `--pose-head-points`, `--face-mesh`, and `--no-track-state` with the defaults described above.
+
+For browser-friendly H.264/AVC output, install FFmpeg so `ffmpeg` is available on `PATH`, then select `avc1`:
+
+```powershell
+python main.py `
+  --input samples\assembly.mp4 `
+  --output-dir outputs `
+  --head-source mediapipe `
+  --save-rendered `
+  --video-codec avc1
+```
+
+The `avc1` path streams rendered frames to a temporary `mp4v` video, then invokes FFmpeg. It prefers `h264_nvenc` and falls back to `libx264` if NVENC is unavailable when encoding starts. The H.264 output uses `yuv420p`, `-movflags +faststart`, and `-an`; it atomically replaces the formal output only after successful encoding and safely cleans temporary files on success or failure. FFmpeg capability detection occurs before video/provider/model construction. `--video-codec` has no effect unless `--save-rendered` is enabled. Default unit tests mock FFmpeg and do not launch a real encoder.
 
 `--head-source none` can show heatmap, contour, and the red X gaze peak, but it cannot show bbox or arrow because no bbox is available. Use `--head-source static` or `--head-source json` plus `--head-box` for bbox and arrow overlays.
 

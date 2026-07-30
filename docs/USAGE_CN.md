@@ -69,6 +69,7 @@ python main.py --input USER_INPUT_PATH `
   --device cuda `
   --cache-dir models `
   --save-rendered `
+  --video-codec mp4v `
   --head-box `
   --face-box `
   --face-keypoints `
@@ -128,6 +129,7 @@ MediaPipe Face Detector / Face Landmarker / Pose Landmarker
 | `--save-rendered` | flag | `false` | image/video inference | 写 overlay image 或无音频 `.mp4`；未启用时 rendering control 不产生文件作用。 |
 | `--rendered-name` | 非空 leaf filename，后缀 `.png`、`.jpg` 或 `.jpeg` | `rendered.png` | rendered image | 指定 per-image 输出目录内文件名；拒绝 path component。 |
 | `--output-video-name` | 非空 leaf filename，后缀 `.mp4` | `rendered.mp4` | rendered video | 指定 per-video 目录内无音频视频名；拒绝 path component。 |
+| `--video-codec` | `mp4v` 或 `avc1` | `mp4v` | rendered video | `mp4v` 由 OpenCV 直接写入；`avc1` 要求 `PATH` 中可用 FFmpeg，并以原子方式完成 H.264/AVC 输出。未启用 `--save-rendered` 时无作用。 |
 | `--output-fps` | finite float，大于 `0` | `None` | video | 仅 source FPS 无效时使用，否则 source FPS 优先；解析后的 FPS 也用于 video tracking。 |
 | `--max-frames` | integer，大于等于 `1` | `None` | video | 限制解码/写入帧、两个 JSONL 和可选 rendered video。 |
 | `--frame-step` | integer，大于等于 `1` | `1` | video | 每个写入帧仍运行 perception；仅当 `frame_index % frame_step == 0` 运行 Gazelle，否则 status 为 `skipped`。 |
@@ -213,7 +215,18 @@ python main.py --input USER_INPUT_PATH --output-dir outputs --overwrite `
   --head-box
 ```
 
-每个写入帧都运行 perception。`frame_step` 只 gate Gazelle：未选帧即使无 head 也是 `skipped`；已选但无 head 才是 `no_head`。`max_frames` 限制两个 JSONL 和 rendering。raw video heatmap export 不支持。渲染 `mp4v` 不保留源音频。
+每个写入帧都运行 perception。`frame_step` 只 gate Gazelle：未选帧即使无 head 也是 `skipped`；已选但无 head 才是 `no_head`。`max_frames` 限制两个 JSONL 和 rendering。raw video heatmap export 不支持。所有 rendered output 都是无音频视频。
+
+默认 `--video-codec mp4v` 保持现有 OpenCV `VideoWriter` 直接写入路径，不需要 FFmpeg。如需更适合浏览器播放的 H.264/AVC，请安装 FFmpeg 并确保 `ffmpeg` 位于 `PATH`，然后运行：
+
+```powershell
+python main.py --input USER_INPUT_PATH --output-dir outputs --overwrite `
+  --head-source mediapipe `
+  --save-rendered `
+  --video-codec avc1
+```
+
+`avc1` 路径先把 rendered frame 流式写入临时 `mp4v` source，并在 video/provider/model 构建前探测 FFmpeg；encoder 优先选择 `h264_nvenc`，如果 NVENC 在实际执行时不可用则重试 `libx264`。输出使用 `yuv420p`、`-movflags +faststart` 和 `-an`，只有编码成功后才原子替换正式文件。成功或失败都会清理临时 source/candidate。仅指定 `avc1` 而未启用 `--save-rendered` 时，不会探测或运行 FFmpeg。
 
 ## 10. 渲染控制
 
@@ -341,7 +354,7 @@ Landmark、matrix、head-pose value shape：
 
 ### Run configuration
 
-`run_config.json` 先对已验证的 `RuntimeConfig` 执行 `dataclasses.asdict()`，因此 Python tuple 在 JSON 中成为 array。base object 始终含以下全部 44 个 key，包括值为 `null` 的 key。
+`run_config.json` 先对已验证的 `RuntimeConfig` 执行 `dataclasses.asdict()`，因此 Python tuple 在 JSON 中成为 array。base object 始终含以下全部 45 个 key，包括值为 `null` 的 key。
 
 #### Base RuntimeConfig fields
 
@@ -387,6 +400,7 @@ Landmark、matrix、head-pose value shape：
 | `max_frames` | integer or null (nullable) | 来自 `--max-frames` 的 positive frame limit；无显式 limit 时为 null。 |
 | `frame_step` | integer (non-null) | 来自 `--frame-step` 的 positive Gazelle inference stride。 |
 | `output_video_name` | string (non-null) | 来自 `--output-video-name` 的已验证 rendered-video leaf `.mp4` filename。 |
+| `video_codec` | string (non-null) | 来自 `--video-codec` 的已验证 rendered-video codec：`mp4v` 或 `avc1`。 |
 | `device` | string (non-null) | 来自 `--device` 的已验证 request：`auto`、`cpu`、`cuda` 或 indexed CUDA。 |
 | `cache_dir` | string or null (nullable) | 来自 `--cache-dir` 的显式 cache root；使用 environment/default precedence 时为 null。 |
 | `checkpoint` | string or null (nullable) | 来自 `--checkpoint` 的 local Gazelle checkpoint path；使用 registered resource 时为 null。 |
@@ -438,7 +452,7 @@ Perception quality 依赖 visible-face evidence。`pose_only` 使用近似 pose-
 
 ## 15. 验证命令
 
-以下检查 offline 且不构造模型：
+以下检查 offline 且不构造模型。默认测试会 mock FFmpeg capability probe/transcode，不会运行真实 FFmpeg process：
 
 ```powershell
 conda activate Gazelle

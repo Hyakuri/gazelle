@@ -69,6 +69,7 @@ python main.py --input USER_INPUT_PATH `
   --device cuda `
   --cache-dir models `
   --save-rendered `
+  --video-codec mp4v `
   --head-box `
   --face-box `
   --face-keypoints `
@@ -128,6 +129,7 @@ Supported images: `.jpg`, `.jpeg`, `.png`, `.bmp`, `.webp`. Supported videos: `.
 | `--save-rendered` | flag | `false` | image/video inference | Writes an overlay image or silent `.mp4`; rendering controls have no file effect unless enabled. |
 | `--rendered-name` | nonempty leaf filename with `.png`, `.jpg`, or `.jpeg` | `rendered.png` | rendered image | Names the file inside the per-image output directory; path components are rejected. |
 | `--output-video-name` | nonempty leaf filename ending `.mp4` | `rendered.mp4` | rendered video | Names the silent video inside the per-video output directory; path components are rejected. |
+| `--video-codec` | `mp4v` or `avc1` | `mp4v` | rendered video | `mp4v` writes directly with OpenCV; `avc1` requires FFmpeg on `PATH` and atomically finalizes H.264/AVC. It has no effect without `--save-rendered`. |
 | `--output-fps` | finite float greater than `0` | `None` | video | Used only if source FPS is invalid; otherwise source FPS wins. The resolved FPS also feeds video tracking. |
 | `--max-frames` | integer greater than or equal to `1` | `None` | video | Limits decoded/written frames, both JSONL files, and optional rendered video. |
 | `--frame-step` | integer greater than or equal to `1` | `1` | video | Perception still runs every written frame; Gazelle runs when `frame_index % frame_step == 0`; otherwise prediction status is `skipped`. |
@@ -213,7 +215,18 @@ python main.py --input USER_INPUT_PATH --output-dir outputs --overwrite `
   --head-box
 ```
 
-Perception runs on every written frame. `frame_step` gates only Gazelle: a nonselected frame is `skipped` even if it has no head; a selected frame without heads is `no_head`. `max_frames` limits both JSONL files and rendering. Raw video heatmap export is unsupported. Rendered `mp4v` video does not preserve source audio.
+Perception runs on every written frame. `frame_step` gates only Gazelle: a nonselected frame is `skipped` even if it has no head; a selected frame without heads is `no_head`. `max_frames` limits both JSONL files and rendering. Raw video heatmap export is unsupported. Rendered output has no audio.
+
+The default `--video-codec mp4v` keeps the existing direct OpenCV `VideoWriter` path and does not require FFmpeg. For browser-friendly H.264/AVC output, install FFmpeg so `ffmpeg` is available on `PATH`, then run:
+
+```powershell
+python main.py --input USER_INPUT_PATH --output-dir outputs --overwrite `
+  --head-source mediapipe `
+  --save-rendered `
+  --video-codec avc1
+```
+
+The `avc1` path streams rendered frames into a temporary `mp4v` source, probes FFmpeg before video/provider/model construction, prefers `h264_nvenc`, and retries with `libx264` if NVENC is unavailable at runtime. It writes `yuv420p`, applies `-movflags +faststart`, disables audio with `-an`, and atomically replaces the formal output only after successful encoding. Temporary source/candidate files are cleaned on success or failure. Selecting `avc1` without `--save-rendered` performs no FFmpeg probe or transcode.
 
 ## 10. Rendering controls
 
@@ -341,7 +354,7 @@ Video `predictions.jsonl` has one record per written frame:
 
 ### Run configuration
 
-`run_config.json` begins with `dataclasses.asdict()` over the validated `RuntimeConfig`, so Python tuples become JSON arrays. The base object always has all 44 keys below, including keys whose value is `null`.
+`run_config.json` begins with `dataclasses.asdict()` over the validated `RuntimeConfig`, so Python tuples become JSON arrays. The base object always has all 45 keys below, including keys whose value is `null`.
 
 #### Base RuntimeConfig fields
 
@@ -387,6 +400,7 @@ Video `predictions.jsonl` has one record per written frame:
 | `max_frames` | integer or null (nullable) | Positive frame limit from `--max-frames`, or null for no explicit limit. |
 | `frame_step` | integer (non-null) | Positive Gazelle inference stride from `--frame-step`. |
 | `output_video_name` | string (non-null) | Validated rendered-video leaf `.mp4` filename from `--output-video-name`. |
+| `video_codec` | string (non-null) | Validated rendered-video codec from `--video-codec`: `mp4v` or `avc1`. |
 | `device` | string (non-null) | Validated device request from `--device`: `auto`, `cpu`, `cuda`, or indexed CUDA. |
 | `cache_dir` | string or null (nullable) | Explicit cache root from `--cache-dir`, or null to use environment/default precedence. |
 | `checkpoint` | string or null (nullable) | Local Gazelle checkpoint path from `--checkpoint`, or null for the registered resource. |
@@ -438,7 +452,7 @@ There is no webcam/real-time mode, automatic ROI/process logic, Multi-Pose integ
 
 ## 15. Validation commands
 
-These checks are offline and do not construct a model:
+These checks are offline and do not construct a model. Default tests mock FFmpeg capability probes/transcodes and do not run a real FFmpeg process:
 
 ```powershell
 conda activate Gazelle

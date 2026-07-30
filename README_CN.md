@@ -328,9 +328,22 @@ python main.py `
   --save-rendered
 ```
 
-该命令会以流式方式逐帧处理视频，并创建类似 `outputs/assembly_gazelle/` 的视频输出目录。runtime 始终写入 `head_observations.jsonl`、`predictions.jsonl` 和 `run_config.json`，每个写出帧对应恰好一行 observation 和一行 gaze。Gazelle 及其 DINOv2 backbone 会延迟到首个未被跳过且至少有一个可用 head 的帧才构建，之后复用；全部跳过或全部为 `no_head` 的运行不会构建模型。如果权重尚未缓存，首次预测时可能下载它们。这是离线视频处理，不是实时 webcam 模式。渲染视频不会保留音频。
+该命令会以流式方式逐帧处理视频，并创建类似 `outputs/assembly_gazelle/` 的视频输出目录。runtime 始终写入 `head_observations.jsonl`、`predictions.jsonl` 和 `run_config.json`，每个写出帧对应恰好一行 observation 和一行 gaze。Gazelle 及其 DINOv2 backbone 会延迟到首个未被跳过且至少有一个可用 head 的帧才构建，之后复用；全部跳过或全部为 `no_head` 的运行不会构建模型。如果权重尚未缓存，首次预测时可能下载它们。这是离线视频处理，不是实时 webcam 模式。rendered video 是无音频输出。
 
-传入 `--save-rendered` 时会写入渲染后的 `.mp4`；默认文件名是 `rendered.mp4`，也可以用 `--output-video-name` 指定另一个 `.mp4` 文件名。图片渲染使用的绘制选项同样适用于视频，也包括上述具有相同默认值的 `--face-box`、`--face-keypoints`、`--pose-head-points`、`--face-mesh` 和 `--no-track-state`。
+传入 `--save-rendered` 时会写入渲染后的 `.mp4`；默认文件名是 `rendered.mp4`，也可以用 `--output-video-name` 指定另一个 `.mp4` 文件名。`--video-codec mp4v` 是默认值，保持 OpenCV `VideoWriter` 直接写入的现有行为，不要求 FFmpeg。图片渲染使用的绘制选项同样适用于视频，也包括上述具有相同默认值的 `--face-box`、`--face-keypoints`、`--pose-head-points`、`--face-mesh` 和 `--no-track-state`。
+
+如需更适合浏览器播放的 H.264/AVC output，请安装 FFmpeg 并确保 `ffmpeg` 位于 `PATH`，然后选择 `avc1`：
+
+```powershell
+python main.py `
+  --input samples\assembly.mp4 `
+  --output-dir outputs `
+  --head-source mediapipe `
+  --save-rendered `
+  --video-codec avc1
+```
+
+`avc1` 路径先把 rendered frame 流式写入临时 `mp4v` video，再调用 FFmpeg；优先使用 `h264_nvenc`，如果 NVENC 在实际编码启动时不可用，则 fallback 到 `libx264`。H.264 output 使用 `yuv420p`、`-movflags +faststart` 和 `-an`，只有成功编码后才原子替换正式输出，并在成功或失败时安全清理临时文件。FFmpeg capability detection 会在 video/provider/model 构建前执行。未启用 `--save-rendered` 时，`--video-codec` 不产生作用。默认单元测试会 mock FFmpeg，不会启动真实 encoder。
 
 `--head-source none` 可以显示 heatmap、contour 和红色 X gaze peak，但因为没有 bbox，不能显示 bbox 或 arrow。如果需要 bbox 和 arrow，请使用 `--head-source static` 或 `--head-source json` 提供 bbox，并传入 `--head-box`。
 
