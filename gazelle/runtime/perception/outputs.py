@@ -131,7 +131,12 @@ def _reference_ray_to_json_dict(ray, field_name):
     return record
 
 
-def _perception_to_json_dict(perception, *, save_face_landmarks):
+def _perception_to_json_dict(
+    perception,
+    *,
+    save_face_landmarks,
+    gazelle_selected,
+):
     record = {
         "person_id": _exact_int(perception.person_id, "person_id"),
         "head_bbox_normalized": _optional_float_list(
@@ -143,6 +148,7 @@ def _perception_to_json_dict(perception, *, save_face_landmarks):
         "view_state": _enum_value(perception.view_state, HeadViewState, "view_state"),
         "observed": _exact_bool(perception.observed, "observed"),
         "gaze_eligible": _exact_bool(perception.gaze_eligible, "gaze_eligible"),
+        "gazelle_selected": _exact_bool(gazelle_selected, "gazelle_selected"),
         "tracking": {
             "track_age_frames": _exact_int(perception.track_age_frames, "track_age_frames"),
             "missed_frames": _exact_int(perception.missed_frames, "missed_frames"),
@@ -212,6 +218,28 @@ def _head_to_json_dict(head):
     }
 
 
+def _validate_gazelle_selected_indices(value, head_count):
+    try:
+        indices = tuple(value)
+    except TypeError as exc:
+        raise ValueError("gazelle_selected_indices must be an iterable of indices") from exc
+
+    selected = set()
+    for index in indices:
+        if not isinstance(index, int) or isinstance(index, bool):
+            raise ValueError("gazelle_selected_indices must contain integer indices")
+        if index < 0 or index >= head_count:
+            raise ValueError(
+                "gazelle_selected_indices contains out-of-range index {}".format(index)
+            )
+        if index in selected:
+            raise ValueError(
+                "gazelle_selected_indices contains duplicate index {}".format(index)
+            )
+        selected.add(index)
+    return selected
+
+
 def head_frame_to_json_dict(
     *,
     frame_index,
@@ -221,6 +249,7 @@ def head_frame_to_json_dict(
     provider,
     result,
     save_face_landmarks=False,
+    gazelle_selected_indices=None,
 ):
     """Serialize one independent head-provider result into a JSON-safe record."""
     save_face_landmarks = _exact_bool(save_face_landmarks, "save_face_landmarks")
@@ -229,12 +258,27 @@ def head_frame_to_json_dict(
     if perceptions:
         if len(perceptions) != len(heads):
             raise ValueError("result.heads and result.perceptions must have the same length")
+        for head, perception in zip(heads, perceptions):
+            _exact_int(head.person_id, "person_id")
+            _exact_int(perception.person_id, "person_id")
+        if gazelle_selected_indices is None:
+            from gazelle.runtime.perception.gaze_policy import (
+                select_gazelle_head_indices,
+            )
+
+            selected_indices = set(select_gazelle_head_indices(result))
+        else:
+            selected_indices = _validate_gazelle_selected_indices(
+                gazelle_selected_indices,
+                len(heads),
+            )
         people = []
         for index, (head, perception) in enumerate(zip(heads, perceptions)):
             head_record = _head_to_json_dict(head)
             perception_record = _perception_to_json_dict(
                 perception,
                 save_face_landmarks=save_face_landmarks,
+                gazelle_selected=index in selected_indices,
             )
             for field_name in ("person_id", "head_bbox_normalized", "confidence"):
                 if perception_record[field_name] != head_record[field_name]:
@@ -246,6 +290,11 @@ def head_frame_to_json_dict(
                     )
             people.append(perception_record)
     else:
+        if gazelle_selected_indices is not None:
+            _validate_gazelle_selected_indices(
+                gazelle_selected_indices,
+                len(heads),
+            )
         people = [_head_to_json_dict(head) for head in heads]
     return {
         "frame_index": _exact_int(frame_index, "frame_index"),

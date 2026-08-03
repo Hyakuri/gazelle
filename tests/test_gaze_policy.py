@@ -15,6 +15,7 @@ from gazelle.runtime.perception.gaze_policy import (
     annotate_gaze_eligibility,
     apply_prediction_gaze_status,
     arbitrate_perceptions,
+    select_gazelle_head_indices,
     select_gazelle_heads,
 )
 
@@ -50,6 +51,16 @@ def perception(
         observed=observed,
         missed_ms=missed_ms,
         face_pose_reference_ray=ray,
+    )
+
+
+def frame_result(*perceptions):
+    return HeadFrameResult(
+        heads=tuple(
+            HeadObservation(item.person_id, item.head_bbox, item.confidence)
+            for item in perceptions
+        ),
+        perceptions=tuple(perceptions),
     )
 
 
@@ -190,6 +201,128 @@ class GazePolicyTest(unittest.TestCase):
         selected = select_gazelle_heads(result)
 
         self.assertEqual(tuple(head.person_id for head in selected), (3,))
+
+    def test_observed_selector_excludes_tracked_only(self):
+        current = perception(1, ray=face_ray())
+        tracked = perception(
+            2,
+            state=HeadPerceptionState.TRACKED_ONLY,
+            view_state=HeadViewState.UNKNOWN,
+            observed=False,
+            ray=None,
+            missed_ms=100.0,
+        )
+
+        selected = select_gazelle_head_indices(
+            frame_result(current, tracked),
+            ("observed",),
+        )
+
+        self.assertEqual(selected, (0,))
+
+    def test_all_selector_includes_tracked_only(self):
+        current = perception(1, ray=face_ray())
+        tracked = perception(
+            2,
+            state=HeadPerceptionState.TRACKED_ONLY,
+            view_state=HeadViewState.UNKNOWN,
+            observed=False,
+            ray=None,
+            missed_ms=100.0,
+        )
+
+        selected = select_gazelle_head_indices(
+            frame_result(current, tracked),
+            ("all",),
+        )
+
+        self.assertEqual(selected, (0, 1))
+
+    def test_explicit_state_and_view_selectors_use_or_semantics(self):
+        items = (
+            perception(
+                1,
+                state=HeadPerceptionState.FACE_POSE,
+                view_state=HeadViewState.FRONTAL,
+                ray=face_ray(),
+            ),
+            perception(
+                2,
+                state=HeadPerceptionState.FACE_ONLY,
+                view_state=HeadViewState.PROFILE,
+                ray=face_ray(),
+            ),
+            perception(
+                3,
+                state=HeadPerceptionState.POSE_ONLY,
+                view_state=HeadViewState.BACK_OR_OCCLUDED,
+                ray=None,
+            ),
+            perception(
+                4,
+                state=HeadPerceptionState.TRACKED_ONLY,
+                view_state=HeadViewState.UNKNOWN,
+                observed=False,
+                ray=None,
+                missed_ms=100.0,
+            ),
+        )
+
+        selected = select_gazelle_head_indices(
+            frame_result(*items),
+            ("face_only", "back_or_occluded", "tracked_only"),
+        )
+
+        self.assertEqual(selected, (1, 2, 3))
+
+    def test_eligible_can_be_combined_with_pose_only(self):
+        eligible = perception(1, ray=face_ray())
+        rejected = perception(2, ray=None)
+        pose = perception(
+            3,
+            state=HeadPerceptionState.POSE_ONLY,
+            view_state=HeadViewState.BACK_OR_OCCLUDED,
+            ray=None,
+        )
+
+        selected = select_gazelle_head_indices(
+            frame_result(eligible, rejected, pose),
+            ("eligible", "pose_only"),
+        )
+
+        self.assertEqual(selected, (0, 2))
+
+    def test_select_gazelle_heads_accepts_explicit_tracked_only_selector(self):
+        tracked = perception(
+            8,
+            state=HeadPerceptionState.TRACKED_ONLY,
+            view_state=HeadViewState.UNKNOWN,
+            observed=False,
+            ray=None,
+            missed_ms=100.0,
+        )
+
+        selected = select_gazelle_heads(
+            frame_result(tracked),
+            ("tracked_only",),
+        )
+
+        self.assertEqual(tuple(head.person_id for head in selected), (8,))
+
+    def test_no_perception_provider_keeps_all_heads_for_every_mode(self):
+        result = HeadFrameResult(
+            heads=(
+                HeadObservation(3, (0.1, 0.2, 0.3, 0.4), 0.9),
+                HeadObservation(7, (0.4, 0.2, 0.6, 0.5), 0.8),
+            )
+        )
+
+        for selectors in (("eligible",), ("tracked_only",), ("all",)):
+            with self.subTest(selectors=selectors):
+                self.assertEqual(
+                    select_gazelle_head_indices(result, selectors),
+                    (0, 1),
+                )
 
     def test_inout_threshold_assigns_final_gaze_status(self):
         predictions = (

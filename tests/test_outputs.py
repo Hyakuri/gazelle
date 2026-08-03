@@ -207,6 +207,91 @@ class OutputsTest(unittest.TestCase):
         self.assertEqual(person["head_pose"], {"yaw_deg": 1.5, "pitch_deg": -2.5, "roll_deg": 3.5})
         self.assertNotIn("face_landmarks", person)
 
+    def test_head_frame_records_explicit_gazelle_selection_by_index(self):
+        first_result = make_rich_head_result()
+        first_head = first_result.heads[0]
+        first_perception = first_result.perceptions[0]
+        second_head = replace(
+            first_head,
+            person_id=8,
+            bbox=(0.5, 0.2, 0.7, 0.4),
+        )
+        second_perception = replace(
+            first_perception,
+            person_id=8,
+            head_bbox=second_head.bbox,
+        )
+        result = HeadFrameResult(
+            heads=(first_head, second_head),
+            perceptions=(first_perception, second_perception),
+        )
+
+        record = head_frame_to_json_dict(
+            frame_index=0,
+            timestamp_ms=0.0,
+            image_width=640,
+            image_height=480,
+            provider="mediapipe",
+            result=result,
+            gazelle_selected_indices=(1,),
+        )
+
+        self.assertFalse(record["people"][0]["gazelle_selected"])
+        self.assertTrue(record["people"][1]["gazelle_selected"])
+
+    def test_head_frame_defaults_gazelle_selection_to_conservative_policy(self):
+        result = make_rich_head_result()
+
+        record = head_frame_to_json_dict(
+            frame_index=0,
+            timestamp_ms=0.0,
+            image_width=640,
+            image_height=480,
+            provider="mediapipe",
+            result=result,
+        )
+
+        self.assertFalse(record["people"][0]["gazelle_selected"])
+
+    def test_head_frame_rejects_invalid_gazelle_selected_indices(self):
+        result = make_rich_head_result()
+        invalid_values = (
+            (0, 0),
+            (-1,),
+            (1,),
+            (True,),
+            ("0",),
+        )
+
+        for value in invalid_values:
+            with self.subTest(value=value), self.assertRaisesRegex(
+                ValueError,
+                "gazelle_selected_indices",
+            ):
+                head_frame_to_json_dict(
+                    frame_index=0,
+                    timestamp_ms=0.0,
+                    image_width=640,
+                    image_height=480,
+                    provider="mediapipe",
+                    result=result,
+                    gazelle_selected_indices=value,
+                )
+
+    def test_minimal_provider_heads_do_not_gain_perception_selection_field(self):
+        record = head_frame_to_json_dict(
+            frame_index=0,
+            timestamp_ms=0.0,
+            image_width=640,
+            image_height=480,
+            provider="static",
+            result=HeadFrameResult(
+                heads=(HeadObservation(4, (0.1, 0.2, 0.3, 0.4), 0.8),),
+            ),
+        )
+
+        self.assertNotIn("gazelle_selected", record["people"][0])
+
     def test_head_frame_includes_all_face_landmarks_only_when_enabled(self):
         record = head_frame_to_json_dict(
             frame_index=2,

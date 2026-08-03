@@ -89,22 +89,54 @@ def arbitrate_perceptions(perceptions, *, max_heads: int) -> Tuple[HeadPerceptio
     return tuple(item for item in perceptions if id(item) in selected_ids)
 
 
-def select_gazelle_heads(result: HeadFrameResult) -> Tuple[HeadObservation, ...]:
+def _matches_gazelle_selector(perception: HeadPerception, selector: str) -> bool:
+    if selector == "all":
+        return True
+    if selector == "observed":
+        return perception.observed
+    if selector == "eligible":
+        return perception.gaze_eligible and _rejection_status(perception) is None
+    if selector == perception.state.value:
+        return True
+    if selector == perception.view_state.value:
+        return True
+    return False
+
+
+def select_gazelle_head_indices(
+    result: HeadFrameResult,
+    selectors=("eligible",),
+) -> Tuple[int, ...]:
     heads = tuple(result.heads)
     perceptions = tuple(result.perceptions)
     if not perceptions:
-        return heads
+        return tuple(range(len(heads)))
     if len(heads) != len(perceptions):
         raise ValueError("result.heads and result.perceptions must have the same length")
+    selectors = tuple(selectors)
     selected = []
     for index, (head, perception) in enumerate(zip(heads, perceptions)):
         if head.person_id != perception.person_id:
             raise ValueError(
                 "result head and perception person_id mismatch at index {}".format(index)
             )
-        if perception.gaze_eligible and _rejection_status(perception) is None:
-            selected.append(head)
+        if any(
+            _matches_gazelle_selector(perception, selector)
+            for selector in selectors
+        ):
+            selected.append(index)
     return tuple(selected)
+
+
+def select_gazelle_heads(
+    result: HeadFrameResult,
+    selectors=("eligible",),
+) -> Tuple[HeadObservation, ...]:
+    heads = tuple(result.heads)
+    return tuple(
+        heads[index]
+        for index in select_gazelle_head_indices(result, selectors)
+    )
 
 
 def _validate_inout_threshold(value) -> float:
@@ -151,5 +183,6 @@ __all__ = [
     "annotate_gaze_eligibility",
     "apply_prediction_gaze_status",
     "arbitrate_perceptions",
+    "select_gazelle_head_indices",
     "select_gazelle_heads",
 ]
