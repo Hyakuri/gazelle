@@ -353,6 +353,58 @@ class VideoPipelineTest(unittest.TestCase):
             ["ok", "skipped", "ok", "skipped"],
         )
 
+    def test_frame_step_marks_skipped_perceptions_not_selected(self):
+        def result_factory(frame_index):
+            head = HeadObservation(
+                frame_index,
+                (0.1, 0.2, 0.4, 0.6),
+                0.9,
+            )
+            perception = HeadPerception(
+                person_id=head.person_id,
+                head_bbox=head.bbox,
+                face_bbox=None,
+                confidence=0.9,
+                state=HeadPerceptionState.POSE_ONLY,
+                view_state=HeadViewState.BACK_OR_OCCLUDED,
+                observed=True,
+                gaze_eligible=False,
+                gaze_status=GazeStatus.UNAVAILABLE_OCCLUDED,
+            )
+            return HeadFrameResult(heads=(head,), perceptions=(perception,))
+
+        with TemporaryDirectory() as tmpdir:
+            video_path = Path(tmpdir) / "clip.mp4"
+            write_tiny_video(video_path, frame_count=4)
+            provider = FakeHeadProvider(result_factory)
+            predictor = FakePredictor()
+            config = make_config(
+                input_path=str(video_path),
+                output_dir=str(Path(tmpdir) / "outputs"),
+                frame_step=2,
+                gazelle_head_mode=("all",),
+            )
+            with patch(
+                "gazelle.runtime.pipeline.build_head_provider_from_config",
+                return_value=provider,
+            ):
+                result = run_video_pipeline(
+                    config,
+                    predictor_factory=lambda _config: predictor,
+                )
+            head_rows = read_jsonl(result.head_observations_jsonl_path)
+            gaze_rows = read_jsonl(result.predictions_jsonl_path)
+
+        self.assertEqual(
+            [row["people"][0]["gazelle_selected"] for row in head_rows],
+            [True, False, True, False],
+        )
+        self.assertEqual(
+            [row["status"] for row in gaze_rows],
+            ["ok", "skipped", "ok", "skipped"],
+        )
+        self.assertEqual(len(predictor.calls), 2)
+
     def test_missing_head_writes_no_head_without_predictor(self):
         with TemporaryDirectory() as tmpdir:
             video_path = Path(tmpdir) / "clip.mp4"
@@ -689,7 +741,55 @@ class VideoPipelineTest(unittest.TestCase):
 
         self.assertEqual(len(predictor.calls), 0)
         self.assertEqual(head_rows[0]["people"][0]["state"], "tracked_only")
+        self.assertFalse(head_rows[0]["people"][0]["gazelle_selected"])
         self.assertEqual(gaze_rows[0]["status"], "no_gaze")
+
+    def test_tracked_only_head_mode_runs_gazelle_and_marks_selection(self):
+        head = HeadObservation(9, (0.2, 0.2, 0.5, 0.6), 0.8)
+        perception = HeadPerception(
+            person_id=9,
+            head_bbox=head.bbox,
+            face_bbox=None,
+            confidence=0.8,
+            state=HeadPerceptionState.TRACKED_ONLY,
+            view_state=HeadViewState.UNKNOWN,
+            observed=False,
+            missed_frames=1,
+            missed_ms=200.0,
+            gaze_eligible=False,
+            gaze_status=GazeStatus.TRACKED_NO_GAZE,
+        )
+        provider = FakeHeadProvider(
+            lambda frame_index: HeadFrameResult(
+                heads=(head,),
+                perceptions=(perception,),
+            )
+        )
+        predictor = FakePredictor()
+
+        with TemporaryDirectory() as tmpdir:
+            video_path = Path(tmpdir) / "clip.mp4"
+            write_tiny_video(video_path, frame_count=1)
+            config = make_config(
+                input_path=str(video_path),
+                output_dir=str(Path(tmpdir) / "outputs"),
+                gazelle_head_mode=("tracked_only",),
+            )
+            with patch(
+                "gazelle.runtime.pipeline.build_head_provider_from_config",
+                return_value=provider,
+            ):
+                result = run_video_pipeline(
+                    config,
+                    predictor_factory=lambda _config: predictor,
+                )
+            head_rows = read_jsonl(result.head_observations_jsonl_path)
+            gaze_rows = read_jsonl(result.predictions_jsonl_path)
+
+        self.assertEqual(len(predictor.calls), 1)
+        self.assertEqual(predictor.calls[0][1][0].person_id, 9)
+        self.assertTrue(head_rows[0]["people"][0]["gazelle_selected"])
+        self.assertEqual(gaze_rows[0]["status"], "ok")
 
     def test_build_head_provider_mediapipe_video_uses_source_fps_for_tracker(self):
         backend = SimpleNamespace(close=lambda: None)

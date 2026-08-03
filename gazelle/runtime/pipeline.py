@@ -18,7 +18,7 @@ from gazelle.runtime.heads import (
 from gazelle.runtime.perception.contracts import HeadFrameResult
 from gazelle.runtime.perception.gaze_policy import (
     apply_prediction_gaze_status,
-    select_gazelle_heads,
+    select_gazelle_head_indices,
 )
 from gazelle.runtime.perception.outputs import (
     head_frame_to_json_dict,
@@ -256,6 +256,14 @@ def run_image_pipeline(config, predictor_factory: Optional[Callable[[object], ob
             width,
             height,
         )
+        gazelle_selected_indices = select_gazelle_head_indices(
+            head_result,
+            config.gazelle_head_mode,
+        )
+        gazelle_heads = tuple(
+            head_result.heads[index]
+            for index in gazelle_selected_indices
+        )
         head_observations_path = output_dir / "head_observations.json"
         write_head_observations_json(
             head_observations_path,
@@ -266,8 +274,8 @@ def run_image_pipeline(config, predictor_factory: Optional[Callable[[object], ob
             provider=config.head_source,
             result=head_result,
             save_face_landmarks=config.save_face_landmarks,
+            gazelle_selected_indices=gazelle_selected_indices,
         )
-        gazelle_heads = select_gazelle_heads(head_result)
         if gazelle_heads:
             predictor = (
                 predictor_factory(config)
@@ -404,6 +412,18 @@ def run_video_pipeline(config, predictor_factory: Optional[Callable[[object], ob
                 metadata.width,
                 metadata.height,
             )
+            inference_due = frame.index % config.frame_step == 0
+            if inference_due:
+                gazelle_selected_indices = select_gazelle_head_indices(
+                    head_result,
+                    config.gazelle_head_mode,
+                )
+            else:
+                gazelle_selected_indices = ()
+            gazelle_heads = tuple(
+                head_result.heads[index]
+                for index in gazelle_selected_indices
+            )
             head_jsonl_writer.write(
                 head_frame_to_json_dict(
                     frame_index=frame.index,
@@ -413,12 +433,12 @@ def run_video_pipeline(config, predictor_factory: Optional[Callable[[object], ob
                     provider=config.head_source,
                     result=head_result,
                     save_face_landmarks=config.save_face_landmarks,
+                    gazelle_selected_indices=gazelle_selected_indices,
                 )
             )
 
             inference_ms = None
-            gazelle_heads = select_gazelle_heads(head_result)
-            if frame.index % config.frame_step != 0:
+            if not inference_due:
                 status = "skipped"
                 predictions: Tuple[GazePrediction, ...] = ()
             elif not head_result.heads:

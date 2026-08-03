@@ -9,7 +9,7 @@ import torch
 from PIL import Image
 
 from gazelle.runtime.config import RuntimeConfig
-from gazelle.runtime.contracts import GazePrediction, HeadObservation
+from gazelle.runtime.contracts import GazePrediction, GazeStatus, HeadObservation
 from gazelle.runtime.heads import HeadProvider, JsonHeadProvider, NoneHeadProvider, StaticHeadProvider
 from gazelle.runtime.perception.contracts import (
     HeadFrameResult,
@@ -17,6 +17,9 @@ from gazelle.runtime.perception.contracts import (
     HeadPerceptionState,
     HeadViewState,
     NormalizedLandmark,
+    ReferenceRay2D,
+    ReferenceRayProjectionStatus,
+    ReferenceRaySource,
 )
 from gazelle.runtime.perception.provider import MediaPipeHeadProvider
 from gazelle.runtime.pipeline import (
@@ -123,6 +126,59 @@ def make_rich_head_result():
     )
 
 
+def make_diagnostic_head_result():
+    heads = (
+        HeadObservation(1, (0.1, 0.1, 0.3, 0.4), 0.9),
+        HeadObservation(2, (0.4, 0.1, 0.6, 0.4), 0.8),
+        HeadObservation(3, (0.7, 0.1, 0.9, 0.4), 0.7),
+    )
+    face_ray = ReferenceRay2D(
+        source=ReferenceRaySource.FACE_POSE,
+        origin=(0.2, 0.2),
+        direction=(1.0, 0.0),
+        endpoint=(0.6, 0.2),
+        confidence=0.9,
+        projection_status=ReferenceRayProjectionStatus.AVAILABLE,
+    )
+    perceptions = (
+        HeadPerception(
+            person_id=1,
+            head_bbox=heads[0].bbox,
+            face_bbox=(0.12, 0.12, 0.28, 0.35),
+            confidence=0.9,
+            state=HeadPerceptionState.FACE_POSE,
+            view_state=HeadViewState.FRONTAL,
+            observed=True,
+            face_pose_reference_ray=face_ray,
+        ),
+        HeadPerception(
+            person_id=2,
+            head_bbox=heads[1].bbox,
+            face_bbox=None,
+            confidence=0.8,
+            state=HeadPerceptionState.POSE_ONLY,
+            view_state=HeadViewState.BACK_OR_OCCLUDED,
+            observed=True,
+            gaze_eligible=False,
+            gaze_status=GazeStatus.UNAVAILABLE_OCCLUDED,
+        ),
+        HeadPerception(
+            person_id=3,
+            head_bbox=heads[2].bbox,
+            face_bbox=None,
+            confidence=0.7,
+            state=HeadPerceptionState.TRACKED_ONLY,
+            view_state=HeadViewState.UNKNOWN,
+            observed=False,
+            missed_frames=1,
+            missed_ms=100.0,
+            gaze_eligible=False,
+            gaze_status=GazeStatus.TRACKED_NO_GAZE,
+        ),
+    )
+    return HeadFrameResult(heads=heads, perceptions=perceptions)
+
+
 def write_test_image(path, mode="RGB"):
     image = Image.new(mode, (10, 8), color=128 if mode == "L" else (10, 20, 30))
     image.save(path)
@@ -139,6 +195,77 @@ def make_config(**overrides):
 
 
 class ImagePipelineTest(unittest.TestCase):
+    def test_default_gazelle_head_mode_selects_only_eligible_image_head(self):
+        provider = FakeHeadProvider(make_diagnostic_head_result())
+        predictor = FakePredictor()
+
+        with TemporaryDirectory() as tmpdir:
+            image_path = Path(tmpdir) / "frame.png"
+            write_test_image(image_path)
+            config = make_config(
+                input_path=str(image_path),
+                output_dir=str(Path(tmpdir) / "outputs"),
+                head_source="mediapipe",
+            )
+            with unittest.mock.patch(
+                "gazelle.runtime.pipeline.build_head_provider_from_config",
+                return_value=provider,
+            ):
+                result = run_image_pipeline(
+                    config,
+                    predictor_factory=lambda _config: predictor,
+                )
+            observation = json.loads(
+                result.head_observations_path.read_text(encoding="utf-8")
+            )
+
+        self.assertEqual(
+            tuple(head.person_id for head in predictor.calls[0][1]),
+            (1,),
+        )
+        self.assertEqual(
+            [person["gazelle_selected"] for person in observation["people"]],
+            [True, False, False],
+        )
+
+    def test_combined_gazelle_head_mode_selects_pose_and_tracked_image_heads(self):
+        provider = FakeHeadProvider(make_diagnostic_head_result())
+        predictor = FakePredictor()
+
+        with TemporaryDirectory() as tmpdir:
+            image_path = Path(tmpdir) / "frame.png"
+            write_test_image(image_path)
+            config = make_config(
+                input_path=str(image_path),
+                output_dir=str(Path(tmpdir) / "outputs"),
+                head_source="mediapipe",
+                gazelle_head_mode=("pose_only", "tracked_only"),
+                gaze_render_mode="all-predictions",
+            )
+            with unittest.mock.patch(
+                "gazelle.runtime.pipeline.build_head_provider_from_config",
+                return_value=provider,
+            ):
+                result = run_image_pipeline(
+                    config,
+                    predictor_factory=lambda _config: predictor,
+                )
+            observation = json.loads(
+                result.head_observations_path.read_text(encoding="utf-8")
+            )
+            run_config = json.loads(result.run_config_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(
+            tuple(head.person_id for head in predictor.calls[0][1]),
+            (2, 3),
+        )
+        self.assertEqual(
+            [person["gazelle_selected"] for person in observation["people"]],
+            [False, True, True],
+        )
+        self.assertEqual(run_config["gazelle_head_mode"], ["pose_only", "tracked_only"])
+        self.assertEqual(run_config["gaze_render_mode"], "all-predictions")
+
     def test_ok_image_inference_passes_perceptions_and_render_options(self):
         result = make_rich_head_result()
         provider = FakeHeadProvider(result)
