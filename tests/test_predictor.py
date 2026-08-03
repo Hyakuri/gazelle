@@ -206,6 +206,144 @@ class GazellePredictorTest(unittest.TestCase):
 
             self.assertEqual(observed_xformers_disabled, ["1"])
 
+    def test_from_checkpoint_disables_missing_triton_probe_during_cuda_construction(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            checkpoint = Path(tmpdir) / "model.pt"
+            torch.save({"decoder.weight": torch.ones(1)}, checkpoint)
+            fake_model = FakeGazelleModel()
+            fake_transform = RecordingTransform()
+            observed = []
+            fake_module = types.ModuleType("gazelle.model")
+
+            def fake_get_gazelle_model(model_name):
+                observed.append(
+                    (
+                        os.environ.get("XFORMERS_DISABLED"),
+                        os.environ.get("XFORMERS_FORCE_DISABLE_TRITON"),
+                    )
+                )
+                return fake_model, fake_transform
+
+            fake_module.get_gazelle_model = fake_get_gazelle_model
+
+            with patch.dict(os.environ, {}, clear=True):
+                with patch.dict(sys.modules, {"gazelle.model": fake_module}):
+                    with patch(
+                        "gazelle.runtime.predictor.resolve_torch_device",
+                        return_value=torch.device("cuda"),
+                    ):
+                        with patch(
+                            "gazelle.runtime.environment.importlib.util.find_spec",
+                            return_value=None,
+                        ):
+                            GazellePredictor.from_checkpoint(
+                                "gazelle_dinov2_vitb14_inout",
+                                checkpoint,
+                                device="cuda",
+                                cache_dir=tmpdir,
+                            )
+                self.assertIsNone(os.environ.get("XFORMERS_FORCE_DISABLE_TRITON"))
+
+            self.assertEqual(observed, [(None, "1")])
+
+    def test_from_checkpoint_respects_explicit_triton_environment_override(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            checkpoint = Path(tmpdir) / "model.pt"
+            torch.save({"decoder.weight": torch.ones(1)}, checkpoint)
+            fake_model = FakeGazelleModel()
+            fake_transform = RecordingTransform()
+            observed = []
+            fake_module = types.ModuleType("gazelle.model")
+
+            def fake_get_gazelle_model(model_name):
+                observed.append(os.environ.get("XFORMERS_FORCE_DISABLE_TRITON"))
+                return fake_model, fake_transform
+
+            fake_module.get_gazelle_model = fake_get_gazelle_model
+
+            with patch.dict(
+                os.environ,
+                {"XFORMERS_FORCE_DISABLE_TRITON": "0"},
+                clear=True,
+            ):
+                with patch.dict(sys.modules, {"gazelle.model": fake_module}):
+                    with patch(
+                        "gazelle.runtime.predictor.resolve_torch_device",
+                        return_value=torch.device("cuda"),
+                    ):
+                        GazellePredictor.from_checkpoint(
+                            "gazelle_dinov2_vitb14_inout",
+                            checkpoint,
+                            device="cuda",
+                            cache_dir=tmpdir,
+                        )
+                self.assertEqual(os.environ.get("XFORMERS_FORCE_DISABLE_TRITON"), "0")
+
+            self.assertEqual(observed, ["0"])
+
+    def test_from_checkpoint_rejects_cpu_after_xformers_dinov2_import(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            checkpoint = Path(tmpdir) / "model.pt"
+            torch.save({"decoder.weight": torch.ones(1)}, checkpoint)
+            fake_module = types.ModuleType("gazelle.model")
+            fake_module.get_gazelle_model = lambda model_name: (_ for _ in ()).throw(
+                AssertionError("model construction should be rejected")
+            )
+            dinov2_attention = types.ModuleType("dinov2.layers.attention")
+            dinov2_attention.XFORMERS_AVAILABLE = True
+
+            with patch.dict(
+                sys.modules,
+                {
+                    "gazelle.model": fake_module,
+                    "dinov2.layers.attention": dinov2_attention,
+                },
+            ):
+                with self.assertRaisesRegex(RuntimeError, "already initialized.*xFormers"):
+                    GazellePredictor.from_checkpoint(
+                        "gazelle_dinov2_vitb14_inout",
+                        checkpoint,
+                        device="cpu",
+                        cache_dir=tmpdir,
+                    )
+
+    def test_from_checkpoint_rejects_cuda_after_pytorch_dinov2_import(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            checkpoint = Path(tmpdir) / "model.pt"
+            torch.save({"decoder.weight": torch.ones(1)}, checkpoint)
+            fake_module = types.ModuleType("gazelle.model")
+            fake_module.get_gazelle_model = lambda model_name: (_ for _ in ()).throw(
+                AssertionError("model construction should be rejected")
+            )
+            dinov2_attention = types.ModuleType("dinov2.layers.attention")
+            dinov2_attention.XFORMERS_AVAILABLE = False
+
+            with patch.dict(
+                sys.modules,
+                {
+                    "gazelle.model": fake_module,
+                    "dinov2.layers.attention": dinov2_attention,
+                },
+            ):
+                with patch(
+                    "gazelle.runtime.predictor.resolve_torch_device",
+                    return_value=torch.device("cuda"),
+                ):
+                    with patch(
+                        "gazelle.runtime.environment.importlib.util.find_spec",
+                        return_value=object(),
+                    ):
+                        with self.assertRaisesRegex(
+                            RuntimeError,
+                            "already initialized.*without xFormers",
+                        ):
+                            GazellePredictor.from_checkpoint(
+                                "gazelle_dinov2_vitb14_inout",
+                                checkpoint,
+                                device="cuda",
+                                cache_dir=tmpdir,
+                            )
+
     def test_from_checkpoint_rejects_unknown_model_before_model_construction(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             checkpoint = Path(tmpdir) / "model.pt"

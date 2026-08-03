@@ -2,7 +2,11 @@ import argparse
 import sys
 from typing import Optional, Sequence, TextIO
 
-from gazelle.runtime.config import RuntimeConfig
+from gazelle.runtime.config import (
+    RuntimeConfig,
+    SUPPORTED_GAZELLE_HEAD_MODE_SELECTORS,
+    SUPPORTED_GAZE_RENDER_MODES,
+)
 from gazelle.runtime.model_registry import format_model_table
 
 
@@ -20,8 +24,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--prepare-only",
         action="store_true",
         help=(
-            "Prepare the Gazelle checkpoint and DINOv2 Torch Hub cache, then exit without "
-            "running image or video inference."
+            "Prepare the Gazelle checkpoint, DINOv2 Torch Hub cache, and selected MediaPipe "
+            "assets when requested, then exit without running image or video inference."
         ),
     )
     parser.add_argument(
@@ -49,9 +53,24 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--head-source",
-        choices=("none", "static", "json"),
+        choices=("none", "static", "json", "mediapipe"),
         default="none",
         help="Head input source for image or video inference.",
+    )
+    parser.add_argument("--max-heads", type=int, default=1)
+    parser.add_argument("--pose-model", choices=("lite", "full", "heavy"), default="full")
+    parser.add_argument("--head-track-max-gap-ms", type=float, default=500.0)
+    parser.add_argument("--save-face-landmarks", action="store_true")
+    parser.add_argument(
+        "--gazelle-head-mode",
+        nargs="+",
+        choices=SUPPORTED_GAZELLE_HEAD_MODE_SELECTORS,
+        default=("eligible",),
+        metavar="SELECTOR",
+        help=(
+            "Select MediaPipe heads for Gazelle using one or more "
+            "OR-combined selectors."
+        ),
     )
     parser.add_argument(
         "--bbox",
@@ -99,6 +118,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Rendered video file name written inside the per-video output directory.",
     )
     parser.add_argument(
+        "--video-codec",
+        choices=("mp4v", "avc1"),
+        default="mp4v",
+        help=(
+            "Rendered video codec. mp4v uses OpenCV directly; avc1 "
+            "finalizes H.264 through FFmpeg."
+        ),
+    )
+    parser.add_argument(
         "--output-fps",
         type=float,
         default=None,
@@ -131,6 +159,59 @@ def build_parser() -> argparse.ArgumentParser:
         "--head-box",
         action="store_true",
         help="Draw head bounding boxes in rendered output when bboxes are available.",
+    )
+    parser.add_argument(
+        "--face-box",
+        action="store_true",
+        help="Draw auxiliary MediaPipe face boxes in rendered output.",
+    )
+    parser.add_argument(
+        "--face-keypoints",
+        action="store_true",
+        help="Draw up to six MediaPipe face detector keypoints in rendered output.",
+    )
+    parser.add_argument(
+        "--pose-head-points",
+        action="store_true",
+        help="Draw MediaPipe pose head and shoulder points in rendered output.",
+    )
+    parser.add_argument(
+        "--face-mesh",
+        action="store_true",
+        help="Draw current MediaPipe face-mesh landmarks in rendered output.",
+    )
+    parser.add_argument(
+        "--no-track-state",
+        action="store_true",
+        help="Do not draw MediaPipe person, state, and confidence labels.",
+    )
+    parser.add_argument(
+        "--face-pose-ray",
+        action="store_true",
+        help="Draw the uncalibrated 2D reference ray from MediaPipe face head pose.",
+    )
+    parser.add_argument(
+        "--pose-head-ray",
+        action="store_true",
+        help="Draw the independent 2D reference ray from MediaPipe pose head keypoints.",
+    )
+    parser.add_argument(
+        "--reference-ray-length",
+        type=float,
+        default=2.5,
+        help="Reference ray length as a positive multiple of the head-box diagonal.",
+    )
+    parser.add_argument(
+        "--gaze-inout-threshold",
+        type=float,
+        default=0.5,
+        help="Minimum Gazelle in/out score in [0, 1] for classifying gaze as valid.",
+    )
+    parser.add_argument(
+        "--gaze-render-mode",
+        choices=SUPPORTED_GAZE_RENDER_MODES,
+        default="valid-only",
+        help="Render only valid Gazelle geometry or every actual prediction.",
     )
     parser.add_argument(
         "--no-gaze-peak",
@@ -182,7 +263,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--force-download",
         action="store_true",
-        help="Refresh the registered cached checkpoint after a successful temporary download.",
+        help="Refresh registered cached resources after successful temporary downloads.",
     )
     return parser
 
@@ -206,6 +287,11 @@ def main(argv: Optional[Sequence[str]] = None, stdout: Optional[TextIO] = None) 
         from gazelle.runtime.resources import prepare_runtime_resources
 
         prepared = prepare_runtime_resources(config)
+        prepared_mediapipe = None
+        if config.head_source == "mediapipe":
+            from gazelle.runtime.perception.resources import prepare_mediapipe_resources
+
+            prepared_mediapipe = prepare_mediapipe_resources(config)
         checkpoint_source = (
             "local" if prepared.checkpoint_candidate is None else prepared.checkpoint_candidate.source
         )
@@ -224,6 +310,11 @@ def main(argv: Optional[Sequence[str]] = None, stdout: Optional[TextIO] = None) 
                     "" if result.error is None else " error={}".format(result.error),
                 )
             )
+        if prepared_mediapipe is not None:
+            stdout.write("face_detector: {}\n".format(prepared_mediapipe.face_detector_path))
+            stdout.write("face_landmarker: {}\n".format(prepared_mediapipe.face_landmarker_path))
+            stdout.write("pose_landmarker: {}\n".format(prepared_mediapipe.pose_landmarker_path))
+            stdout.write("pose_model: {}\n".format(prepared_mediapipe.pose_model))
         return 0
 
     if config.input_path:
@@ -235,6 +326,7 @@ def main(argv: Optional[Sequence[str]] = None, stdout: Optional[TextIO] = None) 
             result = run_image_pipeline(config)
             stdout.write("Wrote Gazelle image inference outputs to {}\n".format(result.output_dir))
             stdout.write("predictions: {}\n".format(result.predictions_path))
+            stdout.write("head_observations: {}\n".format(result.head_observations_path))
             stdout.write("run_config: {}\n".format(result.run_config_path))
             if result.rendered_path is not None:
                 stdout.write("rendered: {}\n".format(result.rendered_path))
@@ -242,6 +334,9 @@ def main(argv: Optional[Sequence[str]] = None, stdout: Optional[TextIO] = None) 
             result = run_video_pipeline(config)
             stdout.write("Wrote Gazelle video inference outputs to {}\n".format(result.output_dir))
             stdout.write("predictions_jsonl: {}\n".format(result.predictions_jsonl_path))
+            stdout.write(
+                "head_observations_jsonl: {}\n".format(result.head_observations_jsonl_path)
+            )
             stdout.write("run_config: {}\n".format(result.run_config_path))
             if result.rendered_video_path is not None:
                 stdout.write("rendered_video: {}\n".format(result.rendered_video_path))

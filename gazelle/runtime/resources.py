@@ -7,7 +7,7 @@ from typing import Callable, Dict, Mapping, Optional, Tuple
 
 import torch
 
-from gazelle.runtime.environment import temporarily_disable_xformers
+from gazelle.runtime.environment import configure_dinov2_model_construction
 from gazelle.runtime.model_registry import CheckpointCandidate, ModelSpec, get_model_spec
 
 
@@ -16,6 +16,15 @@ class RuntimeCachePaths:
     root_dir: Path
     checkpoints_dir: Path
     torch_hub_dir: Path
+
+
+@dataclass(frozen=True)
+class RuntimeCheckpointResolution:
+    model_name: str
+    checkpoint_path: Path
+    cache_paths: RuntimeCachePaths
+    checkpoint_source: str
+    checkpoint_candidate: Optional[CheckpointCandidate]
 
 
 @dataclass(frozen=True)
@@ -38,9 +47,13 @@ class PreparedResources:
     candidate_results: Tuple[CandidateValidationResult, ...]
 
 
-def resolve_cache_paths(cache_dir: Optional[str] = None, env: Optional[Mapping[str, str]] = None) -> RuntimeCachePaths:
+def resolve_cache_root(cache_dir: Optional[str] = None, env: Optional[Mapping[str, str]] = None) -> Path:
     env = os.environ if env is None else env
-    root = Path(cache_dir or env.get("GAZELLE_CACHE_DIR") or "models")
+    return Path(cache_dir or env.get("GAZELLE_CACHE_DIR") or "models")
+
+
+def resolve_cache_paths(cache_dir: Optional[str] = None, env: Optional[Mapping[str, str]] = None) -> RuntimeCachePaths:
+    root = resolve_cache_root(cache_dir, env=env)
     return RuntimeCachePaths(
         root_dir=root,
         checkpoints_dir=root / "checkpoints",
@@ -296,6 +309,49 @@ def resolve_checkpoint_candidate(
     )
 
 
+def resolve_runtime_checkpoint(config) -> RuntimeCheckpointResolution:
+    spec = get_model_spec(config.model)
+    paths = resolve_cache_paths(config.cache_dir)
+    ensure_cache_dirs(paths)
+    torch.hub.set_dir(str(paths.torch_hub_dir))
+
+    if config.checkpoint:
+        checkpoint_path = Path(config.checkpoint)
+        if not checkpoint_path.exists():
+            raise FileNotFoundError("Checkpoint does not exist: {}".format(checkpoint_path))
+        return RuntimeCheckpointResolution(
+            model_name=spec.name,
+            checkpoint_path=checkpoint_path,
+            cache_paths=paths,
+            checkpoint_source="local",
+            checkpoint_candidate=None,
+        )
+
+    candidate_count = len(spec.checkpoint_candidates)
+    if candidate_count != 1:
+        raise ValueError(
+            "Runtime checkpoint resolution requires exactly one checkpoint candidate for {}; "
+            "found {}. Pass --checkpoint to select one explicitly.".format(
+                spec.name,
+                candidate_count,
+            )
+        )
+
+    candidate = spec.checkpoint_candidates[0]
+    checkpoint_path = ensure_checkpoint(
+        candidate,
+        paths,
+        force_download=config.force_download,
+    )
+    return RuntimeCheckpointResolution(
+        model_name=spec.name,
+        checkpoint_path=checkpoint_path,
+        cache_paths=paths,
+        checkpoint_source=candidate.source,
+        checkpoint_candidate=candidate,
+    )
+
+
 def prepare_runtime_resources(config) -> PreparedResources:
     spec = get_model_spec(config.model)
     paths = resolve_cache_paths(config.cache_dir)
@@ -310,7 +366,7 @@ def prepare_runtime_resources(config) -> PreparedResources:
     ensure_cache_dirs(paths)
     torch.hub.set_dir(str(paths.torch_hub_dir))
 
-    with temporarily_disable_xformers():
+    with configure_dinov2_model_construction(force_disable_xformers=True):
         from gazelle.model import get_gazelle_model
 
         model, _ = get_gazelle_model(spec.name)

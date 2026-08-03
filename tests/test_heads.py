@@ -5,6 +5,7 @@ from pathlib import Path
 
 from gazelle.runtime.contracts import HeadObservation
 from gazelle.runtime.heads import (
+    HeadProvider,
     JsonHeadProvider,
     NoneHeadProvider,
     StaticHeadProvider,
@@ -12,7 +13,73 @@ from gazelle.runtime.heads import (
 )
 
 
+class RecordingProvider(HeadProvider):
+    def get_heads(self, frame, frame_index, timestamp_ms, image_width, image_height):
+        return (
+            HeadObservation(person_id=4, bbox=(0.1, 0.2, 0.3, 0.4), confidence=0.8),
+            HeadObservation(person_id=7, bbox=(0.5, 0.2, 0.7, 0.4), confidence=0.6),
+        )
+
+
+class ClosingProvider(HeadProvider):
+    def __init__(self):
+        self.close_count = 0
+
+    def get_heads(self, frame, frame_index, timestamp_ms, image_width, image_height):
+        return ()
+
+    def close(self):
+        self.close_count += 1
+
+
+class FailingClosingProvider(ClosingProvider):
+    def close(self):
+        super().close()
+        raise RuntimeError("close failed")
+
+
 class HeadProvidersTest(unittest.TestCase):
+    def test_default_frame_result_wraps_existing_provider(self):
+        provider = RecordingProvider()
+
+        result = provider.get_frame_result(None, 3, 100.0, 640, 480)
+
+        self.assertEqual([head.person_id for head in result.heads], [4, 7])
+        self.assertEqual(result.perceptions, ())
+        self.assertEqual(dict(result.timings_ms), {})
+
+    def test_head_provider_context_manager_closes_once(self):
+        provider = ClosingProvider()
+
+        with provider as entered_provider:
+            self.assertIs(entered_provider, provider)
+
+        self.assertEqual(provider.close_count, 1)
+
+    def test_head_provider_preserves_body_error_when_close_also_fails(self):
+        provider = FailingClosingProvider()
+        body_error = ValueError("body failed")
+
+        with self.assertRaises(ValueError) as raised:
+            with provider:
+                raise body_error
+
+        self.assertIs(raised.exception, body_error)
+        self.assertEqual(provider.close_count, 1)
+        self.assertIn(
+            "provider cleanup also failed: RuntimeError('close failed')",
+            getattr(raised.exception, "__notes__", ()),
+        )
+
+    def test_head_provider_raises_close_error_without_body_error(self):
+        provider = FailingClosingProvider()
+
+        with self.assertRaisesRegex(RuntimeError, "close failed"):
+            with provider:
+                pass
+
+        self.assertEqual(provider.close_count, 1)
+
     def test_none_head_provider_returns_single_none_bbox(self):
         heads = NoneHeadProvider().get_heads(None, 0, 0.0, 640, 480)
 

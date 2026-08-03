@@ -4,8 +4,10 @@ from typing import List, Optional, Sequence
 
 import torch
 
+from gazelle.runtime.contracts import GazeStatus
 
-VALID_FRAME_STATUSES = ("ok", "no_head", "skipped", "error")
+
+VALID_FRAME_STATUSES = ("ok", "no_head", "no_gaze", "skipped", "error")
 
 
 def _optional_float(value):
@@ -37,6 +39,11 @@ def prediction_to_json_dict(prediction, *, heatmap_path=None) -> dict:
         "gaze_peak_normalized": _optional_float_list(prediction.gaze_peak),
         "heatmap_peak_value": _optional_float(prediction.heatmap_peak_value),
         "inout_score": _optional_float(prediction.inout_score),
+        "gaze_status": (
+            prediction.gaze_status.value
+            if isinstance(prediction.gaze_status, GazeStatus)
+            else str(prediction.gaze_status)
+        ),
     }
     if heatmap_path is not None:
         record["heatmap_path"] = str(heatmap_path)
