@@ -9,6 +9,8 @@ from gazelle.runtime.cli import build_parser, main, parse_runtime_config
 from gazelle.runtime.config import (
     RuntimeConfig,
     validate_device_name,
+    validate_gaze_render_mode,
+    validate_gazelle_head_mode,
     validate_max_heads,
     validate_pose_model,
     validate_positive_finite_float,
@@ -233,6 +235,79 @@ class RuntimeCliTest(unittest.TestCase):
         self.assertTrue(config.draw_pose_head_ray)
         self.assertEqual(config.reference_ray_length, 3.0)
         self.assertEqual(config.gaze_inout_threshold, 0.65)
+
+    def test_gazelle_diagnostic_modes_default_to_conservative(self):
+        config = parse_runtime_config(["--prepare-only"])
+
+        self.assertEqual(config.gazelle_head_mode, ("eligible",))
+        self.assertEqual(config.gaze_render_mode, "valid-only")
+
+    def test_parse_combined_gazelle_head_selectors(self):
+        config = parse_runtime_config(
+            [
+                "--prepare-only",
+                "--gazelle-head-mode",
+                "face_pose",
+                "pose_only",
+                "back_or_occluded",
+                "tracked_only",
+                "--gaze-render-mode",
+                "all-predictions",
+            ]
+        )
+
+        self.assertEqual(
+            config.gazelle_head_mode,
+            ("face_pose", "pose_only", "back_or_occluded", "tracked_only"),
+        )
+        self.assertEqual(config.gaze_render_mode, "all-predictions")
+
+    def test_runtime_config_deduplicates_gazelle_head_selectors(self):
+        config = RuntimeConfig(
+            gazelle_head_mode=("face_pose", "pose_only", "face_pose"),
+        ).validate()
+
+        self.assertEqual(config.gazelle_head_mode, ("face_pose", "pose_only"))
+
+    def test_runtime_config_all_canonicalizes_gazelle_head_selectors(self):
+        config = RuntimeConfig(
+            gazelle_head_mode=("face_pose", "all", "tracked_only"),
+        ).validate()
+
+        self.assertEqual(config.gazelle_head_mode, ("all",))
+
+    def test_runtime_config_normalizes_single_gazelle_head_selector(self):
+        config = RuntimeConfig(gazelle_head_mode="tracked_only").validate()
+
+        self.assertEqual(config.gazelle_head_mode, ("tracked_only",))
+
+    def test_invalid_gazelle_head_mode_rejected(self):
+        invalid_values = (
+            (),
+            True,
+            ("eligible", 1),
+            ("not_a_selector",),
+        )
+        for value in invalid_values:
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ValueError, "gazelle_head_mode"):
+                    validate_gazelle_head_mode(value)
+
+    def test_invalid_gaze_render_mode_rejected(self):
+        for value in ("all", "", True):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ValueError, "gaze_render_mode"):
+                    validate_gaze_render_mode(value)
+
+    def test_cli_rejects_unknown_gazelle_head_selector(self):
+        stderr = io.StringIO()
+        with redirect_stderr(stderr), self.assertRaises(SystemExit) as caught:
+            parse_runtime_config(
+                ["--prepare-only", "--gazelle-head-mode", "not_a_selector"]
+            )
+
+        self.assertEqual(caught.exception.code, 2)
+        self.assertIn("--gazelle-head-mode", stderr.getvalue())
 
     def test_parse_head_box_enabled(self):
         config = parse_runtime_config(["--input", "image.jpg", "--save-rendered", "--head-box"])

@@ -2,7 +2,11 @@ import argparse
 import sys
 from typing import Optional, Sequence, TextIO
 
-from gazelle.runtime.config import RuntimeConfig
+from gazelle.runtime.config import (
+    RuntimeConfig,
+    SUPPORTED_GAZELLE_HEAD_MODE_SELECTORS,
+    SUPPORTED_GAZE_RENDER_MODES,
+)
 from gazelle.runtime.model_registry import format_model_table
 
 
@@ -57,6 +61,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pose-model", choices=("lite", "full", "heavy"), default="full")
     parser.add_argument("--head-track-max-gap-ms", type=float, default=500.0)
     parser.add_argument("--save-face-landmarks", action="store_true")
+    parser.add_argument(
+        "--gazelle-head-mode",
+        nargs="+",
+        choices=SUPPORTED_GAZELLE_HEAD_MODE_SELECTORS,
+        default=("eligible",),
+        metavar="SELECTOR",
+        help=(
+            "Select MediaPipe heads for Gazelle using one or more "
+            "OR-combined selectors."
+        ),
+    )
     parser.add_argument(
         "--bbox",
         action="append",
@@ -191,6 +206,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=0.5,
         help="Minimum Gazelle in/out score in [0, 1] for gaze overlay rendering.",
+    )
+    parser.add_argument(
+        "--gaze-render-mode",
+        choices=SUPPORTED_GAZE_RENDER_MODES,
+        default="valid-only",
+        help="Render only valid Gazelle geometry or every actual prediction.",
     )
     parser.add_argument(
         "--no-gaze-peak",

@@ -13,6 +13,20 @@ SUPPORTED_RENDERED_SUFFIXES = (".png", ".jpg", ".jpeg")
 SUPPORTED_VIDEO_OUTPUT_SUFFIXES = (".mp4",)
 SUPPORTED_VIDEO_CODECS = ("mp4v", "avc1")
 SUPPORTED_POSE_MODELS = ("lite", "full", "heavy")
+SUPPORTED_GAZELLE_HEAD_MODE_SELECTORS = (
+    "eligible",
+    "observed",
+    "all",
+    "face_pose",
+    "face_only",
+    "pose_only",
+    "tracked_only",
+    "frontal",
+    "profile",
+    "back_or_occluded",
+    "unknown",
+)
+SUPPORTED_GAZE_RENDER_MODES = ("valid-only", "all-predictions")
 
 
 def validate_device_name(device: str) -> str:
@@ -154,6 +168,57 @@ def validate_video_codec(video_codec: str) -> str:
     return codec
 
 
+def validate_gazelle_head_mode(value) -> Tuple[str, ...]:
+    if isinstance(value, bool):
+        raise ValueError("gazelle_head_mode must contain one or more string selectors")
+    if isinstance(value, str):
+        selectors = (value,)
+    else:
+        try:
+            selectors = tuple(value)
+        except TypeError as exc:
+            raise ValueError(
+                "gazelle_head_mode must contain one or more string selectors"
+            ) from exc
+    if not selectors:
+        raise ValueError("gazelle_head_mode must contain at least one selector")
+
+    normalized = []
+    for selector in selectors:
+        if not isinstance(selector, str):
+            raise ValueError("gazelle_head_mode selectors must be strings")
+        selector = selector.strip()
+        if selector not in SUPPORTED_GAZELLE_HEAD_MODE_SELECTORS:
+            raise ValueError(
+                "gazelle_head_mode selector must be one of: {}".format(
+                    ", ".join(SUPPORTED_GAZELLE_HEAD_MODE_SELECTORS)
+                )
+            )
+        if selector not in normalized:
+            normalized.append(selector)
+
+    if "all" in normalized:
+        return ("all",)
+    return tuple(normalized)
+
+
+def validate_gaze_render_mode(value) -> str:
+    if not isinstance(value, str):
+        raise ValueError(
+            "gaze_render_mode must be one of: {}".format(
+                ", ".join(SUPPORTED_GAZE_RENDER_MODES)
+            )
+        )
+    mode = value.strip()
+    if mode not in SUPPORTED_GAZE_RENDER_MODES:
+        raise ValueError(
+            "gaze_render_mode must be one of: {}".format(
+                ", ".join(SUPPORTED_GAZE_RENDER_MODES)
+            )
+        )
+    return mode
+
+
 @dataclass(frozen=True)
 class RuntimeConfig:
     """Validated CLI configuration for the Gazelle runtime."""
@@ -192,6 +257,8 @@ class RuntimeConfig:
     draw_pose_head_ray: bool = False
     reference_ray_length: float = 2.5
     gaze_inout_threshold: float = 0.5
+    gazelle_head_mode: Tuple[str, ...] = ("eligible",)
+    gaze_render_mode: str = "valid-only"
     heatmap_contour_quantile: float = 0.90
     heatmap_contour_width: Optional[int] = None
     output_fps: Optional[float] = None
@@ -229,6 +296,16 @@ class RuntimeConfig:
                 self.gaze_inout_threshold,
                 "gaze_inout_threshold",
             ),
+        )
+        object.__setattr__(
+            self,
+            "gazelle_head_mode",
+            validate_gazelle_head_mode(self.gazelle_head_mode),
+        )
+        object.__setattr__(
+            self,
+            "gaze_render_mode",
+            validate_gaze_render_mode(self.gaze_render_mode),
         )
         object.__setattr__(self, "rendered_name", validate_rendered_name(self.rendered_name))
         object.__setattr__(self, "heatmap_alpha", validate_heatmap_alpha(self.heatmap_alpha))
@@ -302,6 +379,8 @@ class RuntimeConfig:
             draw_pose_head_ray=args.pose_head_ray,
             reference_ray_length=args.reference_ray_length,
             gaze_inout_threshold=args.gaze_inout_threshold,
+            gazelle_head_mode=tuple(args.gazelle_head_mode),
+            gaze_render_mode=args.gaze_render_mode,
             heatmap_contour_quantile=args.heatmap_contour_quantile,
             heatmap_contour_width=args.heatmap_contour_width,
             output_fps=args.output_fps,
