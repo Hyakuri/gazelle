@@ -9,6 +9,7 @@ import numpy as np
 import torch
 from PIL import Image, ImageDraw, ImageFont
 
+from gazelle.runtime.config import SUPPORTED_GAZE_RENDER_MODES
 from gazelle.runtime.contracts import GazeStatus
 from gazelle.runtime.geometry import normalized_bbox_to_pixel
 from gazelle.runtime.perception.contracts import (
@@ -44,10 +45,18 @@ class RenderOptions:
     draw_track_state: bool = True
     draw_face_pose_ray: bool = False
     draw_pose_head_ray: bool = False
+    gaze_render_mode: str = "valid-only"
     heatmap_contour_quantile: float = 0.90
     heatmap_contour_width: Optional[int] = None
     arrow_width: Optional[int] = None
     peak_marker_size: Optional[int] = None
+
+
+def _should_draw_gaze_geometry(prediction, options: RenderOptions) -> bool:
+    return (
+        options.gaze_render_mode == "all-predictions"
+        or prediction.gaze_status is GazeStatus.VALID
+    )
 
 
 def _validate_alpha(alpha: float) -> float:
@@ -344,7 +353,7 @@ def draw_prediction(
         draw_context.rectangle((xmin, ymin, xmax, ymax), outline=color, width=line_width)
 
     if (
-        prediction.gaze_status is GazeStatus.VALID
+        _should_draw_gaze_geometry(prediction, options)
         and options.draw_gaze_arrow
     ):
         draw_gaze_arrow(
@@ -358,7 +367,7 @@ def draw_prediction(
         )
 
     if (
-        prediction.gaze_status is GazeStatus.VALID
+        _should_draw_gaze_geometry(prediction, options)
         and options.draw_gaze_peak
     ):
         draw_gaze_peak_x(
@@ -611,6 +620,12 @@ def draw_perception_overlay(
 class PredictionRenderer:
     def __init__(self, options: RenderOptions = None):
         self.options = options or RenderOptions()
+        if self.options.gaze_render_mode not in SUPPORTED_GAZE_RENDER_MODES:
+            raise ValueError(
+                "gaze_render_mode must be one of: {}".format(
+                    ", ".join(SUPPORTED_GAZE_RENDER_MODES)
+                )
+            )
         self.font = ImageFont.load_default()
 
     def render(self, image, predictions, perceptions=()) -> Image.Image:
@@ -621,7 +636,7 @@ class PredictionRenderer:
 
         if perceptions:
             for prediction in predictions:
-                if prediction.gaze_status is not GazeStatus.VALID:
+                if not _should_draw_gaze_geometry(prediction, self.options):
                     continue
                 color = stable_color_for_person(prediction.person_id)
                 if self.options.draw_heatmap and prediction.heatmap is not None:
@@ -686,7 +701,7 @@ class PredictionRenderer:
         for prediction in predictions:
             color = stable_color_for_person(prediction.person_id)
             if (
-                prediction.gaze_status is GazeStatus.VALID
+                _should_draw_gaze_geometry(prediction, self.options)
                 and self.options.draw_heatmap
                 and prediction.heatmap is not None
             ):
@@ -699,7 +714,7 @@ class PredictionRenderer:
                 )
                 rendered = Image.alpha_composite(rendered.convert("RGBA"), overlay).convert("RGB")
             if (
-                prediction.gaze_status is GazeStatus.VALID
+                _should_draw_gaze_geometry(prediction, self.options)
                 and self.options.draw_heatmap_contour
                 and prediction.heatmap is not None
             ):
@@ -742,6 +757,7 @@ def render_predictions(
     draw_labels: bool = True,
     heatmap_contour_quantile: float = 0.90,
     heatmap_contour_width: Optional[int] = None,
+    gaze_render_mode: str = "valid-only",
 ) -> Image.Image:
     return PredictionRenderer(
         RenderOptions(
@@ -754,6 +770,7 @@ def render_predictions(
             draw_labels=draw_labels,
             heatmap_contour_quantile=heatmap_contour_quantile,
             heatmap_contour_width=heatmap_contour_width,
+            gaze_render_mode=gaze_render_mode,
         )
     ).render(image, predictions)
 

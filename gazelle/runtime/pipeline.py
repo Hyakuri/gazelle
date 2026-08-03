@@ -186,6 +186,7 @@ def _render_options_from_config(config) -> RenderOptions:
         draw_track_state=config.draw_track_state,
         draw_face_pose_ray=config.draw_face_pose_ray,
         draw_pose_head_ray=config.draw_pose_head_ray,
+        gaze_render_mode=config.gaze_render_mode,
         heatmap_contour_quantile=config.heatmap_contour_quantile,
         heatmap_contour_width=config.heatmap_contour_width,
     )

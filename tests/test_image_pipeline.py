@@ -293,6 +293,7 @@ class ImagePipelineTest(unittest.TestCase):
                 draw_pose_head_points=True,
                 draw_face_mesh=True,
                 draw_track_state=False,
+                gaze_render_mode="all-predictions",
             )
             with unittest.mock.patch(
                 "gazelle.runtime.pipeline.build_head_provider_from_config",
@@ -310,6 +311,7 @@ class ImagePipelineTest(unittest.TestCase):
         self.assertTrue(renderer_options[0].draw_pose_head_points)
         self.assertTrue(renderer_options[0].draw_face_mesh)
         self.assertFalse(renderer_options[0].draw_track_state)
+        self.assertEqual(renderer_options[0].gaze_render_mode, "all-predictions")
 
     def test_build_head_provider_mediapipe_image_uses_injected_backend(self):
         backend = SimpleNamespace(close=lambda: None)

@@ -113,6 +113,7 @@ class RendererTest(unittest.TestCase):
         self.assertTrue(options.draw_track_state)
         self.assertFalse(options.draw_face_pose_ray)
         self.assertFalse(options.draw_pose_head_ray)
+        self.assertEqual(options.gaze_render_mode, "valid-only")
         self.assertEqual(options.heatmap_contour_quantile, 0.90)
         self.assertIsNone(options.heatmap_contour_width)
 
@@ -220,6 +221,97 @@ class RendererTest(unittest.TestCase):
         rendered = PredictionRenderer(options).render(image, (prediction,))
 
         self.assertEqual(rendered.tobytes(), image.tobytes())
+
+    def test_all_predictions_mode_draws_out_of_frame_gazelle_geometry(self):
+        image = Image.new("RGB", (64, 64), color=(20, 20, 20))
+        prediction = replace(
+            make_prediction(),
+            gaze_status=GazeStatus.OUT_OF_FRAME,
+        )
+        options = RenderOptions(
+            gaze_render_mode="all-predictions",
+            draw_head_box=False,
+            draw_labels=False,
+        )
+
+        rendered = PredictionRenderer(options).render(image, (prediction,))
+
+        self.assertNotEqual(rendered.tobytes(), image.tobytes())
+        self.assertEqual(prediction.gaze_status, GazeStatus.OUT_OF_FRAME)
+        self.assertEqual(prediction.inout_score, 0.93)
+
+    def test_all_predictions_mode_draws_out_of_frame_geometry_with_perception(self):
+        image = Image.new("RGB", (64, 64), color=(20, 20, 20))
+        prediction = replace(
+            make_prediction(),
+            gaze_status=GazeStatus.OUT_OF_FRAME,
+        )
+        common = dict(
+            draw_head_box=False,
+            draw_labels=False,
+            draw_track_state=False,
+        )
+        perception = make_perception()
+
+        valid_only = PredictionRenderer(
+            RenderOptions(gaze_render_mode="valid-only", **common)
+        ).render(image, (prediction,), (perception,))
+        all_predictions = PredictionRenderer(
+            RenderOptions(gaze_render_mode="all-predictions", **common)
+        ).render(image, (prediction,), (perception,))
+
+        self.assertNotEqual(all_predictions.tobytes(), valid_only.tobytes())
+
+    def test_all_predictions_mode_controls_each_gazelle_geometry_layer(self):
+        image = Image.new("RGB", (64, 64), color=(20, 20, 20))
+        prediction = replace(
+            make_prediction(),
+            gaze_status=GazeStatus.OUT_OF_FRAME,
+        )
+        cases = (
+            {
+                "draw_heatmap": True,
+                "draw_heatmap_contour": False,
+                "draw_gaze_arrow": False,
+                "draw_gaze_peak": False,
+            },
+            {
+                "draw_heatmap": False,
+                "draw_heatmap_contour": True,
+                "draw_gaze_arrow": False,
+                "draw_gaze_peak": False,
+            },
+            {
+                "draw_heatmap": False,
+                "draw_heatmap_contour": False,
+                "draw_gaze_arrow": True,
+                "draw_gaze_peak": False,
+            },
+            {
+                "draw_heatmap": False,
+                "draw_heatmap_contour": False,
+                "draw_gaze_arrow": False,
+                "draw_gaze_peak": True,
+            },
+        )
+
+        for options_override in cases:
+            with self.subTest(options_override=options_override):
+                options = RenderOptions(
+                    gaze_render_mode="all-predictions",
+                    draw_head_box=False,
+                    draw_labels=False,
+                    **options_override,
+                )
+                rendered = PredictionRenderer(options).render(
+                    image,
+                    (prediction,),
+                )
+                self.assertNotEqual(rendered.tobytes(), image.tobytes())
+
+    def test_prediction_renderer_rejects_invalid_gaze_render_mode(self):
+        with self.assertRaisesRegex(ValueError, "gaze_render_mode"):
+            PredictionRenderer(RenderOptions(gaze_render_mode="everything"))
 
     def test_track_state_label_changes_pixels(self):
         image = Image.new("RGB", (96, 64), color=(20, 20, 20))
@@ -569,6 +661,23 @@ class RendererTest(unittest.TestCase):
         rendered = renderer.render(image, [make_prediction(heatmap=None)])
 
         self.assertEqual(rendered.mode, "RGB")
+        self.assertNotEqual(rendered.tobytes(), image.tobytes())
+
+    def test_render_predictions_accepts_all_predictions_mode(self):
+        image = Image.new("RGB", (24, 24), color=(20, 20, 20))
+        prediction = replace(
+            make_prediction(),
+            gaze_status=GazeStatus.OUT_OF_FRAME,
+        )
+
+        rendered = render_predictions(
+            image,
+            (prediction,),
+            gaze_render_mode="all-predictions",
+            draw_head_box=False,
+            draw_labels=False,
+        )
+
         self.assertNotEqual(rendered.tobytes(), image.tobytes())
 
     def test_render_predictions_does_not_mutate_original_image(self):
