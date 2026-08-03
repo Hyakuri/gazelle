@@ -52,7 +52,9 @@ python main.py --input assets\the_office.png `
   --face-pose-ray `
   --pose-head-ray `
   --reference-ray-length 2.5 `
-  --gaze-inout-threshold 0.5
+  --gaze-inout-threshold 0.5 `
+  --gazelle-head-mode eligible `
+  --gaze-render-mode valid-only
 ```
 
 下面的视频工作流明确是模板，因为仓库没有提交任何视频。执行前将 `USER_INPUT_PATH` 替换为确实存在的受支持视频；only the input path must be supplied（只需提供输入路径）。保留其余全部参数，即可维持 MediaPipe、ByteTrack、500 ms bridge、Gazelle、cache 选择和 rendering：
@@ -78,8 +80,27 @@ python main.py --input USER_INPUT_PATH `
   --face-pose-ray `
   --pose-head-ray `
   --reference-ray-length 2.5 `
-  --gaze-inout-threshold 0.5
+  --gaze-inout-threshold 0.5 `
+  --gazelle-head-mode eligible `
+  --gaze-render-mode valid-only
 ```
+
+为了进行探索性对比，请将下面的 `DIAGNOSTIC_VIDEO_PATH` 替换为已有视频。该命令会把指定的保守及诊断 MediaPipe state/view 送入 Gazelle，并同时渲染 in-frame 与 out-of-frame prediction：
+
+```powershell
+python main.py --input DIAGNOSTIC_VIDEO_PATH `
+  --output-dir outputs `
+  --overwrite `
+  --head-source mediapipe `
+  --gazelle-head-mode face_pose face_only pose_only back_or_occluded tracked_only `
+  --gaze-render-mode all-predictions `
+  --face-pose-ray `
+  --pose-head-ray `
+  --save-rendered `
+  --video-codec avc1
+```
+
+这是诊断模式。`tracked_only` 仍只限于 active short-occlusion bridge，不能恢复已过期 track。stale、遮挡、pose-only 或其他 non-eligible head 的 prediction 属于探索性 model output，不能视为经过验证的真实眼睛 gaze measurement。
 
 ```text
 MediaPipe Face Detector / Face Landmarker / Pose Landmarker
@@ -87,12 +108,12 @@ MediaPipe Face Detector / Face Landmarker / Pose Landmarker
   -> ByteTrack and 500 ms short-occlusion bridge for video
   -> post-bridge max-head arbitration
   -> normalized HeadObservation + conservative gaze eligibility
-  -> 仅 eligible head -> GazellePredictor
+  -> 配置的 Gazelle head selector -> GazellePredictor
   -> gaze heatmap / peak / in-out score + final gaze_status
   -> head_observations.jsonl / predictions.jsonl / rendered.mp4
 ```
 
-首次使用可能下载 Gazelle checkpoint、DINOv2 repository/weight 和 MediaPipe task asset；有效 cache entry 会被复用。图像 ID 从零开始，视频 ID 来自 ByteTrack。`GazellePredictor` 只接收有序且 eligible 的 `HeadObservation`，Gazelle model 仍只消费 `"images"` tensor 和 `"bboxes"` list。`tracked_only`、`pose_only`、背脸/遮挡及低质量 rejection 会保留在 observation/rendering 中，但不会运行 Gazelle。eligibility 要求 perception confidence 与 face-ray confidence 均至少为 `0.50`，model-boundary selector 会再次复核 state 与 quality。wrapper 保留 `person_id` 以关联结果；`confidence` 和两条 reference ray 都只属于 sidecar metadata，is not model input。
+首次使用可能下载 Gazelle checkpoint、DINOv2 repository/weight 和 MediaPipe task asset；有效 cache entry 会被复用。图像 ID 从零开始，视频 ID 来自 ByteTrack。默认 `--gazelle-head-mode eligible` 保留保守边界：perception confidence 与 face-ray confidence 均至少为 `0.50`，并在推理前再次复核 state 与 quality。`--gazelle-head-mode` 也可接受一个或多个采用 OR 语义的 selector：`eligible`、`observed`、`all`，state `face_pose`/`face_only`/`pose_only`/`tracked_only`，或 view `frontal`/`profile`/`back_or_occluded`/`unknown`。重复 selector 按顺序去重，出现 `all` 时统一规范化为 `all`。非 MediaPipe provider 保持原有行为。Gazelle model 仍只消费 `"images"` tensor 和 `"bboxes"` list；wrapper 保留 `person_id`，而 confidence、state、keypoint、pose 和两条 reference ray 都只属于 sidecar metadata，不是 model input。
 
 ## 5. 支持的模型和媒体格式
 
@@ -121,6 +142,7 @@ MediaPipe Face Detector / Face Landmarker / Pose Landmarker
 | `--pose-model` | `lite`、`full` 或 `heavy` | `full` | MediaPipe image/video/preparation | 选择 pose landmarker，也决定可能下载哪个 pose task asset。 |
 | `--head-track-max-gap-ms` | finite float，大于 `0` | `500.0` | MediaPipe video | 配置 short-occlusion bridge；图像不使用 tracking。 |
 | `--save-face-landmarks` | flag | `false` | MediaPipe observation output | 有数据时加入 `face_landmarks`，增加大小/隐私暴露；`--face-mesh` 无须它即可渲染内存 landmarks。 |
+| `--gazelle-head-mode` | 一个或多个：`eligible`、`observed`、`all`、`face_pose`、`face_only`、`pose_only`、`tracked_only`、`frontal`、`profile`、`back_or_occluded`、`unknown` | `eligible` | MediaPipe-to-Gazelle scheduling | 使用 OR 语义选择有序 perception 进行推理。`eligible` 是保守策略；`observed` 排除 bridged track；`all` 包含所有 active perception。仍执行 geometry validation 和 track expiry。 |
 | `--bbox` | 四个 float `XMIN YMIN XMAX YMAX`；可重复 | `None` | `static` provider | `static` 至少需要一个；按 `--bbox-format` 解释、clipping/normalization 后必须非空。 |
 | `--bbox-format` | `normalized` 或 `pixel` | `normalized` | `static` provider | 解释 CLI `--bbox`；JSON 使用 record/head 自己的 `bbox_format`，不使用此 option。 |
 | `--person-id` | integer；可重复 | `None` | `static` provider | 若提供，数量必须等于重复 `--bbox` 数；否则 ID 为 `0, 1, ...`。 |
@@ -144,7 +166,8 @@ MediaPipe Face Detector / Face Landmarker / Pose Landmarker
 | `--face-pose-ray` | flag | `false` | MediaPipe rendering | 绘制蓝色、无相机标定的 2D face head-pose reference ray；近轴向姿态只显示 origin marker。 |
 | `--pose-head-ray` | flag | `false` | MediaPipe rendering | 绘制橙色、由 Pose Landmarker nose/eye 或 nose/ear geometry 独立估计的 2D reference ray。 |
 | `--reference-ray-length` | finite float，大于 `0` | `2.5` | MediaPipe perception/rendering | 两条 ray 的长度均为 normalized head-box diagonal 的倍数，再 clipping 到画面边界。 |
-| `--gaze-inout-threshold` | finite float，范围 `[0, 1]` | `0.5` | Gazelle output/rendering | 低于阈值时标记 `out_of_frame` 并抑制 Gazelle heatmap/arrow/peak，但保留 prediction metadata 及可选 bbox/label。 |
+| `--gaze-inout-threshold` | finite float，范围 `[0, 1]` | `0.5` | Gazelle output classification | 将低于阈值的 in/out score 分类为 `out_of_frame`，同时保留 prediction metadata。渲染抑制由 `--gaze-render-mode` 独立控制。 |
+| `--gaze-render-mode` | `valid-only` 或 `all-predictions` | `valid-only` | Gazelle rendering | `valid-only` 只为 `gaze_status=valid` 绘制 Gazelle geometry；`all-predictions` 也绘制真实 `out_of_frame` heatmap/contour/arrow/peak，但不修改状态或 JSON。 |
 | `--no-gaze-peak` | flag | `false` | rendering | 只隐藏 gaze peak marker；prediction 不变。 |
 | `--no-gaze-arrow` | flag | `false` | rendering | 隐藏 head-center-to-peak arrow；arrow 还要求非 null bbox。 |
 | `--draw-heatmap-contour` | flag | `false` | rendering | 使用 quantile/width option 启用高响应 contour。 |
@@ -232,7 +255,7 @@ python main.py --input USER_INPUT_PATH --output-dir outputs --overwrite `
 
 只有 `--save-rendered` 才写渲染。提供 MediaPipe perception 时，每个有 head box 的 person 都绘制 **MediaPipe primary perception head box**：当前 observation 为实线，`tracked_only` 为虚线/半透明。**track-state labels default on**；`--no-track-state` 只关闭 person/state/confidence label，不改变 JSON/JSONL。
 
-`--head-box` 控制独立的 **Gazelle prediction bbox**，要求 prediction bbox 非 null。`--face-box`、`--face-keypoints`、`--pose-head-points`、`--face-mesh` 是辅助 MediaPipe opt-in。`--face-pose-ray` 绘制蓝色 Face Landmarker reference，`--pose-head-ray` 绘制橙色、独立计算的 Pose Landmarker reference。每条 reference ray 都是无相机标定的 2D head-direction diagnostic，不是真实 eye gaze，并以最终 fused head bbox 计算请求长度。face origin 优先使用双眼中点；仅在至少三个 finite current face keypoints 仍存在时才 fallback 到 face-box center。接近 camera axis 时只显示 origin ring，因为不存在可信的 image-plane line。heatmap、gaze peak、gaze arrow、普通 label 默认开启，对应 `--no-*` flag 关闭。只有 `gaze_status=valid` 才绘制 Gazelle heatmap、contour、arrow 和 peak；`out_of_frame` 仍可保留 bbox 和 status label。`skipped`/`no_head`/`no_gaze` video frame 仍会写入并可保留 MediaPipe overlay。
+`--head-box` 控制独立的 **Gazelle prediction bbox**，要求 prediction bbox 非 null。`--face-box`、`--face-keypoints`、`--pose-head-points`、`--face-mesh` 是辅助 MediaPipe opt-in。`--face-pose-ray` 绘制蓝色 Face Landmarker reference，`--pose-head-ray` 绘制橙色、独立计算的 Pose Landmarker reference。每条 reference ray 都是无相机标定的 2D head-direction diagnostic，不是真实 eye gaze，并以最终 fused head bbox 计算请求长度。face origin 优先使用双眼中点；仅在至少三个 finite current face keypoints 仍存在时才 fallback 到 face-box center。接近 camera axis 时只显示 origin ring，因为不存在可信的 image-plane line。heatmap、gaze peak、gaze arrow、普通 label 默认开启，对应 `--no-*` flag 关闭。默认 `--gaze-render-mode valid-only` 只为 `gaze_status=valid` 绘制 Gazelle heatmap、contour、arrow 和 peak；`out_of_frame` 仍可保留 bbox 和 status label。`--gaze-render-mode all-predictions` 也会绘制 `out_of_frame` 的实际 geometry，但不修改状态、分数或 JSON。`skipped`/`no_head`/`no_gaze` video frame 仍会写入并可保留 MediaPipe overlay。
 
 ## 11. JSON/JSONL 输入示例
 
@@ -293,7 +316,8 @@ MediaPipe rich people 保留以上 field，并增加：
 | `state` | Required | enum string | `face_pose`、`face_only`、`pose_only` 或 `tracked_only`。 |
 | `view_state` | Required | enum string | `frontal`、`profile`、`back_or_occluded` 或 `unknown`。 |
 | `observed` | Required | boolean | 当前帧有 evidence 时为 `true`；bridge track 为 `false`。 |
-| `gaze_eligible` | Required | boolean | 当前 MediaPipe perception 是否允许送入 Gazelle；要求 current face state 且 perception/face-ray confidence 均至少为 `0.50`。 |
+| `gaze_eligible` | Required | boolean | perception policy 给出的保守建议；要求 current face state 且 perception/face-ray confidence 均至少为 `0.50`。诊断 selector 不会修改它。 |
+| `gazelle_selected` | Required | boolean | `--gazelle-head-mode` 做出的实际逐帧推理决定。被 `frame_step` 跳过的视频帧中始终为 `false`。 |
 | `gaze_status` | Conditional | enum string | 推理前 rejection reason：`unavailable_occluded`、`tracked_no_gaze` 或 `rejected_low_quality`。 |
 | `tracking` | Required | object | 包含 Required integer `track_age_frames`、Required integer `missed_frames`、Required finite-number `missed_ms`。 |
 | `face_bbox_normalized` | Conditional | number `[4]` | 当前 face bbox，顺序 `(xmin, ymin, xmax, ymax)`，clipping 到 `[0, 1]`。 |
@@ -316,7 +340,7 @@ Landmark、matrix、head-pose value shape：
 | `facial_transformation_matrix` rows | Conditional | nested finite-number arrays | MediaPipe 通常提供 `4 x 4`，但 serializer preserves supplied row lengths；前三行之后的 row 可保留任意 supplied length。 |
 | `head_pose.yaw_deg`, `pitch_deg`, `roll_deg` | Required inside Conditional `head_pose` | finite number | 单位 degree 的 Euler-like head-pose angle。 |
 
-`track_age_frames` 是 track age；`missed_frames`、`missed_ms` 表示上次当前 observation 后连续 bridge reuse 的帧数和时间。因此 `tracked_only` 是 stale bridged box，不是 fresh detection，并且绝不会送入 Gazelle。单人模式在 bridge 后最多保留一个 identity，并裁掉被新 observation 替换的 stale bridge state。
+`track_age_frames` 是 track age；`missed_frames`、`missed_ms` 表示上次当前 observation 后连续 bridge reuse 的帧数和时间。因此 `tracked_only` 是 stale bridged box，不是 fresh detection。默认 `eligible` selector 会排除它；只有在 bridge track 仍 active 时，显式 `tracked_only` 或 `all` 诊断 selector 才能把它送入 Gazelle。单人模式在 bridge 后最多保留一个 identity，并裁掉被新 observation 替换的 stale bridge state。
 
 ### Prediction records
 
@@ -346,7 +370,7 @@ Landmark、matrix、head-pose value shape：
 | Field | Presence | Type/shape | 含义 |
 | --- | --- | --- | --- |
 | `frame_index`, `timestamp_ms` | Required | integer；finite number | 与已写 observation frame 一致。 |
-| `status` | Required | enum string | `ok`、`no_head`、`no_gaze`、`skipped` 或 schema-supported `error`；`no_gaze` 表示有 head 但没有 eligible head，`frame_step` 排除 frame 时 `skipped` 优先。 |
+| `status` | Required | enum string | `ok`、`no_head`、`no_gaze`、`skipped` 或 schema-supported `error`；`no_gaze` 表示有 head 但没有 head 匹配配置的 Gazelle selector，`frame_step` 排除 frame 时 `skipped` 优先。 |
 | `width`, `height` | Required | positive integer | frame pixel 尺寸。 |
 | `people` | Required | array | 除 `status` 为 `ok` 外均为空。 |
 | `inference_ms` | Conditional | finite number | Gazelle inference 已运行时输出。 |
@@ -354,7 +378,7 @@ Landmark、matrix、head-pose value shape：
 
 ### Run configuration
 
-`run_config.json` 先对已验证的 `RuntimeConfig` 执行 `dataclasses.asdict()`，因此 Python tuple 在 JSON 中成为 array。base object 始终含以下全部 45 个 key，包括值为 `null` 的 key。
+`run_config.json` 先对已验证的 `RuntimeConfig` 执行 `dataclasses.asdict()`，因此 Python tuple 在 JSON 中成为 array。base object 始终含以下全部 47 个 key，包括值为 `null` 的 key。
 
 #### Base RuntimeConfig fields
 
@@ -393,7 +417,9 @@ Landmark、matrix、head-pose value shape：
 | `draw_face_pose_ray` | boolean (non-null) | 来自 `--face-pose-ray` 的有效 positive face reference-ray state。 |
 | `draw_pose_head_ray` | boolean (non-null) | 来自 `--pose-head-ray` 的有效 positive pose reference-ray state。 |
 | `reference_ray_length` | number (non-null) | 来自 `--reference-ray-length` 的 positive finite head-box diagonal multiplier。 |
-| `gaze_inout_threshold` | number (non-null) | 来自 `--gaze-inout-threshold` 的 final Gazelle in/out rendering threshold，范围 `[0, 1]`。 |
+| `gaze_inout_threshold` | number (non-null) | 来自 `--gaze-inout-threshold` 的 Gazelle in/out classification threshold，范围 `[0, 1]`。 |
+| `gazelle_head_mode` | string array (non-null) | 来自 `--gazelle-head-mode` 的已验证、去重 selector sequence；默认 `["eligible"]`，输入包含 `all` 时规范化为 `["all"]`。 |
+| `gaze_render_mode` | string (non-null) | 来自 `--gaze-render-mode` 的已验证 rendering mode：`valid-only` 或 `all-predictions`。 |
 | `heatmap_contour_quantile` | number (non-null) | 来自 `--heatmap-contour-quantile` 的 finite contour threshold quantile，范围 `[0, 1]`。 |
 | `heatmap_contour_width` | integer or null (nullable) | 来自 `--heatmap-contour-width` 的 positive contour width；自动 width 时为 null。 |
 | `output_fps` | number or null (nullable) | 来自 `--output-fps` 的 positive finite fallback，未提供时为 null；video 会用 resolved writer/tracker FPS override。 |

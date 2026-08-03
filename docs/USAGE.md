@@ -52,7 +52,9 @@ python main.py --input assets\the_office.png `
   --face-pose-ray `
   --pose-head-ray `
   --reference-ray-length 2.5 `
-  --gaze-inout-threshold 0.5
+  --gaze-inout-threshold 0.5 `
+  --gazelle-head-mode eligible `
+  --gaze-render-mode valid-only
 ```
 
 The video workflow below is intentionally a template because the repository has no committed video. Replace `USER_INPUT_PATH` with an existing supported video path before execution; only the input path must be supplied. Keep every other argument unchanged to retain MediaPipe, ByteTrack, the 500 ms bridge, Gazelle, cache selection, and rendering:
@@ -78,8 +80,27 @@ python main.py --input USER_INPUT_PATH `
   --face-pose-ray `
   --pose-head-ray `
   --reference-ray-length 2.5 `
-  --gaze-inout-threshold 0.5
+  --gaze-inout-threshold 0.5 `
+  --gazelle-head-mode eligible `
+  --gaze-render-mode valid-only
 ```
+
+For exploratory comparison, replace `DIAGNOSTIC_VIDEO_PATH` below with an existing video. This command sends selected conservative and diagnostic MediaPipe states/views into Gazelle and renders both in-frame and out-of-frame predictions:
+
+```powershell
+python main.py --input DIAGNOSTIC_VIDEO_PATH `
+  --output-dir outputs `
+  --overwrite `
+  --head-source mediapipe `
+  --gazelle-head-mode face_pose face_only pose_only back_or_occluded tracked_only `
+  --gaze-render-mode all-predictions `
+  --face-pose-ray `
+  --pose-head-ray `
+  --save-rendered `
+  --video-codec avc1
+```
+
+This is a diagnostic mode. `tracked_only` remains limited to an active short-occlusion bridge and cannot revive an expired track. Predictions from stale, occluded, pose-only, or otherwise non-eligible heads are exploratory model outputs, not validated physical eye-gaze measurements.
 
 ```text
 MediaPipe Face Detector / Face Landmarker / Pose Landmarker
@@ -87,12 +108,12 @@ MediaPipe Face Detector / Face Landmarker / Pose Landmarker
   -> ByteTrack and 500 ms short-occlusion bridge for video
   -> post-bridge max-head arbitration
   -> normalized HeadObservation + conservative gaze eligibility
-  -> eligible heads only -> GazellePredictor
+  -> configured Gazelle head selectors -> GazellePredictor
   -> gaze heatmap / peak / in-out score + final gaze_status
   -> head_observations.jsonl / predictions.jsonl / rendered.mp4
 ```
 
-First use may download the Gazelle checkpoint, DINOv2 repository/weights, and MediaPipe task assets; valid cache entries are reused. Image IDs start at zero, while video IDs come from ByteTrack. `GazellePredictor` accepts ordered eligible `HeadObservation` values, but the Gazelle model consumes only `"images"` tensors and `"bboxes"` lists. `tracked_only`, `pose_only`, back/occluded, and rejected low-quality MediaPipe perceptions remain in observation/rendering output but do not run Gazelle. Eligibility requires both perception confidence and face-ray confidence to be at least `0.50`, and the model-boundary selector repeats the state/quality checks. `person_id` is retained by the wrapper to associate model results with output people. `confidence` and both reference rays remain sidecar metadata and are not model input.
+First use may download the Gazelle checkpoint, DINOv2 repository/weights, and MediaPipe task assets; valid cache entries are reused. Image IDs start at zero, while video IDs come from ByteTrack. The default `--gazelle-head-mode eligible` preserves the conservative boundary: perception confidence and face-ray confidence must both be at least `0.50`, and state/quality checks are repeated before inference. `--gazelle-head-mode` may instead accept one or more selectors with OR semantics: `eligible`, `observed`, `all`, states `face_pose`/`face_only`/`pose_only`/`tracked_only`, or views `frontal`/`profile`/`back_or_occluded`/`unknown`. Duplicate selectors are removed in order, and any `all` canonicalizes the selection to `all`. Non-MediaPipe providers retain their existing behavior. The Gazelle model still consumes only `"images"` tensors and `"bboxes"` lists; `person_id` is retained by the wrapper, while confidence, state, keypoints, pose, and both reference rays remain sidecar metadata rather than model input.
 
 ## 5. Supported models and media formats
 
@@ -121,6 +142,7 @@ Supported images: `.jpg`, `.jpeg`, `.png`, `.bmp`, `.webp`. Supported videos: `.
 | `--pose-model` | `lite`, `full`, or `heavy` | `full` | MediaPipe image/video/preparation | Selects pose landmarker and therefore which pose task asset may be downloaded. |
 | `--head-track-max-gap-ms` | finite float greater than `0` | `500.0` | MediaPipe video | Configures short-occlusion bridge; tracking is not used for images. |
 | `--save-face-landmarks` | flag | `false` | MediaPipe observation output | Adds `face_landmarks` when available, increasing size/privacy exposure; `--face-mesh` can render in-memory landmarks without it. |
+| `--gazelle-head-mode` | one or more of `eligible`, `observed`, `all`, `face_pose`, `face_only`, `pose_only`, `tracked_only`, `frontal`, `profile`, `back_or_occluded`, `unknown` | `eligible` | MediaPipe-to-Gazelle scheduling | OR-selects ordered perceptions for inference. `eligible` is the conservative policy; `observed` excludes bridged tracks; `all` includes every active perception. Geometry validation and track expiry still apply. |
 | `--bbox` | four floats `XMIN YMIN XMAX YMAX`; repeatable | `None` | `static` provider | Required at least once for `static`; values use `--bbox-format`, are clipped/normalized, and must leave a nonempty box. |
 | `--bbox-format` | `normalized` or `pixel` | `normalized` | `static` provider | Interprets CLI `--bbox`; JSON records use their own record/head `bbox_format`, not this option. |
 | `--person-id` | integer; repeatable | `None` | `static` provider | If supplied, count must equal repeated `--bbox` count; otherwise IDs are `0, 1, ...`. |
@@ -144,7 +166,8 @@ Supported images: `.jpg`, `.jpeg`, `.png`, `.bmp`, `.webp`. Supported videos: `.
 | `--face-pose-ray` | flag | `false` | MediaPipe rendering | Draws the blue uncalibrated 2D reference ray derived from current face keypoints and Face Landmarker head pose; an axial pose is shown as an origin marker. |
 | `--pose-head-ray` | flag | `false` | MediaPipe rendering | Draws the orange independent 2D reference ray derived from current Pose Landmarker nose/eye or nose/ear geometry. |
 | `--reference-ray-length` | finite float greater than `0` | `2.5` | MediaPipe perception/rendering | Sets both ray lengths as a multiple of the normalized head-box diagonal before image-boundary clipping. |
-| `--gaze-inout-threshold` | finite float in `[0, 1]` | `0.5` | Gazelle output/rendering | Classifies lower in/out scores as `out_of_frame`; suppresses Gazelle heatmap/arrow/peak while retaining prediction metadata and optional bbox/label. |
+| `--gaze-inout-threshold` | finite float in `[0, 1]` | `0.5` | Gazelle output classification | Classifies lower in/out scores as `out_of_frame` while retaining prediction metadata. Rendering suppression is controlled separately by `--gaze-render-mode`. |
+| `--gaze-render-mode` | `valid-only` or `all-predictions` | `valid-only` | Gazelle rendering | `valid-only` draws Gazelle geometry only for `gaze_status=valid`; `all-predictions` also draws actual `out_of_frame` heatmap/contour/arrow/peak without changing status or JSON. |
 | `--no-gaze-peak` | flag | `false` | rendering | Hides the gaze peak marker only; predictions remain unchanged. |
 | `--no-gaze-arrow` | flag | `false` | rendering | Hides head-center-to-peak arrow; an arrow also requires a non-null bbox. |
 | `--draw-heatmap-contour` | flag | `false` | rendering | Enables high-response contour using the quantile/width options. |
@@ -232,7 +255,7 @@ The `avc1` path streams rendered frames into a temporary `mp4v` source, probes F
 
 Rendering writes only with `--save-rendered`. When MediaPipe perceptions are supplied, the **MediaPipe primary perception head box** renders for every person with a head box; it is solid for a current observation and dashed/translucent for `tracked_only`. The **track-state labels default on**, and `--no-track-state` disables the person/state/confidence labels without changing JSON/JSONL.
 
-`--head-box` controls the separate **Gazelle prediction bbox**, which requires a non-null prediction bbox. `--face-box`, `--face-keypoints`, `--pose-head-points`, and `--face-mesh` are auxiliary MediaPipe opt-ins for the face box, up to six detector keypoints, pose head/shoulder points, and the current in-memory face mesh. `--face-pose-ray` draws the blue Face Landmarker reference and `--pose-head-ray` draws the orange, independently estimated Pose Landmarker reference. Each reference ray is an uncalibrated 2D head-direction diagnostic, not an eye-gaze measurement, and uses the final fused head bbox for its requested length. The face origin prefers the eye midpoint and falls back to the face-box center only when at least three finite current face keypoints remain. A near-camera-axis face direction is an origin ring because it has no honest image-plane line. Heatmap, gaze peak, gaze arrow, and general labels default on; their `--no-*` flags disable them. Gazelle heatmap, contour, arrow, and peak are drawn only for `gaze_status=valid`; an `out_of_frame` prediction can still retain its optional bbox and status label. `--draw-heatmap-contour --heatmap-contour-quantile 0.90 --heatmap-contour-width 3` adds a contour. Skipped/no-head/no-gaze video frames are still written and can retain MediaPipe overlays.
+`--head-box` controls the separate **Gazelle prediction bbox**, which requires a non-null prediction bbox. `--face-box`, `--face-keypoints`, `--pose-head-points`, and `--face-mesh` are auxiliary MediaPipe opt-ins for the face box, up to six detector keypoints, pose head/shoulder points, and the current in-memory face mesh. `--face-pose-ray` draws the blue Face Landmarker reference and `--pose-head-ray` draws the orange, independently estimated Pose Landmarker reference. Each reference ray is an uncalibrated 2D head-direction diagnostic, not an eye-gaze measurement, and uses the final fused head bbox for its requested length. The face origin prefers the eye midpoint and falls back to the face-box center only when at least three finite current face keypoints remain. A near-camera-axis face direction is an origin ring because it has no honest image-plane line. Heatmap, gaze peak, gaze arrow, and general labels default on; their `--no-*` flags disable them. With default `--gaze-render-mode valid-only`, Gazelle heatmap, contour, arrow, and peak are drawn only for `gaze_status=valid`; an `out_of_frame` prediction can still retain its optional bbox and status label. `--gaze-render-mode all-predictions` also draws the actual geometry for `out_of_frame` predictions without changing their status, scores, or JSON. `--draw-heatmap-contour --heatmap-contour-quantile 0.90 --heatmap-contour-width 3` adds a contour. Skipped/no-head/no-gaze video frames are still written and can retain MediaPipe overlays.
 
 ## 11. JSON/JSONL input examples
 
@@ -293,7 +316,8 @@ MediaPipe rich people retain those fields and add:
 | `state` | Required | enum string | `face_pose`, `face_only`, `pose_only`, or `tracked_only`. |
 | `view_state` | Required | enum string | `frontal`, `profile`, `back_or_occluded`, or `unknown`. |
 | `observed` | Required | boolean | `true` for current-frame evidence; `false` for a bridged track. |
-| `gaze_eligible` | Required | boolean | Whether the current MediaPipe perception may be sent to Gazelle; current face state and perception/face-ray confidence values of at least `0.50` are required. |
+| `gaze_eligible` | Required | boolean | Conservative recommendation from the perception policy; current face state and perception/face-ray confidence values of at least `0.50` are required. Diagnostic selectors do not mutate it. |
+| `gazelle_selected` | Required | boolean | Actual per-frame decision made by `--gazelle-head-mode`. It is always `false` on `frame_step`-skipped video frames. |
 | `gaze_status` | Conditional | enum string | Pre-inference rejection reason: `unavailable_occluded`, `tracked_no_gaze`, or `rejected_low_quality`. |
 | `tracking` | Required | object | Contains Required integer `track_age_frames`, Required integer `missed_frames`, and Required finite-number `missed_ms`. |
 | `face_bbox_normalized` | Conditional | number `[4]` | Current face bbox in `(xmin, ymin, xmax, ymax)` order, clipped to `[0, 1]`. |
@@ -316,7 +340,7 @@ Landmark, matrix, and head-pose value shapes:
 | `facial_transformation_matrix` rows | Conditional | nested finite-number arrays | MediaPipe commonly supplies `4 x 4`, but the serializer preserves supplied row lengths; rows after the first three may have any supplied length. |
 | `head_pose.yaw_deg`, `pitch_deg`, `roll_deg` | Required inside Conditional `head_pose` | finite number | Euler-like head-pose angles in degrees. |
 
-`track_age_frames` is the track age, while `missed_frames` and `missed_ms` count consecutive bridge reuse since the last current observation. `tracked_only` therefore represents a stale bridged box, not a fresh detection, and it is never sent to Gazelle. In single-person mode, post-bridge arbitration keeps at most one identity and prunes displaced stale bridge state.
+`track_age_frames` is the track age, while `missed_frames` and `missed_ms` count consecutive bridge reuse since the last current observation. `tracked_only` therefore represents a stale bridged box, not a fresh detection. It is excluded by the default `eligible` selector, but explicit `tracked_only` or `all` diagnostic selection may send it to Gazelle only while that bridge track is active. In single-person mode, post-bridge arbitration keeps at most one identity and prunes displaced stale bridge state.
 
 ### Prediction records
 
@@ -346,7 +370,7 @@ Video `predictions.jsonl` has one record per written frame:
 | Field | Presence | Type/shape | Meaning |
 | --- | --- | --- | --- |
 | `frame_index`, `timestamp_ms` | Required | integer; finite number | Matches the written observation frame. |
-| `status` | Required | enum string | `ok`, `no_head`, `no_gaze`, `skipped`, or schema-supported `error`; `no_gaze` means heads exist but none are eligible, and `skipped` takes precedence when `frame_step` excludes a frame. |
+| `status` | Required | enum string | `ok`, `no_head`, `no_gaze`, `skipped`, or schema-supported `error`; `no_gaze` means heads exist but none match the configured Gazelle selectors, and `skipped` takes precedence when `frame_step` excludes a frame. |
 | `width`, `height` | Required | positive integer | Frame pixel dimensions. |
 | `people` | Required | array | Empty unless `status` is `ok`. |
 | `inference_ms` | Conditional | finite number | Emitted when Gazelle inference ran. |
@@ -354,7 +378,7 @@ Video `predictions.jsonl` has one record per written frame:
 
 ### Run configuration
 
-`run_config.json` begins with `dataclasses.asdict()` over the validated `RuntimeConfig`, so Python tuples become JSON arrays. The base object always has all 45 keys below, including keys whose value is `null`.
+`run_config.json` begins with `dataclasses.asdict()` over the validated `RuntimeConfig`, so Python tuples become JSON arrays. The base object always has all 47 keys below, including keys whose value is `null`.
 
 #### Base RuntimeConfig fields
 
@@ -393,7 +417,9 @@ Video `predictions.jsonl` has one record per written frame:
 | `draw_face_pose_ray` | boolean (non-null) | Effective positive face reference-ray state from `--face-pose-ray`. |
 | `draw_pose_head_ray` | boolean (non-null) | Effective positive pose reference-ray state from `--pose-head-ray`. |
 | `reference_ray_length` | number (non-null) | Positive finite head-box diagonal multiplier from `--reference-ray-length`. |
-| `gaze_inout_threshold` | number (non-null) | Finite final Gazelle in/out rendering threshold from `--gaze-inout-threshold`, in `[0, 1]`. |
+| `gaze_inout_threshold` | number (non-null) | Finite Gazelle in/out classification threshold from `--gaze-inout-threshold`, in `[0, 1]`. |
+| `gazelle_head_mode` | string array (non-null) | Validated, de-duplicated selector sequence from `--gazelle-head-mode`; defaults to `["eligible"]`, and any `all` input canonicalizes to `["all"]`. |
+| `gaze_render_mode` | string (non-null) | Validated rendering mode from `--gaze-render-mode`: `valid-only` or `all-predictions`. |
 | `heatmap_contour_quantile` | number (non-null) | Finite contour threshold quantile from `--heatmap-contour-quantile`, in `[0, 1]`. |
 | `heatmap_contour_width` | integer or null (nullable) | Positive contour width from `--heatmap-contour-width`, or null for automatic width. |
 | `output_fps` | number or null (nullable) | Positive finite fallback from `--output-fps`, or null when not supplied; video overrides this key with the resolved writer/tracker FPS. |

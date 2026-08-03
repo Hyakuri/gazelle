@@ -205,7 +205,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--gaze-inout-threshold",
         type=float,
         default=0.5,
-        help="Minimum Gazelle in/out score in [0, 1] for gaze overlay rendering.",
+        help="Minimum Gazelle in/out score in [0, 1] for classifying gaze as valid.",
     )
     parser.add_argument(
         "--gaze-render-mode",

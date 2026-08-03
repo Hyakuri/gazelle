@@ -207,7 +207,7 @@ python main.py `
 
 ### MediaPipe Provider Composition (Staged)
 
-The CLI accepts `--head-source mediapipe` and validates MediaPipe runtime settings: `--max-heads` accepts `1` through `10` (default `1`), `--pose-model` accepts `lite`, `full`, or `heavy` (default `full`), `--head-track-max-gap-ms` accepts a finite value greater than `0` in milliseconds (default `500.0`), and `--save-face-landmarks` enables face-landmark output configuration (default off). `--face-pose-ray` and `--pose-head-ray` independently render two uncalibrated 2D head-direction references; `--reference-ray-length` controls their positive head-box-diagonal multiplier, and `--gaze-inout-threshold` controls the final Gazelle in-frame rendering gate.
+The CLI accepts `--head-source mediapipe` and validates MediaPipe runtime settings: `--max-heads` accepts `1` through `10` (default `1`), `--pose-model` accepts `lite`, `full`, or `heavy` (default `full`), `--head-track-max-gap-ms` accepts a finite value greater than `0` in milliseconds (default `500.0`), and `--save-face-landmarks` enables face-landmark output configuration (default off). `--face-pose-ray` and `--pose-head-ray` independently render two uncalibrated 2D head-direction references, and `--reference-ray-length` controls their positive head-box-diagonal multiplier. `--gazelle-head-mode` selects which MediaPipe perceptions may cross into Gazelle, `--gaze-inout-threshold` classifies the resulting prediction as `valid` or `out_of_frame`, and `--gaze-render-mode` independently controls whether out-of-frame Gazelle geometry is drawn.
 
 Prepare the official face detector, face landmarker, and one selected pose landmarker without running inference:
 
@@ -222,9 +222,9 @@ The pose selection prepares `pose_landmarker_lite.task`, `pose_landmarker_full.t
 
 Default unit tests use fake downloaders and do not access the network. The pinned registry hashes were established once by downloading exactly the five official versioned assets to an OS temporary directory outside the repository, calculating SHA-256, and deleting that temporary directory.
 
-`--head-source mediapipe` is now wired into the runtime head-provider factory. The provider composes prepared resources, the MediaPipe backend, head/pose fusion, video ByteTrack tracking, and the 500 ms short-occlusion bridge. Image IDs are deterministic and start at zero; video IDs come from ByteTrack. In single-person mode, a post-bridge arbitration step keeps at most one identity and prunes stale identities replaced by a current observation. Gazelle receives normalized, non-`None` MediaPipe head bboxes only when the current perception passes the conservative gaze-eligibility policy, including minimum perception and face-ray confidence values of `0.50`.
+`--head-source mediapipe` is now wired into the runtime head-provider factory. The provider composes prepared resources, the MediaPipe backend, head/pose fusion, video ByteTrack tracking, and the 500 ms short-occlusion bridge. Image IDs are deterministic and start at zero; video IDs come from ByteTrack. In single-person mode, a post-bridge arbitration step keeps at most one identity and prunes stale identities replaced by a current observation. By default, Gazelle receives normalized, non-`None` MediaPipe head bboxes only when the current perception passes the conservative gaze-eligibility policy, including minimum perception and face-ray confidence values of `0.50`.
 
-The integration keeps the model boundary deliberately small: fusion/tracking produces an ordered `HeadObservation(person_id, bbox, confidence)` tuple and an aligned `HeadPerception` tuple for observation sidecars and rendering. `tracked_only`, `pose_only`, back/occluded, and rejected low-quality perceptions stay visible as continuity/diagnostic records but are not passed to `GazellePredictor.predict_frame(...)`. Only eligible normalized head boxes cross the model boundary; face bbox, face mesh, face/pose keypoints, both head-pose reference rays, head pose, and tracking state are not added to the Gazelle tensor input. Gazelle returns its heatmap, gaze peak, peak value, optional in/out score, and wrapper-level `gaze_status` in the same eligible-person order.
+The integration keeps the model boundary deliberately small: fusion/tracking produces an ordered `HeadObservation(person_id, bbox, confidence)` tuple and an aligned `HeadPerception` tuple for observation sidecars and rendering. The default `--gazelle-head-mode eligible` passes only conservative eligible heads. Diagnostic selectors may instead opt in one or more states (`face_pose`, `face_only`, `pose_only`, `tracked_only`) or views (`frontal`, `profile`, `back_or_occluded`, `unknown`); `observed` selects current observations, and `all` selects every active perception. Multiple selectors use OR semantics. Even in diagnostic mode, expired tracks cannot be revived and normalized non-`None` bbox validation remains mandatory. Face bbox, face mesh, face/pose keypoints, both head-pose reference rays, head pose, and tracking state are never added to the Gazelle tensor input. Gazelle returns results in the selected-person order.
 
 The current `environment.yml` dependency set has been validated with real MediaPipe 0.10.35, production ByteTrack via `trackers==2.5.0.post0`, Gazelle/DINOv2 CUDA image inference, and a short rendered video pipeline. This repository now treats that NumPy 2.4.6 environment as the recommended end-to-end setup for the staged runtime work. Optional Ultralytics YOLO model inference and export have not been validated and are not claimed here.
 
@@ -234,9 +234,9 @@ The runtime narrowly filters the exact upstream `trackers` `target=None` depreca
 
 `gazelle.runtime.perception.outputs` provides `head_frame_to_json_dict(...)` for one independent provider result. The image pipeline uses `write_head_observations_json(output_path, **frame_kwargs)` to create parent directories and write exactly one indented JSON document with a trailing newline. The video pipeline writes every serialized provider result as one compact `head_observations.jsonl` row. The record has exactly `frame_index`, `timestamp_ms`, `status`, `width`, `height`, `provider`, `timings_ms`, and `people` fields. `status` is `"ok"` when the result has heads and `"no_head"` otherwise. `timings_ms` retains provider timing names and finite millisecond values.
 
-Each person has `person_id`, `head_bbox_normalized`, and `confidence`. Head boxes are normalized to `[0, 1]` and retain the runtime bbox tuple ordering. Rich MediaPipe perceptions additionally include `gaze_eligible`, optional rejection `gaze_status`, applicable face bbox, `state`, `view_state`, `observed`, `tracking`, face keypoints, filtered pose-head landmarks, named pose-head keypoints, facial transformation matrix, yaw/pitch/roll head-pose evidence, and either available reference ray. The face reference uses Face Landmarker pose plus face keypoints; the pose reference is independently estimated from reliable Pose Landmarker nose/eye or nose/ear geometry. Both are uncalibrated 2D references, not eye-gaze measurements.
+Each person has `person_id`, `head_bbox_normalized`, and `confidence`. Head boxes are normalized to `[0, 1]` and retain the runtime bbox tuple ordering. Rich MediaPipe perceptions additionally include conservative recommendation `gaze_eligible`, actual per-frame inference decision `gazelle_selected`, optional rejection `gaze_status`, applicable face bbox, `state`, `view_state`, `observed`, `tracking`, face keypoints, filtered pose-head landmarks, named pose-head keypoints, facial transformation matrix, yaw/pitch/roll head-pose evidence, and either available reference ray. The face reference uses Face Landmarker pose plus face keypoints; the pose reference is independently estimated from reliable Pose Landmarker nose/eye or nose/ear geometry. Both are uncalibrated 2D references, not eye-gaze measurements.
 
-Every image run writes this independent record to `head_observations.json` before gaze scheduling, regardless of `--head-source`. Every video frame writes its independent observation row before its gaze row. These outputs include the selected provider, provider timing fields, normalized head boxes, and `status="no_head"` when there are no heads. A video `tracked_only` perception maintains bbox continuity only and uses `gaze_status="tracked_no_gaze"`; it never reruns Gazelle. `pose_only` and back/occluded perceptions similarly remain observable but use unavailable gaze status. During the bridge, stale current-frame face evidence and both reference rays are cleared rather than fabricated.
+Every image run writes this independent record to `head_observations.json` before gaze inference, regardless of `--head-source`. Every video frame writes its independent observation row before its gaze row. These outputs include the selected provider, provider timing fields, normalized head boxes, and `status="no_head"` when there are no heads. By default, a video `tracked_only` perception maintains bbox continuity only and uses `gaze_status="tracked_no_gaze"`; it can be sent to Gazelle only through explicit `tracked_only` or `all` diagnostic selection while its bridge track remains active. `pose_only` and back/occluded perceptions likewise retain their conservative status even if explicitly selected. During the bridge, stale current-frame face evidence and both reference rays are cleared rather than fabricated.
 
 For privacy and output size, all 478 face landmarks are omitted by default. Pass `--save-face-landmarks` to include them in image `head_observations.json` or video `head_observations.jsonl`; this can substantially increase output size and retain more biometric detail.
 
@@ -274,7 +274,7 @@ When a `HeadPerception` result is supplied, its primary head bbox is drawn by de
 
 The layer order is gaze heatmaps and optional contours, existing gaze bbox/arrow/peak marks, the perception primary head bbox, auxiliary face bbox, six detector keypoints, pose head/shoulder points, optional face mesh, perception state/person/confidence label, and finally gaze prediction labels. Perception rendering uses the supplied `HeadPerception` data as-is: it does not recompute the perception bbox, mutate the perception, or replace `GazePrediction.bbox`, the normalized bbox already sent to Gazelle. MediaPipe perceptions already retain in-memory `face_landmarks`; `--face-mesh` independently opts into drawing them and does not require `--save-face-landmarks`. The separate `--save-face-landmarks` switch controls whether those landmarks are serialized into observation JSON/JSONL sidecars. Drawing hundreds of mesh points adds per-frame rendering work, while serializing them increases observation output size and retained biometric detail. Calls that omit perceptions or pass `perceptions=()` retain byte-identical legacy rendering, and the perception switches have no effect on those calls.
 
-The Gazelle gaze arrow is a visualization from the head bbox center to the predicted gaze peak. It is separate from both reference rays and is not a true eye vector. `--gaze-inout-threshold` defaults to `0.5`; predictions below it receive `gaze_status="out_of_frame"` and do not draw the Gazelle heatmap, contour, arrow, or red-X peak. Their metadata and optional prediction bbox/status label remain available.
+The Gazelle gaze arrow is a visualization from the head bbox center to the predicted gaze peak. It is separate from both reference rays and is not a true eye vector. `--gaze-inout-threshold` defaults to `0.5` and classifies lower-score predictions as `gaze_status="out_of_frame"`. The default `--gaze-render-mode valid-only` suppresses their Gazelle heatmap, contour, arrow, and red-X peak while retaining metadata and the optional prediction bbox/status label. `--gaze-render-mode all-predictions` draws that geometry for both `valid` and `out_of_frame` predictions without changing status, scores, or JSON output.
 
 Render bbox, arrow, red X, and labels without heatmap:
 
@@ -336,6 +336,24 @@ python main.py `
 
 The `avc1` path streams rendered frames to a temporary `mp4v` video, then invokes FFmpeg. It prefers `h264_nvenc` and falls back to `libx264` if NVENC is unavailable when encoding starts. The H.264 output uses `yuv420p`, `-movflags +faststart`, and `-an`; it atomically replaces the formal output only after successful encoding and safely cleans temporary files on success or failure. FFmpeg capability detection occurs before video/provider/model construction. `--video-codec` has no effect unless `--save-rendered` is enabled. Default unit tests mock FFmpeg and do not launch a real encoder.
 
+To inspect Gazelle output for selected non-conservative MediaPipe states and views, use the diagnostic controls explicitly:
+
+```powershell
+python main.py `
+  --input samples\assembly.mp4 `
+  --output-dir outputs `
+  --head-source mediapipe `
+  --gazelle-head-mode face_pose face_only pose_only back_or_occluded tracked_only `
+  --gaze-render-mode all-predictions `
+  --face-pose-ray `
+  --pose-head-ray `
+  --save-rendered `
+  --video-codec avc1 `
+  --overwrite
+```
+
+This mode is intended for diagnosis and comparison. An active `tracked_only` bridge can be selected, but an expired track cannot be revived. Gazelle predictions from stale, occluded, pose-only, or otherwise non-eligible heads are exploratory and must not be treated as validated eye gaze.
+
 `--head-source none` can show heatmap, contour, and the red X gaze peak, but it cannot show bbox or arrow because no bbox is available. Use `--head-source static` or `--head-source json` plus `--head-box` for bbox and arrow overlays.
 
 Render heatmap, contour, and red X in `none` mode, with no bbox or arrow expected:
@@ -350,7 +368,7 @@ python main.py `
   --overwrite
 ```
 
-Video head input sources use the same `--head-source none`, `--head-source static`, and `--head-source json` options as image inference, plus `--head-source mediapipe` for per-frame perception and tracking. JSON head data for video should use one record per `frame_index`, either in JSONL or a JSON list. If a frame is missing from JSON head data, its observation and selected gaze row use `no_head`; `frame_step` still takes precedence and writes `skipped`. A MediaPipe frame with heads but no eligible current face writes gaze `status="no_gaze"` without calling Gazelle. Its current or bridged perception overlays can still be written to rendered video.
+Video head input sources use the same `--head-source none`, `--head-source static`, and `--head-source json` options as image inference, plus `--head-source mediapipe` for per-frame perception and tracking. JSON head data for video should use one record per `frame_index`, either in JSONL or a JSON list. If a frame is missing from JSON head data, its observation and selected gaze row use `no_head`; `frame_step` still takes precedence and writes `skipped`. A MediaPipe frame with heads but no perception matched by the configured `--gazelle-head-mode` writes gaze `status="no_gaze"` without calling Gazelle. Its current or bridged perception overlays can still be written to rendered video.
 
 Use JSON head data:
 
@@ -393,7 +411,7 @@ python main.py `
   --overwrite
 ```
 
-Perception and tracking run exactly once on every decoded and written frame. `--frame-step` gates only Gazelle: skipped frames still get their observation and prediction rows. The renderer now receives perceptions on `ok`, `no_gaze`, `skipped`, and `no_head` frames, allowing head continuity and current reference rays to remain visible without inventing Gazelle output. `--max-frames` limits both JSONL files and the optional rendered video to the same written-frame count. `--output-fps` is used only when the source video FPS is invalid; otherwise the source FPS is preserved. `--save-heatmaps` is not supported for video in this milestone.
+Perception and tracking run exactly once on every decoded and written frame. `--frame-step` gates only Gazelle: skipped frames still get their observation and prediction rows, and every rich perception is recorded with `gazelle_selected=false`. The renderer receives perceptions on `ok`, `no_gaze`, `skipped`, and `no_head` frames, allowing head continuity and current reference rays to remain visible without inventing Gazelle output. `--max-frames` limits both JSONL files and the optional rendered video to the same written-frame count. `--output-fps` is used only when the source video FPS is invalid; otherwise the source FPS is preserved. `--save-heatmaps` is not supported for video in this milestone.
 
 ### Real Smoke Tests
 

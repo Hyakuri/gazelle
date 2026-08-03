@@ -216,7 +216,7 @@ python main.py `
 
 ### MediaPipe Provider 组合（分阶段）
 
-CLI 接受 `--head-source mediapipe`，并校验 MediaPipe 运行时设置：`--max-heads` 接受 `1` 到 `10`（默认 `1`）；`--pose-model` 接受 `lite`、`full` 或 `heavy`（默认 `full`）；`--head-track-max-gap-ms` 接受大于 `0` 的有限毫秒值（默认 `500.0`）；`--save-face-landmarks` 启用人脸关键点输出配置（默认关闭）。`--face-pose-ray` 与 `--pose-head-ray` 可分别渲染两条无相机标定的 2D head-direction reference；`--reference-ray-length` 控制长度，`--gaze-inout-threshold` 控制 Gazelle 最终的 in-frame 渲染门限。
+CLI 接受 `--head-source mediapipe`，并校验 MediaPipe 运行时设置：`--max-heads` 接受 `1` 到 `10`（默认 `1`）；`--pose-model` 接受 `lite`、`full` 或 `heavy`（默认 `full`）；`--head-track-max-gap-ms` 接受大于 `0` 的有限毫秒值（默认 `500.0`）；`--save-face-landmarks` 启用人脸关键点输出配置（默认关闭）。`--face-pose-ray` 与 `--pose-head-ray` 可分别渲染两条无相机标定的 2D head-direction reference，`--reference-ray-length` 控制长度。`--gazelle-head-mode` 选择哪些 MediaPipe perception 可以进入 Gazelle，`--gaze-inout-threshold` 将结果分类为 `valid` 或 `out_of_frame`，`--gaze-render-mode` 则独立控制是否绘制 out-of-frame Gazelle geometry。
 
 使用以下命令准备官方 face detector、face landmarker 和一个所选 pose landmarker，而不执行推理：
 
@@ -231,9 +231,9 @@ pose 选项会分别准备 `pose_landmarker_lite.task`、`pose_landmarker_full.t
 
 默认单元测试使用 fake downloader，不访问网络。注册表中的固定摘要只在建立时进行过一次真实校验：将恰好五个官方版本化资源下载到仓库外的 OS 临时目录，计算 SHA-256，然后删除该临时目录。
 
-`--head-source mediapipe` 现已接入 runtime head provider 工厂。provider 会组合已准备的资源、MediaPipe backend、head/pose fusion；视频还会使用 ByteTrack 跟踪和 500 ms 的短时遮挡桥接。图片 ID 确定且从零开始，视频 ID 来自 ByteTrack。单人模式会在 bridge 后再次裁决，最多保留一个 identity，并清除被当前 observation 替换的 stale identity。只有通过保守 gaze eligibility 的当前 MediaPipe head bbox 才会送入 Gazelle，其中 perception confidence 与 face-ray confidence 均不得低于 `0.50`。
+`--head-source mediapipe` 现已接入 runtime head provider 工厂。provider 会组合已准备的资源、MediaPipe backend、head/pose fusion；视频还会使用 ByteTrack 跟踪和 500 ms 的短时遮挡桥接。图片 ID 确定且从零开始，视频 ID 来自 ByteTrack。单人模式会在 bridge 后再次裁决，最多保留一个 identity，并清除被当前 observation 替换的 stale identity。默认情况下，只有通过保守 gaze eligibility 的当前 MediaPipe head bbox 才会送入 Gazelle，其中 perception confidence 与 face-ray confidence 均不得低于 `0.50`。
 
-该集成刻意保持较小的模型边界：fusion/tracking 会生成有序 `HeadObservation` 和对齐的 `HeadPerception`。`tracked_only`、`pose_only`、背脸/遮挡及低质量 rejection 会保留为 continuity/diagnostic record，但不会送入 `GazellePredictor.predict_frame(...)`。只有 eligible normalized head bbox 跨过模型边界；face bbox、face mesh、face/pose keypoint、两条 head-pose reference ray、head pose 和 tracking state 都不会加入 Gazelle tensor input。Gazelle 按 eligible person 顺序返回结果，并由 wrapper 增加最终 `gaze_status`。
+该集成刻意保持较小的模型边界：fusion/tracking 会生成有序 `HeadObservation` 和对齐的 `HeadPerception`。默认 `--gazelle-head-mode eligible` 只传入保守 eligible head。诊断 selector 可以改为一个或多个 state（`face_pose`、`face_only`、`pose_only`、`tracked_only`）或 view（`frontal`、`profile`、`back_or_occluded`、`unknown`）；`observed` 选择当前 observation，`all` 选择全部 active perception，多个 selector 采用 OR 语义。即使处于诊断模式，也不能恢复已经过期的 track，并且仍然要求通过 normalized non-`None` bbox 校验。face bbox、face mesh、face/pose keypoint、两条 head-pose reference ray、head pose 和 tracking state 永远不会加入 Gazelle tensor input。Gazelle 按选中的 person 顺序返回结果。
 
 当前 `environment.yml` 中声明的依赖集合已经用真实 MediaPipe 0.10.35、通过 `trackers==2.5.0.post0` 接入的生产 ByteTrack、Gazelle/DINOv2 CUDA 单图推理，以及一段短视频渲染流程完成验证。因此，本文档现在将这个 NumPy 2.4.6 环境视为当前分阶段 runtime 的推荐端到端配置。这里不宣称已经验证可选的 Ultralytics YOLO 模型推理或导出能力。
 
@@ -243,9 +243,9 @@ runtime 会在延迟导入 ByteTrack 时精确过滤 upstream `trackers` 的 `ta
 
 `gazelle.runtime.perception.outputs` 提供 `head_frame_to_json_dict(...)`，用于序列化单个独立 provider 结果。图片 pipeline 使用 `write_head_observations_json(output_path, **frame_kwargs)` 创建父目录，并写入恰好一个带缩进且末尾换行的 JSON 文档。视频 pipeline 会把每个序列化 provider 结果写成一行紧凑的 `head_observations.jsonl`。record 恰好包含 `frame_index`、`timestamp_ms`、`status`、`width`、`height`、`provider`、`timings_ms` 和 `people` 字段。结果存在 head 时 `status` 为 `"ok"`，否则为 `"no_head"`。`timings_ms` 保留 provider 的 timing 名称及有限的毫秒数值。
 
-每个人包含 `person_id`、`head_bbox_normalized` 和 `confidence`。rich MediaPipe perception 还会包含 `gaze_eligible`、可选 rejection `gaze_status`、具名 pose-head keypoint，以及可用的两条 reference ray。face reference 使用 Face Landmarker pose 与 face keypoint；pose reference 由可靠的 Pose Landmarker nose/eye 或 nose/ear geometry 独立估计。两者都是无标定 2D reference，并非真实 eye gaze。
+每个人包含 `person_id`、`head_bbox_normalized` 和 `confidence`。rich MediaPipe perception 还会包含保守建议 `gaze_eligible`、实际逐帧推理决定 `gazelle_selected`、可选 rejection `gaze_status`、具名 pose-head keypoint，以及可用的两条 reference ray。face reference 使用 Face Landmarker pose 与 face keypoint；pose reference 由可靠的 Pose Landmarker nose/eye 或 nose/ear geometry 独立估计。两者都是无标定 2D reference，并非真实 eye gaze。
 
-每次单图运行都会在 gaze 调度前写入独立 observation；视频帧也先写 observation，再写 gaze。`tracked_only` 只维持 bbox continuity，使用 `gaze_status="tracked_no_gaze"`，绝不会重新运行 Gazelle；`pose_only` 与背脸/遮挡同样只保留观测。bridge 不会复制旧 face evidence 或两条 reference ray。
+每次单图运行都会在 gaze 推理前写入独立 observation；视频帧也先写 observation，再写 gaze。默认情况下，`tracked_only` 只维持 bbox continuity，并使用 `gaze_status="tracked_no_gaze"`；只有在 active bridge track 尚未过期时，显式使用 `tracked_only` 或 `all` 诊断 selector 才会把它送入 Gazelle。`pose_only` 与背脸/遮挡即使被显式选择，也仍保留其保守状态。bridge 不会复制旧 face evidence 或两条 reference ray。
 
 出于隐私和输出体积考虑，默认省略全部 478 个 face landmark。传入 `--save-face-landmarks` 后才会在图片 `head_observations.json` 或视频 `head_observations.jsonl` 中包含它们；这会显著增加输出体积，并保留更多生物特征细节。
 
@@ -283,7 +283,7 @@ python main.py `
 
 绘制层级依次为：gaze heatmap 和可选 contour、现有 gaze bbox/arrow/peak、perception primary head bbox、辅助 face bbox、六个 detector keypoint、pose head/shoulder point、可选 face mesh、perception state/person/confidence label，最后是 gaze prediction label。perception 渲染会原样使用传入的 `HeadPerception`：不会重新计算 perception bbox，不会修改 perception，也不会替换 `GazePrediction.bbox` 或已经传给 Gazelle 的归一化 bbox。MediaPipe perception 已经在内存中保留 `face_landmarks`；`--face-mesh` 独立控制是否绘制这些 landmark，不要求同时使用 `--save-face-landmarks`。单独的 `--save-face-landmarks` 只控制是否把这些 landmark 序列化到 observation JSON/JSONL sidecar。逐帧绘制数百个 mesh point 会增加渲染工作量，序列化它们则会增加 observation 输出体积和保留的生物特征细节。调用方未传 perceptions 或显式传入 `perceptions=()` 时，仍保持逐字节一致的旧版渲染行为；此时 perception 选项不起作用。
 
-Gazelle gaze arrow 是从 head bbox 中心到预测 gaze peak 的可视化，与两条 reference ray 相互独立，也不是真实眼睛方向。`--gaze-inout-threshold` 默认 `0.5`；低于阈值的 prediction 使用 `gaze_status="out_of_frame"`，不绘制 Gazelle heatmap、contour、arrow 或红色 X，但保留 metadata 及可选 bbox/status label。
+Gazelle gaze arrow 是从 head bbox 中心到预测 gaze peak 的可视化，与两条 reference ray 相互独立，也不是真实眼睛方向。`--gaze-inout-threshold` 默认 `0.5`，低于阈值的 prediction 使用 `gaze_status="out_of_frame"`。默认 `--gaze-render-mode valid-only` 不绘制这些 prediction 的 Gazelle heatmap、contour、arrow 或红色 X，但保留 metadata 及可选 bbox/status label。`--gaze-render-mode all-predictions` 会同时绘制 `valid` 与 `out_of_frame` 的这些 geometry，不会修改状态、分数或 JSON 输出。
 
 只显示 bbox、arrow、红色 X 和 label，不显示 heatmap：
 
@@ -345,6 +345,24 @@ python main.py `
 
 `avc1` 路径先把 rendered frame 流式写入临时 `mp4v` video，再调用 FFmpeg；优先使用 `h264_nvenc`，如果 NVENC 在实际编码启动时不可用，则 fallback 到 `libx264`。H.264 output 使用 `yuv420p`、`-movflags +faststart` 和 `-an`，只有成功编码后才原子替换正式输出，并在成功或失败时安全清理临时文件。FFmpeg capability detection 会在 video/provider/model 构建前执行。未启用 `--save-rendered` 时，`--video-codec` 不产生作用。默认单元测试会 mock FFmpeg，不会启动真实 encoder。
 
+如需观察 Gazelle 对指定非保守 MediaPipe state/view 的输出，请显式使用诊断控制：
+
+```powershell
+python main.py `
+  --input samples\assembly.mp4 `
+  --output-dir outputs `
+  --head-source mediapipe `
+  --gazelle-head-mode face_pose face_only pose_only back_or_occluded tracked_only `
+  --gaze-render-mode all-predictions `
+  --face-pose-ray `
+  --pose-head-ray `
+  --save-rendered `
+  --video-codec avc1 `
+  --overwrite
+```
+
+该模式用于诊断和对比。active `tracked_only` bridge 可以被选择，但已经过期的 track 无法恢复。来自 stale、遮挡、pose-only 或其他 non-eligible head 的 Gazelle prediction 属于探索性结果，不能视为已经验证的真实 eye gaze。
+
 `--head-source none` 可以显示 heatmap、contour 和红色 X gaze peak，但因为没有 bbox，不能显示 bbox 或 arrow。如果需要 bbox 和 arrow，请使用 `--head-source static` 或 `--head-source json` 提供 bbox，并传入 `--head-box`。
 
 在 `none` 模式下渲染 heatmap、contour 和红色 X；此模式下不应期待 bbox 或 arrow：
@@ -359,7 +377,7 @@ python main.py `
   --overwrite
 ```
 
-视频 head 输入复用图片推理的 `--head-source none`、`--head-source static` 和 `--head-source json`，也可使用 `--head-source mediapipe` 进行逐帧 perception 和 tracking。视频 JSON head data 应按 `frame_index` 提供记录，可以使用 JSONL 或 JSON list。缺少某一帧时 observation 和被选中的 gaze 行为 `no_head`；`frame_step` 仍优先写 `skipped`。MediaPipe 帧有 head 但没有 eligible 当前 face 时，gaze 行写 `status="no_gaze"`，且不调用 Gazelle；当前或 bridged perception overlay 仍可写入 rendered video。
+视频 head 输入复用图片推理的 `--head-source none`、`--head-source static` 和 `--head-source json`，也可使用 `--head-source mediapipe` 进行逐帧 perception 和 tracking。视频 JSON head data 应按 `frame_index` 提供记录，可以使用 JSONL 或 JSON list。缺少某一帧时 observation 和被选中的 gaze 行为 `no_head`；`frame_step` 仍优先写 `skipped`。MediaPipe 帧有 head 但没有 perception 匹配配置的 `--gazelle-head-mode` 时，gaze 行写 `status="no_gaze"`，且不调用 Gazelle；当前或 bridged perception overlay 仍可写入 rendered video。
 
 使用 JSON head data：
 
@@ -402,7 +420,7 @@ python main.py `
   --overwrite
 ```
 
-perception 和 tracking 会在每个解码并写出的帧上恰好运行一次。`--frame-step` 只控制 Gazelle：被跳过的帧仍会写 observation 和 prediction 行。renderer 会接收 `ok`、`no_gaze`、`skipped`、`no_head` 帧的 perceptions，因此可以持续显示 head continuity 和当前 reference ray，而不会伪造 Gazelle output。`--max-frames` 会把两份 JSONL 和可选渲染视频限制到相同帧数；`--output-fps` 仅在源 FPS 无效时使用。视频仍不支持 `--save-heatmaps`。
+perception 和 tracking 会在每个解码并写出的帧上恰好运行一次。`--frame-step` 只控制 Gazelle：被跳过的帧仍会写 observation 和 prediction 行，且所有 rich perception 都记录为 `gazelle_selected=false`。renderer 会接收 `ok`、`no_gaze`、`skipped`、`no_head` 帧的 perceptions，因此可以持续显示 head continuity 和当前 reference ray，而不会伪造 Gazelle output。`--max-frames` 会把两份 JSONL 和可选渲染视频限制到相同帧数；`--output-fps` 仅在源 FPS 无效时使用。视频仍不支持 `--save-heatmaps`。
 
 ### 真实 smoke test
 

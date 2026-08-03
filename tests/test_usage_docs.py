@@ -57,6 +57,8 @@ class UsageDocumentationTest(unittest.TestCase):
             return "`None`"
         if isinstance(action.default, bool):
             return "`{}`".format(str(action.default).lower())
+        if isinstance(action.default, (list, tuple)):
+            return "`{}`".format(" ".join(str(value) for value in action.default))
         return "`{}`".format(action.default)
 
     def _option_rows(self, guide_path):
@@ -202,6 +204,8 @@ class UsageDocumentationTest(unittest.TestCase):
             "--pose-head-ray",
             "--reference-ray-length",
             "--gaze-inout-threshold",
+            "--gazelle-head-mode",
+            "--gaze-render-mode",
         }
         for guide_path in (ENGLISH_GUIDE, CHINESE_GUIDE):
             section = self._section(guide_path, 4)
@@ -236,6 +240,8 @@ class UsageDocumentationTest(unittest.TestCase):
             self.assertTrue(config.draw_pose_head_ray)
             self.assertEqual(2.5, config.reference_ray_length)
             self.assertEqual(0.5, config.gaze_inout_threshold)
+            self.assertEqual(("eligible",), config.gazelle_head_mode)
+            self.assertEqual("valid-only", config.gaze_render_mode)
             self.assertIn("only the input path", section.lower())
 
     def test_video_codec_contract_is_documented_in_all_user_guides(self):
@@ -374,6 +380,7 @@ class UsageDocumentationTest(unittest.TestCase):
             "face_pose_reference_ray",
             "pose_head_reference_ray",
             "gaze_eligible",
+            "gazelle_selected",
             "gaze_status",
             "face_landmarks",
             "x",
@@ -418,7 +425,7 @@ class UsageDocumentationTest(unittest.TestCase):
 
     def test_base_run_config_tables_match_dataclass_fields(self):
         expected = [field.name for field in fields(RuntimeConfig)]
-        self.assertEqual(45, len(expected))
+        self.assertEqual(47, len(expected))
         english_rows = self._base_run_config_rows(ENGLISH_GUIDE)
         chinese_rows = self._base_run_config_rows(CHINESE_GUIDE)
         self.assertEqual(expected, [name for name, _, _ in english_rows])
