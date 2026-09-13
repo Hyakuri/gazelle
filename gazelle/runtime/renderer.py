@@ -9,11 +9,24 @@ import numpy as np
 import torch
 from PIL import Image, ImageDraw, ImageFont
 
+from gazelle.runtime.config import SUPPORTED_GAZE_RENDER_MODES
+from gazelle.runtime.contracts import GazeStatus
 from gazelle.runtime.geometry import normalized_bbox_to_pixel
+from gazelle.runtime.perception.contracts import (
+    HeadPerceptionState,
+    ReferenceRayProjectionStatus,
+)
 
 
 SUPPORTED_RENDERED_SUFFIXES = (".png", ".jpg", ".jpeg")
 PEAK_MARKER_COLOR = (255, 0, 0)
+FACE_BOX_COLOR = (0, 220, 255)
+FACE_KEYPOINT_COLOR = (255, 215, 0)
+POSE_HEAD_POINT_COLOR = (255, 64, 192)
+FACE_MESH_COLOR = (64, 255, 128)
+FACE_POSE_RAY_COLOR = (0, 160, 255)
+POSE_HEAD_RAY_COLOR = (255, 128, 0)
+TRACKED_ONLY_ALPHA = 112
 
 
 @dataclass(frozen=True)
@@ -25,10 +38,25 @@ class RenderOptions:
     draw_gaze_arrow: bool = True
     draw_heatmap_contour: bool = False
     draw_labels: bool = True
+    draw_face_box: bool = False
+    draw_face_keypoints: bool = False
+    draw_pose_head_points: bool = False
+    draw_face_mesh: bool = False
+    draw_track_state: bool = True
+    draw_face_pose_ray: bool = False
+    draw_pose_head_ray: bool = False
+    gaze_render_mode: str = "valid-only"
     heatmap_contour_quantile: float = 0.90
     heatmap_contour_width: Optional[int] = None
     arrow_width: Optional[int] = None
     peak_marker_size: Optional[int] = None
+
+
+def _should_draw_gaze_geometry(prediction, options: RenderOptions) -> bool:
+    return (
+        options.gaze_render_mode == "all-predictions"
+        or prediction.gaze_status is GazeStatus.VALID
+    )
 
 
 def _validate_alpha(alpha: float) -> float:
@@ -267,11 +295,21 @@ def draw_gaze_peak_x(
 
 def build_prediction_label(prediction) -> str:
     label = "id={}".format(prediction.person_id)
+    if prediction.gaze_status is not GazeStatus.VALID:
+        label = "{} gaze={}".format(label, prediction.gaze_status.value)
     if prediction.inout_score is not None:
         label = "{} inout={:.2f}".format(label, float(prediction.inout_score))
     if prediction.heatmap_peak_value is not None:
         label = "{} peak={:.2f}".format(label, float(prediction.heatmap_peak_value))
     return label
+
+
+def build_perception_label(perception) -> str:
+    return "id={} {} conf={:.2f}".format(
+        perception.person_id,
+        perception.state.value,
+        float(perception.confidence),
+    )
 
 
 def _label_anchor_for_prediction(prediction, image_width: int, image_height: int) -> Tuple[int, int]:
@@ -295,6 +333,7 @@ def draw_prediction(
     color,
     options: RenderOptions,
     font=None,
+    include_labels: bool = True,
 ) -> None:
     x_anchor, y_anchor = _label_anchor_for_prediction(prediction, image_width, image_height)
     line_width = _auto_line_width(image_width, image_height)
@@ -313,7 +352,10 @@ def draw_prediction(
         ymax = _clamp(ymax, 0.0, float(image_height - 1))
         draw_context.rectangle((xmin, ymin, xmax, ymax), outline=color, width=line_width)
 
-    if options.draw_gaze_arrow:
+    if (
+        _should_draw_gaze_geometry(prediction, options)
+        and options.draw_gaze_arrow
+    ):
         draw_gaze_arrow(
             draw_context,
             bbox=prediction.bbox,
@@ -324,7 +366,10 @@ def draw_prediction(
             width=arrow_width,
         )
 
-    if options.draw_gaze_peak:
+    if (
+        _should_draw_gaze_geometry(prediction, options)
+        and options.draw_gaze_peak
+    ):
         draw_gaze_peak_x(
             draw_context,
             gaze_peak=prediction.gaze_peak,
@@ -335,31 +380,331 @@ def draw_prediction(
             width=line_width,
         )
 
-    if options.draw_labels:
-        label = build_prediction_label(prediction)
+    if options.draw_labels and include_labels:
+        draw_prediction_label(
+            draw_context,
+            prediction,
+            image_width=image_width,
+            image_height=image_height,
+            color=color,
+            font=font,
+        )
+
+
+def draw_prediction_label(
+    draw_context,
+    prediction,
+    *,
+    image_width: int,
+    image_height: int,
+    color,
+    font=None,
+) -> None:
+    x_anchor, y_anchor = _label_anchor_for_prediction(prediction, image_width, image_height)
+    label = build_prediction_label(prediction)
+    font = font if font is not None else ImageFont.load_default()
+    try:
+        left, top, right, bottom = draw_context.textbbox((x_anchor, y_anchor), label, font=font)
+    except AttributeError:
+        width, height = draw_context.textsize(label, font=font)
+        left, top, right, bottom = x_anchor, y_anchor, x_anchor + width, y_anchor + height
+    draw_context.rectangle((left, top, right + 2, bottom + 2), fill=(0, 0, 0))
+    draw_context.text((x_anchor + 1, y_anchor + 1), label, fill=color, font=font)
+
+
+def _bbox_to_clamped_pixels(bbox, image_width: int, image_height: int):
+    xmin, ymin, xmax, ymax = normalized_bbox_to_pixel(
+        bbox,
+        image_width=image_width,
+        image_height=image_height,
+    )
+    return (
+        _clamp(xmin, 0.0, float(image_width - 1)),
+        _clamp(ymin, 0.0, float(image_height - 1)),
+        _clamp(xmax, 0.0, float(image_width - 1)),
+        _clamp(ymax, 0.0, float(image_height - 1)),
+    )
+
+
+def _draw_dashed_rectangle(draw_context, bbox, *, fill, width: int, dash_length: int) -> None:
+    xmin, ymin, xmax, ymax = bbox
+    step = dash_length * 2
+    for x in range(int(xmin), int(xmax) + 1, step):
+        end_x = min(x + dash_length - 1, int(xmax))
+        draw_context.line((x, ymin, end_x, ymin), fill=fill, width=width)
+        draw_context.line((x, ymax, end_x, ymax), fill=fill, width=width)
+    for y in range(int(ymin), int(ymax) + 1, step):
+        end_y = min(y + dash_length - 1, int(ymax))
+        draw_context.line((xmin, y, xmin, end_y), fill=fill, width=width)
+        draw_context.line((xmax, y, xmax, end_y), fill=fill, width=width)
+
+
+def _draw_landmark_points(
+    draw_context,
+    landmarks,
+    *,
+    image_width: int,
+    image_height: int,
+    color,
+    radius: int,
+) -> None:
+    for landmark in landmarks:
+        x, y = normalized_point_to_pixel(
+            (landmark.x, landmark.y),
+            image_width,
+            image_height,
+        )
+        draw_context.ellipse(
+            (x - radius, y - radius, x + radius, y + radius),
+            fill=color,
+        )
+
+
+def _draw_reference_ray(
+    draw_context,
+    ray,
+    *,
+    image_width: int,
+    image_height: int,
+    color,
+    width: int,
+) -> None:
+    origin = normalized_point_to_pixel(
+        ray.origin,
+        image_width,
+        image_height,
+    )
+    marker_radius = max(2, width + 1)
+    if (
+        ray.projection_status is ReferenceRayProjectionStatus.AVAILABLE
+        and ray.endpoint is not None
+    ):
+        endpoint = normalized_point_to_pixel(
+            ray.endpoint,
+            image_width,
+            image_height,
+        )
+        draw_context.line(origin + endpoint, fill=color, width=width)
+        draw_context.ellipse(
+            (
+                endpoint[0] - marker_radius,
+                endpoint[1] - marker_radius,
+                endpoint[0] + marker_radius,
+                endpoint[1] + marker_radius,
+            ),
+            outline=color,
+            width=max(1, width),
+        )
+        return
+    draw_context.ellipse(
+        (
+            origin[0] - marker_radius,
+            origin[1] - marker_radius,
+            origin[0] + marker_radius,
+            origin[1] + marker_radius,
+        ),
+        outline=color,
+        width=max(1, width),
+    )
+
+
+def draw_perception_overlay(
+    rendered: Image.Image,
+    perception,
+    *,
+    options: RenderOptions,
+    font=None,
+) -> Image.Image:
+    image_width, image_height = rendered.size
+    line_width = _auto_line_width(image_width, image_height)
+    tracked_only = perception.state is HeadPerceptionState.TRACKED_ONLY
+    alpha = TRACKED_ONLY_ALPHA if tracked_only else 255
+    person_color = stable_color_for_person(perception.person_id) + (alpha,)
+    overlay = Image.new("RGBA", rendered.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+    head_bbox = _bbox_to_clamped_pixels(
+        perception.head_bbox,
+        image_width,
+        image_height,
+    )
+
+    if tracked_only:
+        _draw_dashed_rectangle(
+            draw,
+            head_bbox,
+            fill=person_color,
+            width=line_width,
+            dash_length=max(3, line_width * 3),
+        )
+    else:
+        draw.rectangle(head_bbox, outline=person_color, width=line_width)
+
+    if options.draw_face_box and perception.face_bbox is not None:
+        face_bbox = _bbox_to_clamped_pixels(
+            perception.face_bbox,
+            image_width,
+            image_height,
+        )
+        draw.rectangle(
+            face_bbox,
+            outline=FACE_BOX_COLOR + (alpha,),
+            width=max(1, line_width - 1),
+        )
+
+    if options.draw_face_keypoints:
+        _draw_landmark_points(
+            draw,
+            perception.face_keypoints[:6],
+            image_width=image_width,
+            image_height=image_height,
+            color=FACE_KEYPOINT_COLOR + (alpha,),
+            radius=max(1, line_width + 1),
+        )
+
+    if options.draw_pose_head_points:
+        _draw_landmark_points(
+            draw,
+            perception.pose_head_landmarks,
+            image_width=image_width,
+            image_height=image_height,
+            color=POSE_HEAD_POINT_COLOR + (alpha,),
+            radius=max(1, line_width + 1),
+        )
+
+    if options.draw_face_mesh:
+        _draw_landmark_points(
+            draw,
+            perception.face_landmarks,
+            image_width=image_width,
+            image_height=image_height,
+            color=FACE_MESH_COLOR + (alpha,),
+            radius=max(1, line_width),
+        )
+
+    if options.draw_face_pose_ray and perception.face_pose_reference_ray is not None:
+        _draw_reference_ray(
+            draw,
+            perception.face_pose_reference_ray,
+            image_width=image_width,
+            image_height=image_height,
+            color=FACE_POSE_RAY_COLOR + (alpha,),
+            width=max(1, line_width),
+        )
+
+    if options.draw_pose_head_ray and perception.pose_head_reference_ray is not None:
+        _draw_reference_ray(
+            draw,
+            perception.pose_head_reference_ray,
+            image_width=image_width,
+            image_height=image_height,
+            color=POSE_HEAD_RAY_COLOR + (alpha,),
+            width=max(1, line_width),
+        )
+
+    if options.draw_track_state:
+        x_anchor = int(head_bbox[0])
+        y_anchor = min(image_height - 1, int(head_bbox[1]) + 2)
+        label = build_perception_label(perception)
         font = font if font is not None else ImageFont.load_default()
         try:
-            left, top, right, bottom = draw_context.textbbox((x_anchor, y_anchor), label, font=font)
+            left, top, right, bottom = draw.textbbox((x_anchor, y_anchor), label, font=font)
         except AttributeError:
-            width, height = draw_context.textsize(label, font=font)
+            width, height = draw.textsize(label, font=font)
             left, top, right, bottom = x_anchor, y_anchor, x_anchor + width, y_anchor + height
-        draw_context.rectangle((left, top, right + 2, bottom + 2), fill=(0, 0, 0))
-        draw_context.text((x_anchor + 1, y_anchor + 1), label, fill=color, font=font)
+        draw.rectangle((left, top, right + 2, bottom + 2), fill=(0, 0, 0, alpha))
+        draw.text((x_anchor + 1, y_anchor + 1), label, fill=person_color, font=font)
+
+    return Image.alpha_composite(rendered.convert("RGBA"), overlay).convert("RGB")
 
 
 class PredictionRenderer:
     def __init__(self, options: RenderOptions = None):
         self.options = options or RenderOptions()
+        if self.options.gaze_render_mode not in SUPPORTED_GAZE_RENDER_MODES:
+            raise ValueError(
+                "gaze_render_mode must be one of: {}".format(
+                    ", ".join(SUPPORTED_GAZE_RENDER_MODES)
+                )
+            )
         self.font = ImageFont.load_default()
 
-    def render(self, image, predictions) -> Image.Image:
+    def render(self, image, predictions, perceptions=()) -> Image.Image:
         rendered = _image_to_rgb_pil(image).copy()
         image_width, image_height = rendered.size
         predictions = tuple(predictions)
+        perceptions = tuple(perceptions)
+
+        if perceptions:
+            for prediction in predictions:
+                if not _should_draw_gaze_geometry(prediction, self.options):
+                    continue
+                color = stable_color_for_person(prediction.person_id)
+                if self.options.draw_heatmap and prediction.heatmap is not None:
+                    overlay = heatmap_to_overlay(
+                        prediction.heatmap,
+                        image_width=image_width,
+                        image_height=image_height,
+                        color=color,
+                        alpha=self.options.heatmap_alpha,
+                    )
+                    rendered = Image.alpha_composite(rendered.convert("RGBA"), overlay).convert("RGB")
+                if self.options.draw_heatmap_contour and prediction.heatmap is not None:
+                    mask = heatmap_to_topk_mask(
+                        prediction.heatmap,
+                        quantile=self.options.heatmap_contour_quantile,
+                    )
+                    contour_overlay = heatmap_mask_to_contour_overlay(
+                        mask,
+                        image_width=image_width,
+                        image_height=image_height,
+                        color=color,
+                        width=self.options.heatmap_contour_width
+                        or max(2, _auto_line_width(image_width, image_height)),
+                    )
+                    rendered = Image.alpha_composite(
+                        rendered.convert("RGBA"), contour_overlay
+                    ).convert("RGB")
+
+            for prediction in predictions:
+                draw_prediction(
+                    ImageDraw.Draw(rendered),
+                    prediction,
+                    image_width=image_width,
+                    image_height=image_height,
+                    color=stable_color_for_person(prediction.person_id),
+                    options=self.options,
+                    font=self.font,
+                    include_labels=False,
+                )
+
+            for perception in perceptions:
+                rendered = draw_perception_overlay(
+                    rendered,
+                    perception,
+                    options=self.options,
+                    font=self.font,
+                )
+
+            if self.options.draw_labels:
+                draw = ImageDraw.Draw(rendered)
+                for prediction in predictions:
+                    draw_prediction_label(
+                        draw,
+                        prediction,
+                        image_width=image_width,
+                        image_height=image_height,
+                        color=stable_color_for_person(prediction.person_id),
+                        font=self.font,
+                    )
+            return rendered
 
         for prediction in predictions:
             color = stable_color_for_person(prediction.person_id)
-            if self.options.draw_heatmap and prediction.heatmap is not None:
+            if (
+                _should_draw_gaze_geometry(prediction, self.options)
+                and self.options.draw_heatmap
+                and prediction.heatmap is not None
+            ):
                 overlay = heatmap_to_overlay(
                     prediction.heatmap,
                     image_width=image_width,
@@ -368,7 +713,11 @@ class PredictionRenderer:
                     alpha=self.options.heatmap_alpha,
                 )
                 rendered = Image.alpha_composite(rendered.convert("RGBA"), overlay).convert("RGB")
-            if self.options.draw_heatmap_contour and prediction.heatmap is not None:
+            if (
+                _should_draw_gaze_geometry(prediction, self.options)
+                and self.options.draw_heatmap_contour
+                and prediction.heatmap is not None
+            ):
                 mask = heatmap_to_topk_mask(
                     prediction.heatmap,
                     quantile=self.options.heatmap_contour_quantile,
@@ -408,6 +757,7 @@ def render_predictions(
     draw_labels: bool = True,
     heatmap_contour_quantile: float = 0.90,
     heatmap_contour_width: Optional[int] = None,
+    gaze_render_mode: str = "valid-only",
 ) -> Image.Image:
     return PredictionRenderer(
         RenderOptions(
@@ -420,6 +770,7 @@ def render_predictions(
             draw_labels=draw_labels,
             heatmap_contour_quantile=heatmap_contour_quantile,
             heatmap_contour_width=heatmap_contour_width,
+            gaze_render_mode=gaze_render_mode,
         )
     ).render(image, predictions)
 

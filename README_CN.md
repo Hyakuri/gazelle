@@ -1,6 +1,8 @@
 # Gaze-LLE
 #### CVPR 2025 Highlight
 
+有关完整的 runtime 环境设置、全部 CLI 选项、输入/输出 schema 以及可运行的图像/视频工作流，请参阅[项目使用指南](docs/USAGE_CN.md)。
+
 [English README](README.md)
 
 [Gaze-LLE: Gaze Target Estimation via Large-Scale Learned Encoders](https://arxiv.org/abs/2412.09586)
@@ -30,21 +32,29 @@
 
 ## 安装方式
 
-当前 fork 的 runtime pipeline 以本地已经验证过的 Conda 环境 `Gazelle` 为推荐环境。开发或运行当前分阶段 CLI 时，优先激活这个环境：
+`environment.yml` 是当前推荐使用的 Gazelle 环境定义，记录了这次已经验证的 NumPy 2.4.6 依赖栈，包括 Python 3.11、PyTorch 2.6.0 + CUDA 12.6 wheels、xFormers 0.0.29.post3、MediaPipe 0.10.35，以及生产 ByteTrack 依赖 `trackers==2.5.0.post0`、`supervision==0.29.1`，并保留了本次验证事务中的 `ultralytics==8.4.104`。
+
+`environment_1.0.yml` 保留了之前的 NumPy 1.26.4 配置，可用于回滚或对照。两个 YAML 文件里的环境名都声明为 `Gazelle`，因此同一时间只应创建一个名为 `Gazelle` 的环境。
+
+当前正常工作流仍然是激活已经验证过的 `Gazelle` 环境：
 
 ```powershell
 conda activate Gazelle
 pip install -e .
 ```
 
-仓库中的 `environment.yml` 已对齐本地验证环境：Python 3.11、PyTorch 2.6.0 + CUDA 12.6 wheels、TorchVision 0.21.0 + CUDA 12.6、TorchAudio 2.6.0 + CUDA 12.6、OpenCV 4.11.0，以及 xFormers 0.0.29。原始 upstream Gazelle 的旧环境配置不再作为本 fork 当前 runtime pipeline 的主要依据。如果你已经有可运行的本地 `Gazelle` 环境，请优先激活它，不要为了匹配旧 upstream 设置而降级当前环境。
-
-如果是在一台全新机器上配置，`environment.yml` 记录了当前预期的包版本：
+如果是在全新机器上配置当前推荐环境，请使用 `environment.yml`：
 
 ```powershell
 conda env create -f environment.yml
 conda activate Gazelle
 pip install -e .
+```
+
+如果你需要把旧版 NumPy 1.26.4 环境作为并行对照保留下来，请在创建 `environment_1.0.yml` 时显式覆盖环境名：
+
+```powershell
+conda env create -f environment_1.0.yml --name Gazelle-1.0
 ```
 
 激活 `Gazelle` 后，建议先运行以下命令验证 CLI，并准备默认本地模型缓存：
@@ -120,9 +130,9 @@ python main.py --list-models
 python main.py --prepare-only --model gazelle_dinov2_vitb14_inout
 ```
 
-该命令可能下载 Gazelle checkpoint，并且会通过 PyTorch Hub 构建 DINOv2 backbone。如果本地没有 DINOv2 缓存，构建 DINOv2 时可能下载 DINOv2 权重。它不会处理图片、处理视频、打开摄像头、渲染输出，也不会写入 JSON/JSONL 预测结果。
+该命令可能下载 Gazelle checkpoint，并且会通过 PyTorch Hub 构建 DINOv2 backbone。如果本地没有 DINOv2 缓存，构建 DINOv2 时可能下载 DINOv2 权重。传入 `--head-source mediapipe` 时，它还会准备所选的官方 MediaPipe task 资源。它不会处理图片、处理视频、打开摄像头、渲染输出，也不会写入 JSON/JSONL 预测结果。
 
-成功时，该命令会输出解析后的 checkpoint 路径、`checkpoint_source`、缓存根目录、Torch Hub 缓存目录，以及注册 checkpoint 候选的 strict-load 校验信息。使用 `--checkpoint` 时，`checkpoint_source` 为 `local`；使用 runtime 注册 checkpoint 时，`checkpoint_source` 为对应候选来源。
+成功时，该命令会输出解析后的 checkpoint 路径、`checkpoint_source`、缓存根目录、Torch Hub 缓存目录，以及注册 checkpoint 候选的 strict-load 校验信息。使用 `--checkpoint` 时，`checkpoint_source` 为 `local`；使用 runtime 注册 checkpoint 时，`checkpoint_source` 为对应候选来源。准备 MediaPipe 资源时还会输出 face detector、face landmarker、所选 pose landmarker 和 pose model。
 
 缓存根目录优先级：
 
@@ -135,6 +145,7 @@ runtime 使用以下目录结构：
 ```text
 models/
 ├── checkpoints/
+├── mediapipe/
 └── torch_hub/
 ```
 
@@ -147,7 +158,7 @@ python main.py `
   --checkpoint C:\path\to\gazelle_dinov2_vitb14_inout.pt
 ```
 
-如果希望刷新已缓存的注册 checkpoint，可以使用 `--force-download`：
+如果希望刷新已缓存的注册 checkpoint 和所选 MediaPipe 资源，可以使用 `--force-download`：
 
 ```powershell
 python main.py `
@@ -157,7 +168,7 @@ python main.py `
   --force-download
 ```
 
-为了避免网络失败导致旧缓存丢失，强制下载会先写入 checkpoint 缓存下的临时 `.downloads` 目录。只有新文件下载完成且确认存在后，runtime 才会替换旧 checkpoint。如果下载失败，已有 checkpoint 会被保留。
+为了避免下载失败导致旧缓存丢失，强制下载会先写入相关缓存下的临时 `.downloads` 目录。只有新文件下载完成并通过校验后，runtime 才会替换旧文件。如果下载或校验失败，已有缓存文件会被保留。
 
 runtime 路径中的 checkpoint 校验是严格的：空 state dict、缺失 key、额外 key、tensor shape 不一致、非 tensor 值、checkpoint 顶层结构不兼容都会让准备流程报错停止。
 
@@ -173,7 +184,7 @@ python main.py `
   --model gazelle_dinov2_vitb14_inout
 ```
 
-该命令会构建 Gazelle 模型和 DINOv2 backbone。如果所选 Gazelle checkpoint 或 DINOv2 权重尚未缓存，运行时可能访问网络并下载它们。命令会创建类似 `outputs/frame_gazelle/` 的单图输出目录，并写入 `predictions.json` 和 `run_config.json`。图片输入不会打开摄像头，也不会写入视频 JSONL；视频输入由下方的视频推理路径处理。
+该命令会加载图片、创建输出目录、收集 head observation，并写入类似 `outputs/frame_gazelle/` 的单图输出目录，其中包含 `head_observations.json`、`predictions.json` 和 `run_config.json`。只有当 head provider 返回至少一个 head 时才会构建 Gazelle 模型和 DINOv2 backbone；如果所选 Gazelle checkpoint 或 DINOv2 权重尚未缓存，该预测路径可能访问网络并下载它们。图片输入不会打开摄像头，也不会写入视频 JSONL；视频输入由下方的视频推理路径处理。
 
 使用 `--overwrite` 时，runtime 会在写入新结果前清理对应图片的输出目录，因此旧的 heatmap 或 rendered image 不会残留。
 
@@ -203,6 +214,41 @@ python main.py `
   --head-data samples\frame_heads.json
 ```
 
+### MediaPipe Provider 组合（分阶段）
+
+CLI 接受 `--head-source mediapipe`，并校验 MediaPipe 运行时设置：`--max-heads` 接受 `1` 到 `10`（默认 `1`）；`--pose-model` 接受 `lite`、`full` 或 `heavy`（默认 `full`）；`--head-track-max-gap-ms` 接受大于 `0` 的有限毫秒值（默认 `500.0`）；`--save-face-landmarks` 启用人脸关键点输出配置（默认关闭）。`--face-pose-ray` 与 `--pose-head-ray` 可分别渲染两条无相机标定的 2D head-direction reference，`--reference-ray-length` 控制长度。`--gazelle-head-mode` 选择哪些 MediaPipe perception 可以进入 Gazelle，`--gaze-inout-threshold` 将结果分类为 `valid` 或 `out_of_frame`，`--gaze-render-mode` 则独立控制是否绘制 out-of-frame Gazelle geometry。
+
+使用以下命令准备官方 face detector、face landmarker 和一个所选 pose landmarker，而不执行推理：
+
+```powershell
+python main.py `
+  --prepare-only `
+  --head-source mediapipe `
+  --pose-model full
+```
+
+pose 选项会分别准备 `pose_landmarker_lite.task`、`pose_landmarker_full.task` 或 `pose_landmarker_heavy.task`。只有当 `<cache-root>/mediapipe` 中已有的资源是普通文件，并且 SHA-256 与对应版本化官方 URL 的固定摘要一致时，才会复用该资源；被篡改、截断或不是文件的缓存项会明确报错，绝不会作为有效路径返回。新资源或强制刷新资源在检查或修改临时 `.downloads/<asset-key>` 目录之前，会以原子方式获取 `.downloads/<asset-key>.lock`；同一资源的并发准备会在不触碰该暂存目录的情况下失败，并明确说明已有缓存项已保留。资源下载到暂存目录后，会先通过校验，再以原子方式移动到缓存中。初始化、加锁、下载、文件缺失、摘要校验或替换失败时，已有缓存项都会保留。任务目录和锁采用 best-effort 清理，范围严格限制在经过校验的下载目录内，并且清理失败不会掩盖资源准备的主要结果。无法确认所有权的锁不会被自动删除，因为它可能属于仍在运行的进程；手动删除陈旧锁之前，必须先确认没有进程正在准备该资源。
+
+默认单元测试使用 fake downloader，不访问网络。注册表中的固定摘要只在建立时进行过一次真实校验：将恰好五个官方版本化资源下载到仓库外的 OS 临时目录，计算 SHA-256，然后删除该临时目录。
+
+`--head-source mediapipe` 现已接入 runtime head provider 工厂。provider 会组合已准备的资源、MediaPipe backend、head/pose fusion；视频还会使用 ByteTrack 跟踪和 500 ms 的短时遮挡桥接。图片 ID 确定且从零开始，视频 ID 来自 ByteTrack。单人模式会在 bridge 后再次裁决，最多保留一个 identity，并清除被当前 observation 替换的 stale identity。默认情况下，只有通过保守 gaze eligibility 的当前 MediaPipe head bbox 才会送入 Gazelle，其中 perception confidence 与 face-ray confidence 均不得低于 `0.50`。
+
+该集成刻意保持较小的模型边界：fusion/tracking 会生成有序 `HeadObservation` 和对齐的 `HeadPerception`。默认 `--gazelle-head-mode eligible` 只传入保守 eligible head。诊断 selector 可以改为一个或多个 state（`face_pose`、`face_only`、`pose_only`、`tracked_only`）或 view（`frontal`、`profile`、`back_or_occluded`、`unknown`）；`observed` 选择当前 observation，`all` 选择全部 active perception，多个 selector 采用 OR 语义。即使处于诊断模式，也不能恢复已经过期的 track，并且仍然要求通过 normalized non-`None` bbox 校验。face bbox、face mesh、face/pose keypoint、两条 head-pose reference ray、head pose 和 tracking state 永远不会加入 Gazelle tensor input。Gazelle 按选中的 person 顺序返回结果。
+
+当前 `environment.yml` 中声明的依赖集合已经用真实 MediaPipe 0.10.35、通过 `trackers==2.5.0.post0` 接入的生产 ByteTrack、Gazelle/DINOv2 CUDA 单图推理，以及一段短视频渲染流程完成验证。因此，本文档现在将这个 NumPy 2.4.6 环境视为当前分阶段 runtime 的推荐端到端配置。这里不宣称已经验证可选的 Ultralytics YOLO 模型推理或导出能力。
+
+runtime 会在延迟导入 ByteTrack 时精确过滤 upstream `trackers` 的 `target=None` 弃用 warning，其他 `FutureWarning` 仍会正常显示。常规 CUDA 图片/视频推理会先解析 checkpoint 而不构建 DINOv2，然后只构建一次启用 xFormers 的 predictor。如果可选 Triton 不存在，并且用户没有设置 xFormers Triton override，模型构建期间会临时使用官方 `XFORMERS_FORCE_DISABLE_TRITON=1` 开关；这只跳过无效的 Triton 探测，不会关闭其他 xFormers operator，也不会修改 Conda 环境。`--prepare-only` 为了 strict-load 校验仍会有意关闭 xFormers，因此该路径上仍可能看到 DINOv2 非致命的 xFormers-disabled/not-available 状态 warning。由于 DINOv2 会在首次 import 时缓存 backend 选择，长生命周期 Python 进程若随后请求不兼容的 CPU/prepare-only 与启用 xFormers 的 CUDA 构建，现在会明确失败，而不是静默复用错误 backend；切换 backend mode 时应启动新进程。
+
+### 独立 Head Observation Schema
+
+`gazelle.runtime.perception.outputs` 提供 `head_frame_to_json_dict(...)`，用于序列化单个独立 provider 结果。图片 pipeline 使用 `write_head_observations_json(output_path, **frame_kwargs)` 创建父目录，并写入恰好一个带缩进且末尾换行的 JSON 文档。视频 pipeline 会把每个序列化 provider 结果写成一行紧凑的 `head_observations.jsonl`。record 恰好包含 `frame_index`、`timestamp_ms`、`status`、`width`、`height`、`provider`、`timings_ms` 和 `people` 字段。结果存在 head 时 `status` 为 `"ok"`，否则为 `"no_head"`。`timings_ms` 保留 provider 的 timing 名称及有限的毫秒数值。
+
+每个人包含 `person_id`、`head_bbox_normalized` 和 `confidence`。rich MediaPipe perception 还会包含保守建议 `gaze_eligible`、实际逐帧推理决定 `gazelle_selected`、可选 rejection `gaze_status`、具名 pose-head keypoint，以及可用的两条 reference ray。face reference 使用 Face Landmarker pose 与 face keypoint；pose reference 由可靠的 Pose Landmarker nose/eye 或 nose/ear geometry 独立估计。两者都是无标定 2D reference，并非真实 eye gaze。
+
+每次单图运行都会在 gaze 推理前写入独立 observation；视频帧也先写 observation，再写 gaze。默认情况下，`tracked_only` 只维持 bbox continuity，并使用 `gaze_status="tracked_no_gaze"`；只有在 active bridge track 尚未过期时，显式使用 `tracked_only` 或 `all` 诊断 selector 才会把它送入 Gazelle。`pose_only` 与背脸/遮挡即使被显式选择，也仍保留其保守状态。bridge 不会复制旧 face evidence 或两条 reference ray。
+
+出于隐私和输出体积考虑，默认省略全部 478 个 face landmark。传入 `--save-face-landmarks` 后才会在图片 `head_observations.json` 或视频 `head_observations.jsonl` 中包含它们；这会显著增加输出体积，并保留更多生物特征细节。
+
 单图推理会读取 `frame_index=0` 的 head 数据。JSON 使用 runtime head provider 的内部 record 格式，`bbox_format` 可以是 `normalized` 或 `pixel`，`heads` 中包含 `person_id`、`bbox` 和可选 `confidence`。
 
 `--head-source none` 不提供 bbox。因此渲染时无法绘制 head bbox，也无法计算从 head center 到 gaze peak 的箭头。如果需要 bbox / arrow，请使用 `--head-source static` 或 `--head-source json` 并提供 bbox。
@@ -231,9 +277,13 @@ python main.py `
   --save-rendered
 ```
 
-默认情况下，单图推理只写入 `predictions.json` 和 `run_config.json`；只有传入 `--save-rendered` 时才会写可视化图片。默认文件名是 `rendered.png`。可以用 `--rendered-name` 指定 `.png`、`.jpg` 或 `.jpeg` 文件名，用 `--heatmap-alpha` 控制 heatmap 透明度。可视化 overlay 可以包含 heatmap、需要显式开启的 head bbox、在存在 bbox 时从 head bbox 中心指向 gaze peak 的箭头、gaze target peak 位置的红色 X、稳定的 per-person 颜色，以及包含 `person_id`、可选 `inout_score` 和 `heatmap_peak_value` 的 label。head bbox 默认不绘制；如果 bbox 可用并希望显示它，请传入 `--head-box`。可以用 `--no-heatmap`、`--no-gaze-arrow`、`--no-gaze-peak` 或 `--no-labels` 关闭对应绘制元素。可以用 `--draw-heatmap-contour` 绘制 heatmap 高响应区域轮廓，用 `--heatmap-contour-quantile` 设置阈值，并用 `--heatmap-contour-width` 设置轮廓线宽。渲染不会改变 `predictions.json`，`heatmap_peak_value` 也不是校准后的概率。
+默认情况下，单图推理会写入 `head_observations.json`、`predictions.json` 和 `run_config.json`；只有传入 `--save-rendered` 时才会写可视化图片。默认文件名是 `rendered.png`。可以用 `--rendered-name` 指定 `.png`、`.jpg` 或 `.jpeg` 文件名，用 `--heatmap-alpha` 控制 heatmap 透明度。gaze overlay 可以包含 heatmap、需要显式开启的 Gazelle prediction bbox、在存在 bbox 时从 head bbox 中心指向 gaze peak 的箭头、gaze target peak 位置的红色 X、稳定的 per-person 颜色，以及包含 `person_id`、可选 `inout_score` 和 `heatmap_peak_value` 的 label。Gazelle prediction bbox 默认不绘制；如果 bbox 可用并希望显示它，请传入 `--head-box`。可以用 `--no-heatmap`、`--no-gaze-arrow`、`--no-gaze-peak` 或 `--no-labels` 关闭对应绘制元素。可以用 `--draw-heatmap-contour` 绘制 heatmap 高响应区域轮廓，用 `--heatmap-contour-quantile` 设置阈值，并用 `--heatmap-contour-width` 设置轮廓线宽。渲染不会改变 `predictions.json`，`heatmap_peak_value` 也不是校准后的概率。
 
-gaze arrow 只是从 head bbox 中心到预测 gaze peak 的可视化，不是 face keypoint、eye keypoint、head pose，也不是真实眼睛方向向量。gaze peak 会画成红色 X；heatmap 和可选 contour 用于展示 gaze target 的高响应区域。
+当传入 `HeadPerception` 时，primary head bbox 默认绘制。`--face-pose-ray` 绘制蓝色 face reference，`--pose-head-ray` 绘制橙色、独立计算的 pose reference；两者可能不一致，这正是对比用途，请求长度以最终 fused head bbox 为基准。face ray 优先使用双眼中点；仅在仍有至少三个 finite current face keypoints 时，才 fallback 到 face-box center。接近 camera axis 的 face pose 只绘制 origin marker。`tracked_only` primary bbox 使用低透明度虚线，且不保留 stale ray。
+
+绘制层级依次为：gaze heatmap 和可选 contour、现有 gaze bbox/arrow/peak、perception primary head bbox、辅助 face bbox、六个 detector keypoint、pose head/shoulder point、可选 face mesh、perception state/person/confidence label，最后是 gaze prediction label。perception 渲染会原样使用传入的 `HeadPerception`：不会重新计算 perception bbox，不会修改 perception，也不会替换 `GazePrediction.bbox` 或已经传给 Gazelle 的归一化 bbox。MediaPipe perception 已经在内存中保留 `face_landmarks`；`--face-mesh` 独立控制是否绘制这些 landmark，不要求同时使用 `--save-face-landmarks`。单独的 `--save-face-landmarks` 只控制是否把这些 landmark 序列化到 observation JSON/JSONL sidecar。逐帧绘制数百个 mesh point 会增加渲染工作量，序列化它们则会增加 observation 输出体积和保留的生物特征细节。调用方未传 perceptions 或显式传入 `perceptions=()` 时，仍保持逐字节一致的旧版渲染行为；此时 perception 选项不起作用。
+
+Gazelle gaze arrow 是从 head bbox 中心到预测 gaze peak 的可视化，与两条 reference ray 相互独立，也不是真实眼睛方向。`--gaze-inout-threshold` 默认 `0.5`，低于阈值的 prediction 使用 `gaze_status="out_of_frame"`。默认 `--gaze-render-mode valid-only` 不绘制这些 prediction 的 Gazelle heatmap、contour、arrow 或红色 X，但保留 metadata 及可选 bbox/status label。`--gaze-render-mode all-predictions` 会同时绘制 `valid` 与 `out_of_frame` 的这些 geometry，不会修改状态、分数或 JSON 输出。
 
 只显示 bbox、arrow、红色 X 和 label，不显示 heatmap：
 
@@ -278,9 +328,40 @@ python main.py `
   --save-rendered
 ```
 
-该命令会构建 Gazelle 模型和 DINOv2 backbone。如果所选 Gazelle checkpoint 或 DINOv2 权重尚未缓存，运行时可能访问网络并下载它们。视频会以流式方式逐帧处理，并创建类似 `outputs/assembly_gazelle/` 的视频输出目录，始终写入 `predictions.jsonl` 和 `run_config.json`。这是离线视频处理，不是实时 webcam 模式。渲染视频不会保留音频。
+该命令会以流式方式逐帧处理视频，并创建类似 `outputs/assembly_gazelle/` 的视频输出目录。runtime 始终写入 `head_observations.jsonl`、`predictions.jsonl` 和 `run_config.json`，每个写出帧对应恰好一行 observation 和一行 gaze。Gazelle 及其 DINOv2 backbone 会延迟到首个未被跳过且至少有一个可用 head 的帧才构建，之后复用；全部跳过或全部为 `no_head` 的运行不会构建模型。如果权重尚未缓存，首次预测时可能下载它们。这是离线视频处理，不是实时 webcam 模式。rendered video 是无音频输出。
 
-传入 `--save-rendered` 时会写入渲染后的 `.mp4`；默认文件名是 `rendered.mp4`，也可以用 `--output-video-name` 指定另一个 `.mp4` 文件名。图片渲染使用的绘制选项同样适用于视频：`--heatmap-alpha`、`--head-box`、`--no-heatmap`、`--no-gaze-arrow`、`--no-gaze-peak`、`--draw-heatmap-contour`、`--heatmap-contour-quantile`、`--heatmap-contour-width` 和 `--no-labels`。
+传入 `--save-rendered` 时会写入渲染后的 `.mp4`；默认文件名是 `rendered.mp4`，也可以用 `--output-video-name` 指定另一个 `.mp4` 文件名。`--video-codec mp4v` 是默认值，保持 OpenCV `VideoWriter` 直接写入的现有行为，不要求 FFmpeg。图片渲染使用的绘制选项同样适用于视频，也包括上述具有相同默认值的 `--face-box`、`--face-keypoints`、`--pose-head-points`、`--face-mesh` 和 `--no-track-state`。
+
+如需更适合浏览器播放的 H.264/AVC output，请安装 FFmpeg 并确保 `ffmpeg` 位于 `PATH`，然后选择 `avc1`：
+
+```powershell
+python main.py `
+  --input samples\assembly.mp4 `
+  --output-dir outputs `
+  --head-source mediapipe `
+  --save-rendered `
+  --video-codec avc1
+```
+
+`avc1` 路径先把 rendered frame 流式写入临时 `mp4v` video，再调用 FFmpeg；优先使用 `h264_nvenc`，如果 NVENC 在实际编码启动时不可用，则 fallback 到 `libx264`。H.264 output 使用 `yuv420p`、`-movflags +faststart` 和 `-an`，只有成功编码后才原子替换正式输出，并在成功或失败时安全清理临时文件。FFmpeg capability detection 会在 video/provider/model 构建前执行。未启用 `--save-rendered` 时，`--video-codec` 不产生作用。默认单元测试会 mock FFmpeg，不会启动真实 encoder。
+
+如需观察 Gazelle 对指定非保守 MediaPipe state/view 的输出，请显式使用诊断控制：
+
+```powershell
+python main.py `
+  --input samples\assembly.mp4 `
+  --output-dir outputs `
+  --head-source mediapipe `
+  --gazelle-head-mode face_pose face_only pose_only back_or_occluded tracked_only `
+  --gaze-render-mode all-predictions `
+  --face-pose-ray `
+  --pose-head-ray `
+  --save-rendered `
+  --video-codec avc1 `
+  --overwrite
+```
+
+该模式用于诊断和对比。active `tracked_only` bridge 可以被选择，但已经过期的 track 无法恢复。来自 stale、遮挡、pose-only 或其他 non-eligible head 的 Gazelle prediction 属于探索性结果，不能视为已经验证的真实 eye gaze。
 
 `--head-source none` 可以显示 heatmap、contour 和红色 X gaze peak，但因为没有 bbox，不能显示 bbox 或 arrow。如果需要 bbox 和 arrow，请使用 `--head-source static` 或 `--head-source json` 提供 bbox，并传入 `--head-box`。
 
@@ -296,7 +377,7 @@ python main.py `
   --overwrite
 ```
 
-视频 head 输入复用图片推理的 `--head-source none`、`--head-source static` 和 `--head-source json`。视频 JSON head data 应按 `frame_index` 提供记录，可以使用 JSONL 或 JSON list。如果 JSON head data 缺少某一帧，runtime 会为该帧写入 `status="no_head"` 的 `predictions.jsonl` 行，并跳过该帧的模型推理。
+视频 head 输入复用图片推理的 `--head-source none`、`--head-source static` 和 `--head-source json`，也可使用 `--head-source mediapipe` 进行逐帧 perception 和 tracking。视频 JSON head data 应按 `frame_index` 提供记录，可以使用 JSONL 或 JSON list。缺少某一帧时 observation 和被选中的 gaze 行为 `no_head`；`frame_step` 仍优先写 `skipped`。MediaPipe 帧有 head 但没有 perception 匹配配置的 `--gazelle-head-mode` 时，gaze 行写 `status="no_gaze"`，且不调用 Gazelle；当前或 bridged perception overlay 仍可写入 rendered video。
 
 使用 JSON head data：
 
@@ -339,7 +420,7 @@ python main.py `
   --overwrite
 ```
 
-`--frame-step` 表示每隔 N 帧运行一次 Gazelle。被跳过的帧仍会写入 `status="skipped"` 的 `predictions.jsonl` 行；如果启用了渲染，这些帧会以原帧写入渲染视频。`--max-frames` 限制写出的帧数。`--output-fps` 只在源视频 FPS 无效时作为 fallback；源视频 FPS 有效时会保留源 FPS。当前里程碑不支持视频 `--save-heatmaps`，使用时会报错 `video heatmap export is not implemented yet`。
+perception 和 tracking 会在每个解码并写出的帧上恰好运行一次。`--frame-step` 只控制 Gazelle：被跳过的帧仍会写 observation 和 prediction 行，且所有 rich perception 都记录为 `gazelle_selected=false`。renderer 会接收 `ok`、`no_gaze`、`skipped`、`no_head` 帧的 perceptions，因此可以持续显示 head continuity 和当前 reference ray，而不会伪造 Gazelle output。`--max-frames` 会把两份 JSONL 和可选渲染视频限制到相同帧数；`--output-fps` 仅在源 FPS 无效时使用。视频仍不支持 `--save-heatmaps`。
 
 ### 真实 smoke test
 
@@ -377,7 +458,7 @@ python main.py `
   --overwrite
 ```
 
-这些命令会构建真实 Gazelle predictor 和 DINOv2 backbone，加载 Gazelle checkpoint，执行推理，并写出输出目录。如果 `models/checkpoints` 或 `models/torch_hub` 为空，首次运行可能下载 Gazelle checkpoint、DINOv2 PyTorch Hub 仓库和 DINOv2 权重；再次运行相同命令时应复用缓存。CPU smoke test 可以使用 `--device cpu`；在 CPU 上构建 DINOv2 时，runtime 会临时关闭 xFormers，避免本地 CUDA-only xFormers wheel 强制使用不支持的 CPU attention kernel。
+这些命令会在每次图片运行中构建一次真实 Gazelle predictor 和 DINOv2 backbone，或在视频首个可用帧上构建一次，随后加载 Gazelle checkpoint、执行推理并写出输出目录。checkpoint 解析本身不会构建 DINOv2。如果 `models/checkpoints` 或 `models/torch_hub` 为空，首次运行可能下载 Gazelle checkpoint、DINOv2 PyTorch Hub 仓库和 DINOv2 权重；再次运行相同命令时应复用缓存。CPU smoke test 可以使用 `--device cpu`；在 CPU 上构建 DINOv2 时，runtime 会临时关闭 xFormers，避免本地 CUDA-only xFormers wheel 强制使用不支持的 CPU attention kernel。CUDA 构建会保持 xFormers 启用，并只在 Triton 不可用时跳过可选 Triton 探测。重复的 programmatic 构建可以复用该进程已经选择的 backend，但在不兼容的 CPU/prepare-only 与启用 xFormers 的 CUDA mode 之间切换时必须启动新进程。
 
 ### 编程式单帧 Predictor
 
@@ -417,7 +498,7 @@ runtime 对 head 的处理规则是严格的：
 
 编程式 predictor API 仍然可以直接用于内存中的单帧调用。上面的 CLI image pipeline 和离线视频 pipeline 都是基于它的用户可见封装。
 
-以下 runtime 功能在当前里程碑尚未完成：实时 webcam 输入、自动 head detection、tracking、ROI / 工序逻辑、Multi-Pose 集成、音频 remux、视频 raw heatmap 导出，以及高性能异步推理。
+以下 runtime 功能在当前里程碑尚未完成：实时 webcam perception/tracking、ROI / 工序逻辑、Multi-Pose 集成、音频 remux、视频 raw heatmap 导出，以及高性能异步推理。
 
 ## 推理流程
 

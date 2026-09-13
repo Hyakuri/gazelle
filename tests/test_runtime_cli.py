@@ -6,16 +6,32 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from gazelle.runtime.cli import build_parser, main, parse_runtime_config
-from gazelle.runtime.config import RuntimeConfig, validate_device_name
+from gazelle.runtime.config import (
+    RuntimeConfig,
+    validate_device_name,
+    validate_gaze_render_mode,
+    validate_gazelle_head_mode,
+    validate_max_heads,
+    validate_pose_model,
+    validate_positive_finite_float,
+    validate_video_codec,
+)
 
 
 class RuntimeCliTest(unittest.TestCase):
+    def test_face_mesh_help_describes_rendering_opt_in_not_saved_landmarks(self):
+        help_text = build_parser().format_help()
+
+        self.assertIn("Draw current MediaPipe face-mesh landmarks", help_text)
+        self.assertNotIn("Draw saved MediaPipe face-mesh points", help_text)
+
     def assert_no_model_modules_newly_imported(self, callback):
         before = set(sys.modules)
         callback()
         newly_imported = set(sys.modules) - before
         self.assertNotIn("gazelle.model", newly_imported)
         self.assertNotIn("gazelle.backbone", newly_imported)
+        self.assertNotIn("mediapipe", newly_imported)
 
     def test_help_exits_without_model_construction_imports(self):
         def run_help():
@@ -39,6 +55,51 @@ class RuntimeCliTest(unittest.TestCase):
         config = parse_runtime_config(["--list-models"])
         self.assertTrue(config.list_models)
         self.assertEqual(config.model, "gazelle_dinov2_vitb14_inout")
+
+    def test_parse_mediapipe_head_config(self):
+        config = parse_runtime_config(
+            [
+                "--input",
+                "worker.mp4",
+                "--head-source",
+                "mediapipe",
+                "--max-heads",
+                "3",
+                "--pose-model",
+                "lite",
+                "--head-track-max-gap-ms",
+                "750",
+                "--save-face-landmarks",
+            ]
+        )
+
+        self.assertEqual(config.head_source, "mediapipe")
+        self.assertEqual(config.max_heads, 3)
+        self.assertEqual(config.pose_model, "lite")
+        self.assertEqual(config.head_track_max_gap_ms, 750.0)
+        self.assertTrue(config.save_face_landmarks)
+
+    def test_mediapipe_head_config_defaults(self):
+        config = parse_runtime_config(["--input", "worker.mp4"])
+
+        self.assertEqual(config.max_heads, 1)
+        self.assertEqual(config.pose_model, "full")
+        self.assertEqual(config.head_track_max_gap_ms, 500.0)
+        self.assertFalse(config.save_face_landmarks)
+
+    def test_mediapipe_runtime_config_validators_reject_invalid_values(self):
+        for max_heads in (0, 11, True):
+            with self.subTest(max_heads=max_heads):
+                with self.assertRaises(ValueError):
+                    validate_max_heads(max_heads)
+
+        with self.assertRaises(ValueError):
+            validate_pose_model("medium")
+
+        for gap_ms in (0, -1, float("nan"), float("inf"), True):
+            with self.subTest(gap_ms=gap_ms):
+                with self.assertRaises(ValueError):
+                    validate_positive_finite_float(gap_ms, "head_track_max_gap_ms")
 
     def test_prepare_only_config_does_not_require_input(self):
         config = parse_runtime_config(["--prepare-only", "--cache-dir", "models"])
@@ -127,6 +188,127 @@ class RuntimeCliTest(unittest.TestCase):
 
         self.assertFalse(config.draw_head_box)
 
+    def test_perception_render_defaults(self):
+        config = parse_runtime_config(["--input", "image.jpg", "--save-rendered"])
+
+        self.assertFalse(config.draw_face_box)
+        self.assertFalse(config.draw_face_keypoints)
+        self.assertFalse(config.draw_pose_head_points)
+        self.assertFalse(config.draw_face_mesh)
+        self.assertTrue(config.draw_track_state)
+
+    def test_parse_perception_render_config(self):
+        config = parse_runtime_config(
+            [
+                "--input",
+                "image.jpg",
+                "--save-rendered",
+                "--face-box",
+                "--face-keypoints",
+                "--pose-head-points",
+                "--face-mesh",
+                "--no-track-state",
+            ]
+        )
+
+        self.assertTrue(config.draw_face_box)
+        self.assertTrue(config.draw_face_keypoints)
+        self.assertTrue(config.draw_pose_head_points)
+        self.assertTrue(config.draw_face_mesh)
+        self.assertFalse(config.draw_track_state)
+
+    def test_parse_reference_ray_and_gaze_gate_config(self):
+        config = parse_runtime_config(
+            [
+                "--input",
+                "clip.mp4",
+                "--face-pose-ray",
+                "--pose-head-ray",
+                "--reference-ray-length",
+                "3.0",
+                "--gaze-inout-threshold",
+                "0.65",
+            ]
+        )
+
+        self.assertTrue(config.draw_face_pose_ray)
+        self.assertTrue(config.draw_pose_head_ray)
+        self.assertEqual(config.reference_ray_length, 3.0)
+        self.assertEqual(config.gaze_inout_threshold, 0.65)
+
+    def test_gazelle_diagnostic_modes_default_to_conservative(self):
+        config = parse_runtime_config(["--prepare-only"])
+
+        self.assertEqual(config.gazelle_head_mode, ("eligible",))
+        self.assertEqual(config.gaze_render_mode, "valid-only")
+
+    def test_parse_combined_gazelle_head_selectors(self):
+        config = parse_runtime_config(
+            [
+                "--prepare-only",
+                "--gazelle-head-mode",
+                "face_pose",
+                "pose_only",
+                "back_or_occluded",
+                "tracked_only",
+                "--gaze-render-mode",
+                "all-predictions",
+            ]
+        )
+
+        self.assertEqual(
+            config.gazelle_head_mode,
+            ("face_pose", "pose_only", "back_or_occluded", "tracked_only"),
+        )
+        self.assertEqual(config.gaze_render_mode, "all-predictions")
+
+    def test_runtime_config_deduplicates_gazelle_head_selectors(self):
+        config = RuntimeConfig(
+            gazelle_head_mode=("face_pose", "pose_only", "face_pose"),
+        ).validate()
+
+        self.assertEqual(config.gazelle_head_mode, ("face_pose", "pose_only"))
+
+    def test_runtime_config_all_canonicalizes_gazelle_head_selectors(self):
+        config = RuntimeConfig(
+            gazelle_head_mode=("face_pose", "all", "tracked_only"),
+        ).validate()
+
+        self.assertEqual(config.gazelle_head_mode, ("all",))
+
+    def test_runtime_config_normalizes_single_gazelle_head_selector(self):
+        config = RuntimeConfig(gazelle_head_mode="tracked_only").validate()
+
+        self.assertEqual(config.gazelle_head_mode, ("tracked_only",))
+
+    def test_invalid_gazelle_head_mode_rejected(self):
+        invalid_values = (
+            (),
+            True,
+            ("eligible", 1),
+            ("not_a_selector",),
+        )
+        for value in invalid_values:
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ValueError, "gazelle_head_mode"):
+                    validate_gazelle_head_mode(value)
+
+    def test_invalid_gaze_render_mode_rejected(self):
+        for value in ("all", "", True):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ValueError, "gaze_render_mode"):
+                    validate_gaze_render_mode(value)
+
+    def test_cli_rejects_unknown_gazelle_head_selector(self):
+        stderr = io.StringIO()
+        with redirect_stderr(stderr), self.assertRaises(SystemExit) as caught:
+            parse_runtime_config(
+                ["--prepare-only", "--gazelle-head-mode", "not_a_selector"]
+            )
+
+        self.assertEqual(caught.exception.code, 2)
+        self.assertIn("--gazelle-head-mode", stderr.getvalue())
+
     def test_parse_head_box_enabled(self):
         config = parse_runtime_config(["--input", "image.jpg", "--save-rendered", "--head-box"])
 
@@ -179,6 +361,18 @@ class RuntimeCliTest(unittest.TestCase):
         self.assertEqual(config.frame_step, 2)
         self.assertEqual(config.output_video_name, "rendered.mp4")
 
+    def test_video_codec_defaults_to_mp4v(self):
+        config = parse_runtime_config(["--input", "clip.mp4"])
+
+        self.assertEqual(config.video_codec, "mp4v")
+
+    def test_parse_avc1_video_codec(self):
+        config = parse_runtime_config(
+            ["--input", "clip.mp4", "--video-codec", "avc1"]
+        )
+
+        self.assertEqual(config.video_codec, "avc1")
+
     def test_prepare_only_route_calls_resource_preparation(self):
         prepared = SimpleNamespace(
             model_name="gazelle_dinov2_vitb14_inout",
@@ -188,17 +382,67 @@ class RuntimeCliTest(unittest.TestCase):
             candidate_results=(),
         )
         with patch("gazelle.runtime.resources.prepare_runtime_resources", return_value=prepared) as mock_prepare:
-            stdout = io.StringIO()
-            exit_code = main(["--prepare-only", "--cache-dir", "models"], stdout=stdout)
+            with patch(
+                "gazelle.runtime.perception.resources.prepare_mediapipe_resources"
+            ) as mock_prepare_mediapipe:
+                stdout = io.StringIO()
+                exit_code = main(["--prepare-only", "--cache-dir", "models"], stdout=stdout)
         self.assertEqual(exit_code, 0)
         mock_prepare.assert_called_once()
+        mock_prepare_mediapipe.assert_not_called()
         self.assertIn("Prepared Gazelle resources", stdout.getvalue())
         self.assertIn("checkpoint_source: local", stdout.getvalue())
+
+    def test_prepare_only_mediapipe_prepares_and_prints_selected_assets(self):
+        prepared = SimpleNamespace(
+            model_name="gazelle_dinov2_vitb14_inout",
+            checkpoint_path="models/checkpoints/example.pt",
+            checkpoint_candidate=None,
+            cache_paths=SimpleNamespace(root_dir="models", torch_hub_dir="models/torch_hub"),
+            candidate_results=(),
+        )
+        prepared_mediapipe = SimpleNamespace(
+            face_detector_path="models/mediapipe/blaze_face_full_range.tflite",
+            face_landmarker_path="models/mediapipe/face_landmarker.task",
+            pose_landmarker_path="models/mediapipe/pose_landmarker_heavy.task",
+            pose_model="heavy",
+        )
+        with patch(
+            "gazelle.runtime.resources.prepare_runtime_resources",
+            return_value=prepared,
+        ) as mock_prepare:
+            with patch(
+                "gazelle.runtime.perception.resources.prepare_mediapipe_resources",
+                return_value=prepared_mediapipe,
+            ) as mock_prepare_mediapipe:
+                stdout = io.StringIO()
+                exit_code = main(
+                    [
+                        "--prepare-only",
+                        "--head-source",
+                        "mediapipe",
+                        "--pose-model",
+                        "heavy",
+                    ],
+                    stdout=stdout,
+                )
+
+        self.assertEqual(exit_code, 0)
+        mock_prepare.assert_called_once()
+        mock_prepare_mediapipe.assert_called_once()
+        config = mock_prepare_mediapipe.call_args.args[0]
+        self.assertEqual(config.pose_model, "heavy")
+        output = stdout.getvalue()
+        self.assertIn("face_detector: models/mediapipe/blaze_face_full_range.tflite", output)
+        self.assertIn("face_landmarker: models/mediapipe/face_landmarker.task", output)
+        self.assertIn("pose_landmarker: models/mediapipe/pose_landmarker_heavy.task", output)
+        self.assertIn("pose_model: heavy", output)
 
     def test_image_input_route_calls_pipeline(self):
         result = SimpleNamespace(
             output_dir="outputs/frame_gazelle",
             predictions_path="outputs/frame_gazelle/predictions.json",
+            head_observations_path="outputs/frame_gazelle/head_observations.json",
             run_config_path="outputs/frame_gazelle/run_config.json",
             rendered_path=None,
         )
@@ -223,11 +467,13 @@ class RuntimeCliTest(unittest.TestCase):
         self.assertEqual(config.output_dir, "outputs")
         self.assertEqual(config.head_source, "none")
         self.assertIn("predictions:", stdout.getvalue())
+        self.assertIn("head_observations: outputs/frame_gazelle/head_observations.json", stdout.getvalue())
 
     def test_video_input_route_calls_pipeline(self):
         result = SimpleNamespace(
             output_dir="outputs/clip_gazelle",
             predictions_jsonl_path="outputs/clip_gazelle/predictions.jsonl",
+            head_observations_jsonl_path="outputs/clip_gazelle/head_observations.jsonl",
             run_config_path="outputs/clip_gazelle/run_config.json",
             rendered_video_path=None,
             frames_read=2,
@@ -256,10 +502,32 @@ class RuntimeCliTest(unittest.TestCase):
         self.assertIn("predictions_jsonl:", stdout.getvalue())
         self.assertIn("frames_written: 2", stdout.getvalue())
 
+    def test_cli_prints_head_observations_jsonl(self):
+        result = SimpleNamespace(
+            output_dir="outputs/clip_gazelle",
+            predictions_jsonl_path="outputs/clip_gazelle/predictions.jsonl",
+            head_observations_jsonl_path="outputs/clip_gazelle/head_observations.jsonl",
+            run_config_path="outputs/clip_gazelle/run_config.json",
+            rendered_video_path=None,
+            frames_read=1,
+            frames_written=1,
+        )
+        with patch("gazelle.runtime.media.detect_media_type", return_value="video"):
+            with patch("gazelle.runtime.pipeline.run_video_pipeline", return_value=result):
+                stdout = io.StringIO()
+                exit_code = main(["--input", "clip.mp4"], stdout=stdout)
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn(
+            "head_observations_jsonl: outputs/clip_gazelle/head_observations.jsonl",
+            stdout.getvalue(),
+        )
+
     def test_video_input_route_prints_rendered_video_path_when_present(self):
         result = SimpleNamespace(
             output_dir="outputs/clip_gazelle",
             predictions_jsonl_path="outputs/clip_gazelle/predictions.jsonl",
+            head_observations_jsonl_path="outputs/clip_gazelle/head_observations.jsonl",
             run_config_path="outputs/clip_gazelle/run_config.json",
             rendered_video_path="outputs/clip_gazelle/rendered.mp4",
             frames_read=1,
@@ -277,6 +545,7 @@ class RuntimeCliTest(unittest.TestCase):
         result = SimpleNamespace(
             output_dir="outputs/frame_gazelle",
             predictions_path="outputs/frame_gazelle/predictions.json",
+            head_observations_path="outputs/frame_gazelle/head_observations.json",
             run_config_path="outputs/frame_gazelle/run_config.json",
             rendered_path="outputs/frame_gazelle/rendered.png",
         )
@@ -389,6 +658,23 @@ class RuntimeCliTest(unittest.TestCase):
                 self.assertEqual(cm.exception.code, 2)
                 self.assertIn("output_video_name", stderr.getvalue())
 
+    def test_invalid_video_codec_rejected(self):
+        stderr = io.StringIO()
+        with redirect_stderr(stderr), self.assertRaises(SystemExit) as caught:
+            parse_runtime_config(
+                ["--input", "clip.mp4", "--video-codec", "h264"]
+            )
+
+        self.assertEqual(caught.exception.code, 2)
+        self.assertIn("--video-codec", stderr.getvalue())
+
+    def test_runtime_config_rejects_invalid_video_codec(self):
+        with self.assertRaisesRegex(ValueError, "video_codec"):
+            RuntimeConfig(video_codec="h264").validate()
+
+        with self.assertRaisesRegex(ValueError, "video_codec"):
+            validate_video_codec("h264")
+
     def test_invalid_heatmap_contour_quantile_rejected(self):
         invalid_quantiles = ("-0.1", "1.1", "nan")
         for quantile in invalid_quantiles:
@@ -398,6 +684,32 @@ class RuntimeCliTest(unittest.TestCase):
                     parse_runtime_config(["--input", "image.jpg", "--heatmap-contour-quantile", quantile])
                 self.assertEqual(cm.exception.code, 2)
                 self.assertIn("heatmap_contour_quantile", stderr.getvalue())
+
+    def test_invalid_reference_ray_length_rejected(self):
+        stderr = io.StringIO()
+        with redirect_stderr(stderr), self.assertRaises(SystemExit) as caught:
+            parse_runtime_config(
+                ["--input", "clip.mp4", "--reference-ray-length", "0"]
+            )
+
+        self.assertEqual(caught.exception.code, 2)
+        self.assertIn("reference_ray_length", stderr.getvalue())
+
+    def test_invalid_gaze_inout_threshold_rejected(self):
+        for threshold in ("-0.1", "1.1", "nan"):
+            with self.subTest(threshold=threshold):
+                stderr = io.StringIO()
+                with redirect_stderr(stderr), self.assertRaises(SystemExit) as caught:
+                    parse_runtime_config(
+                        [
+                            "--input",
+                            "clip.mp4",
+                            "--gaze-inout-threshold",
+                            threshold,
+                        ]
+                    )
+                self.assertEqual(caught.exception.code, 2)
+                self.assertIn("gaze_inout_threshold", stderr.getvalue())
 
     def test_parse_heatmap_contour_width(self):
         config = parse_runtime_config(
@@ -432,6 +744,8 @@ class RuntimeCliTest(unittest.TestCase):
             {"frame_step": True},
             {"heatmap_contour_quantile": True},
             {"heatmap_contour_width": True},
+            {"reference_ray_length": True},
+            {"gaze_inout_threshold": True},
         ):
             with self.subTest(kwargs=kwargs):
                 with self.assertRaises(ValueError):

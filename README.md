@@ -1,6 +1,8 @@
 # Gaze-LLE
 #### CVPR 2025 (Highlight)
 
+For complete runtime setup, every CLI option, input/output schemas, and runnable image/video workflows, see the [Project Usage Guide](docs/USAGE.md).
+
 [中文说明](README_CN.md)
 
 [Gaze-LLE: Gaze Target Estimation via Large-Scale Learned Encoders](https://arxiv.org/abs/2412.09586) \
@@ -24,21 +26,29 @@ When adding user-facing features, scripts, CLI arguments, environment requiremen
 
 ## Installation
 
-The current runtime work in this fork is validated against the existing local Conda environment named `Gazelle`. Prefer that environment when developing or running the staged CLI:
+`environment.yml` is the current recommended Gazelle environment. It documents the validated NumPy 2.4.6 stack for this fork, including Python 3.11, PyTorch 2.6.0 + CUDA 12.6 wheels, xFormers 0.0.29.post3, MediaPipe 0.10.35, production ByteTrack dependencies (`trackers==2.5.0.post0`, `supervision==0.29.1`), and `ultralytics==8.4.104` for the validated dependency transaction.
+
+`environment_1.0.yml` preserves the previous NumPy 1.26.4 configuration as a rollback/reference copy of the earlier Gazelle environment definition. Both files declare the Conda environment name `Gazelle`, so only create one environment with that name at a time.
+
+For the current workflow, keep using the validated `Gazelle` environment:
 
 ```powershell
 conda activate Gazelle
 pip install -e .
 ```
 
-The repository `environment.yml` is aligned to the locally verified runtime environment: Python 3.11, PyTorch 2.6.0 + CUDA 12.6 wheels, TorchVision 0.21.0 + CUDA 12.6, TorchAudio 2.6.0 + CUDA 12.6, OpenCV 4.11.0, and xFormers 0.0.29. The original upstream Gazelle environment file is no longer the primary baseline for this fork's runtime pipeline. If you already have a working `Gazelle` environment, activate it instead of downgrading packages to match older upstream settings.
-
-On a fresh machine, `environment.yml` documents the expected package set:
+On a fresh machine, create the current environment from `environment.yml`:
 
 ```powershell
 conda env create -f environment.yml
 conda activate Gazelle
 pip install -e .
+```
+
+If you need the legacy NumPy 1.26.4 definition alongside the current environment for comparison or rollback, override the name when you create it:
+
+```powershell
+conda env create -f environment_1.0.yml --name Gazelle-1.0
 ```
 
 After activating `Gazelle`, these commands validate the CLI and prepare the default local model cache:
@@ -111,9 +121,9 @@ Use `--prepare-only` to prepare local model resources without running image or v
 python main.py --prepare-only --model gazelle_dinov2_vitb14_inout
 ```
 
-This command may download the Gazelle checkpoint and may construct the DINOv2 backbone through PyTorch Hub. Constructing DINOv2 can download DINOv2 weights if they are not already cached. It does not process images, process videos, open a camera, render output, or write JSON/JSONL predictions.
+This command may download the Gazelle checkpoint and may construct the DINOv2 backbone through PyTorch Hub. Constructing DINOv2 can download DINOv2 weights if they are not already cached. With `--head-source mediapipe`, it also prepares the selected official MediaPipe task assets. It does not process images, process videos, open a camera, render output, or write JSON/JSONL predictions.
 
-On success, the command prints the resolved checkpoint path, `checkpoint_source`, cache root, Torch Hub cache directory, and strict-load validation details for registered checkpoint candidates. `checkpoint_source` is `local` when `--checkpoint` is used, or the registered candidate source when the runtime prepares a downloaded checkpoint.
+On success, the command prints the resolved checkpoint path, `checkpoint_source`, cache root, Torch Hub cache directory, and strict-load validation details for registered checkpoint candidates. `checkpoint_source` is `local` when `--checkpoint` is used, or the registered candidate source when the runtime prepares a downloaded checkpoint. MediaPipe preparation additionally prints the face detector, face landmarker, selected pose landmarker, and pose model.
 
 Cache root priority:
 
@@ -126,6 +136,7 @@ The runtime uses this directory layout:
 ```text
 models/
 ├── checkpoints/
+├── mediapipe/
 └── torch_hub/
 ```
 
@@ -138,7 +149,7 @@ python main.py `
   --checkpoint C:\path\to\gazelle_dinov2_vitb14_inout.pt
 ```
 
-Use `--force-download` to refresh the cached registered checkpoint for the selected model:
+Use `--force-download` to refresh the cached registered checkpoint and any selected MediaPipe assets:
 
 ```powershell
 python main.py `
@@ -148,7 +159,7 @@ python main.py `
   --force-download
 ```
 
-For safety, forced downloads are written to a temporary `.downloads` directory under the checkpoint cache first. The old cached checkpoint is replaced only after the new file is downloaded and found on disk. If the download fails, the existing cached checkpoint is preserved.
+For safety, forced downloads are written to a temporary `.downloads` directory under the relevant cache first. The old cached file is replaced only after the new file is downloaded and validated. If download or validation fails, the existing cached file is preserved.
 
 Checkpoint validation is strict in the runtime path: empty state dicts, missing keys, unexpected keys, shape mismatches, non-tensor values, and incompatible checkpoint structures stop preparation with an error.
 
@@ -164,7 +175,7 @@ python main.py `
   --model gazelle_dinov2_vitb14_inout
 ```
 
-This command constructs the Gazelle model and DINOv2 backbone. If the selected Gazelle checkpoint or DINOv2 weights are not already cached, it may download them. It writes a per-image output directory such as `outputs/frame_gazelle/` containing `predictions.json` and `run_config.json`. Image input does not open a camera or write video JSONL; video input is handled by the video inference path below.
+This command loads the image, creates its output directory, collects head observations, and writes a per-image output directory such as `outputs/frame_gazelle/` containing `head_observations.json`, `predictions.json`, and `run_config.json`. It constructs the Gazelle model and DINOv2 backbone only when the head provider returns at least one head. If the selected Gazelle checkpoint or DINOv2 weights are not already cached, that prediction path may download them. Image input does not open a camera or write video JSONL; video input is handled by the video inference path below.
 
 When `--overwrite` is used, the per-image output directory is cleaned before writing new results, so stale heatmaps or rendered images from earlier runs are removed.
 
@@ -194,6 +205,41 @@ python main.py `
   --head-data samples\frame_heads.json
 ```
 
+### MediaPipe Provider Composition (Staged)
+
+The CLI accepts `--head-source mediapipe` and validates MediaPipe runtime settings: `--max-heads` accepts `1` through `10` (default `1`), `--pose-model` accepts `lite`, `full`, or `heavy` (default `full`), `--head-track-max-gap-ms` accepts a finite value greater than `0` in milliseconds (default `500.0`), and `--save-face-landmarks` enables face-landmark output configuration (default off). `--face-pose-ray` and `--pose-head-ray` independently render two uncalibrated 2D head-direction references, and `--reference-ray-length` controls their positive head-box-diagonal multiplier. `--gazelle-head-mode` selects which MediaPipe perceptions may cross into Gazelle, `--gaze-inout-threshold` classifies the resulting prediction as `valid` or `out_of_frame`, and `--gaze-render-mode` independently controls whether out-of-frame Gazelle geometry is drawn.
+
+Prepare the official face detector, face landmarker, and one selected pose landmarker without running inference:
+
+```powershell
+python main.py `
+  --prepare-only `
+  --head-source mediapipe `
+  --pose-model full
+```
+
+The pose selection prepares `pose_landmarker_lite.task`, `pose_landmarker_full.task`, or `pose_landmarker_heavy.task`. Existing assets in `<cache-root>/mediapipe` are reused only when they are regular files whose SHA-256 matches the immutable digest pinned for the versioned official URL. A tampered, truncated, or non-file cache entry fails clearly and is never returned. Before a new or forced preparation can inspect or modify its temporary `.downloads/<asset-key>` directory, it atomically acquires `.downloads/<asset-key>.lock`; a concurrent preparation for the same asset fails without touching that staging directory and reports an existing cache entry as preserved. The asset is downloaded to the staging directory, verified, and atomically moved into the cache. Any setup, lock, download, missing-file, digest, or replacement failure leaves an existing cache entry in place. Task and lock cleanup is best-effort, remains confined to the validated downloads directory, and never masks the primary preparation result. Lock artifacts are not removed automatically when ownership cannot be established because they may belong to an active process; before manually removing a stale lock, verify that no preparation process is active for that asset.
+
+Default unit tests use fake downloaders and do not access the network. The pinned registry hashes were established once by downloading exactly the five official versioned assets to an OS temporary directory outside the repository, calculating SHA-256, and deleting that temporary directory.
+
+`--head-source mediapipe` is now wired into the runtime head-provider factory. The provider composes prepared resources, the MediaPipe backend, head/pose fusion, video ByteTrack tracking, and the 500 ms short-occlusion bridge. Image IDs are deterministic and start at zero; video IDs come from ByteTrack. In single-person mode, a post-bridge arbitration step keeps at most one identity and prunes stale identities replaced by a current observation. By default, Gazelle receives normalized, non-`None` MediaPipe head bboxes only when the current perception passes the conservative gaze-eligibility policy, including minimum perception and face-ray confidence values of `0.50`.
+
+The integration keeps the model boundary deliberately small: fusion/tracking produces an ordered `HeadObservation(person_id, bbox, confidence)` tuple and an aligned `HeadPerception` tuple for observation sidecars and rendering. The default `--gazelle-head-mode eligible` passes only conservative eligible heads. Diagnostic selectors may instead opt in one or more states (`face_pose`, `face_only`, `pose_only`, `tracked_only`) or views (`frontal`, `profile`, `back_or_occluded`, `unknown`); `observed` selects current observations, and `all` selects every active perception. Multiple selectors use OR semantics. Even in diagnostic mode, expired tracks cannot be revived and normalized non-`None` bbox validation remains mandatory. Face bbox, face mesh, face/pose keypoints, both head-pose reference rays, head pose, and tracking state are never added to the Gazelle tensor input. Gazelle returns results in the selected-person order.
+
+The current `environment.yml` dependency set has been validated with real MediaPipe 0.10.35, production ByteTrack via `trackers==2.5.0.post0`, Gazelle/DINOv2 CUDA image inference, and a short rendered video pipeline. This repository now treats that NumPy 2.4.6 environment as the recommended end-to-end setup for the staged runtime work. Optional Ultralytics YOLO model inference and export have not been validated and are not claimed here.
+
+The runtime narrowly filters the exact upstream `trackers` `target=None` deprecation warning during the lazy ByteTrack import while leaving unrelated `FutureWarning` messages visible. Normal CUDA image/video inference resolves the checkpoint without constructing DINOv2, then constructs the predictor once with xFormers available. If optional Triton is absent and the user has not set an xFormers Triton override, model construction temporarily sets the official `XFORMERS_FORCE_DISABLE_TRITON=1` switch; this skips the unavailable Triton probe without disabling other xFormers operators or modifying the Conda environment. `--prepare-only` still intentionally disables xFormers during strict-load validation, so DINOv2 may print non-fatal xFormers-disabled/not-available status warnings on that path. Because DINOv2 caches its backend choice at first import, a long-lived Python process that later requests an incompatible CPU/prepare-only versus xFormers-enabled CUDA construction now fails clearly instead of silently reusing the wrong backend; use a fresh process to switch backend modes.
+
+### Independent Head Observation Schema
+
+`gazelle.runtime.perception.outputs` provides `head_frame_to_json_dict(...)` for one independent provider result. The image pipeline uses `write_head_observations_json(output_path, **frame_kwargs)` to create parent directories and write exactly one indented JSON document with a trailing newline. The video pipeline writes every serialized provider result as one compact `head_observations.jsonl` row. The record has exactly `frame_index`, `timestamp_ms`, `status`, `width`, `height`, `provider`, `timings_ms`, and `people` fields. `status` is `"ok"` when the result has heads and `"no_head"` otherwise. `timings_ms` retains provider timing names and finite millisecond values.
+
+Each person has `person_id`, `head_bbox_normalized`, and `confidence`. Head boxes are normalized to `[0, 1]` and retain the runtime bbox tuple ordering. Rich MediaPipe perceptions additionally include conservative recommendation `gaze_eligible`, actual per-frame inference decision `gazelle_selected`, optional rejection `gaze_status`, applicable face bbox, `state`, `view_state`, `observed`, `tracking`, face keypoints, filtered pose-head landmarks, named pose-head keypoints, facial transformation matrix, yaw/pitch/roll head-pose evidence, and either available reference ray. The face reference uses Face Landmarker pose plus face keypoints; the pose reference is independently estimated from reliable Pose Landmarker nose/eye or nose/ear geometry. Both are uncalibrated 2D references, not eye-gaze measurements.
+
+Every image run writes this independent record to `head_observations.json` before gaze inference, regardless of `--head-source`. Every video frame writes its independent observation row before its gaze row. These outputs include the selected provider, provider timing fields, normalized head boxes, and `status="no_head"` when there are no heads. By default, a video `tracked_only` perception maintains bbox continuity only and uses `gaze_status="tracked_no_gaze"`; it can be sent to Gazelle only through explicit `tracked_only` or `all` diagnostic selection while its bridge track remains active. `pose_only` and back/occluded perceptions likewise retain their conservative status even if explicitly selected. During the bridge, stale current-frame face evidence and both reference rays are cleared rather than fabricated.
+
+For privacy and output size, all 478 face landmarks are omitted by default. Pass `--save-face-landmarks` to include them in image `head_observations.json` or video `head_observations.jsonl`; this can substantially increase output size and retain more biometric detail.
+
 For single-image inference, JSON head data is read from `frame_index=0`. The JSON format is the same internal head record format used by the runtime head providers, with `bbox_format` set to `normalized` or `pixel` and `heads` containing `person_id`, `bbox`, and optional `confidence`.
 
 `--head-source none` does not provide a bbox. Rendered head boxes and head-center-to-gaze-peak arrows require a bbox, so they cannot be drawn in `none` mode. Use `--head-source static` or `--head-source json` with bbox data when bbox-dependent overlays are needed.
@@ -222,9 +268,13 @@ python main.py `
   --save-rendered
 ```
 
-By default, image inference writes `predictions.json` and `run_config.json`; rendered output is written only when `--save-rendered` is passed. The default rendered file is `rendered.png`. Use `--rendered-name` to choose a `.png`, `.jpg`, or `.jpeg` file name, and `--heatmap-alpha` to control heatmap transparency. The rendered overlay can include the heatmap, an opt-in head bbox, a head-center-to-gaze-peak arrow when bbox data exists, a red X at the gaze target peak, stable per-person colors, and labels with `person_id`, optional `inout_score`, and `heatmap_peak_value`. Head boxes are not drawn by default; pass `--head-box` to draw them when bboxes are available. Pass `--no-heatmap`, `--no-gaze-arrow`, `--no-gaze-peak`, or `--no-labels` to disable those drawing components. Pass `--draw-heatmap-contour` to draw a top-response heatmap contour, use `--heatmap-contour-quantile` to set its threshold, and use `--heatmap-contour-width` to set its line width. Rendering does not change `predictions.json`, and `heatmap_peak_value` is not a calibrated probability.
+By default, image inference writes `head_observations.json`, `predictions.json`, and `run_config.json`; rendered output is written only when `--save-rendered` is passed. The default rendered file is `rendered.png`. Use `--rendered-name` to choose a `.png`, `.jpg`, or `.jpeg` file name, and `--heatmap-alpha` to control heatmap transparency. The rendered gaze overlay can include the heatmap, an opt-in Gazelle prediction bbox, a head-center-to-gaze-peak arrow when bbox data exists, a red X at the gaze target peak, stable per-person colors, and labels with `person_id`, optional `inout_score`, and `heatmap_peak_value`. Gazelle prediction boxes are not drawn by default; pass `--head-box` to draw them when available. Pass `--no-heatmap`, `--no-gaze-arrow`, `--no-gaze-peak`, or `--no-labels` to disable those drawing components. Pass `--draw-heatmap-contour` to draw a top-response heatmap contour, use `--heatmap-contour-quantile` to set its threshold, and use `--heatmap-contour-width` to set its line width. Rendering does not change `predictions.json`, and `heatmap_peak_value` is not a calibrated probability.
 
-The gaze arrow is a visualization from the head bbox center to the predicted gaze peak. It is not a face keypoint, eye keypoint, head pose estimate, or true eye vector. The gaze peak is drawn as a red X; the heatmap and optional contour visualize high-response gaze target regions.
+When a `HeadPerception` result is supplied, its primary head bbox is drawn by default, independently of the opt-in Gazelle `--head-box`. The perception controls are `--face-box`, `--face-keypoints`, `--pose-head-points`, `--face-mesh`, `--face-pose-ray`, `--pose-head-ray`, and `--no-track-state`. The blue face ray and orange pose ray are computed independently and may disagree; that comparison is intentional. Their requested length uses the final fused head bbox. The face ray prefers the eye midpoint and can use the face-box center only when at least three other finite current face keypoints remain. A near-camera-axis face direction is drawn as an origin marker because an honest 2D line is unavailable. A `tracked_only` primary box is dashed and uses reduced alpha, but carries no stale ray.
+
+The layer order is gaze heatmaps and optional contours, existing gaze bbox/arrow/peak marks, the perception primary head bbox, auxiliary face bbox, six detector keypoints, pose head/shoulder points, optional face mesh, perception state/person/confidence label, and finally gaze prediction labels. Perception rendering uses the supplied `HeadPerception` data as-is: it does not recompute the perception bbox, mutate the perception, or replace `GazePrediction.bbox`, the normalized bbox already sent to Gazelle. MediaPipe perceptions already retain in-memory `face_landmarks`; `--face-mesh` independently opts into drawing them and does not require `--save-face-landmarks`. The separate `--save-face-landmarks` switch controls whether those landmarks are serialized into observation JSON/JSONL sidecars. Drawing hundreds of mesh points adds per-frame rendering work, while serializing them increases observation output size and retained biometric detail. Calls that omit perceptions or pass `perceptions=()` retain byte-identical legacy rendering, and the perception switches have no effect on those calls.
+
+The Gazelle gaze arrow is a visualization from the head bbox center to the predicted gaze peak. It is separate from both reference rays and is not a true eye vector. `--gaze-inout-threshold` defaults to `0.5` and classifies lower-score predictions as `gaze_status="out_of_frame"`. The default `--gaze-render-mode valid-only` suppresses their Gazelle heatmap, contour, arrow, and red-X peak while retaining metadata and the optional prediction bbox/status label. `--gaze-render-mode all-predictions` draws that geometry for both `valid` and `out_of_frame` predictions without changing status, scores, or JSON output.
 
 Render bbox, arrow, red X, and labels without heatmap:
 
@@ -269,9 +319,40 @@ python main.py `
   --save-rendered
 ```
 
-This command constructs the Gazelle model and DINOv2 backbone. If the selected Gazelle checkpoint or DINOv2 weights are not already cached, it may download them. It streams frames from the input video, writes a per-video output directory such as `outputs/assembly_gazelle/`, and always writes `predictions.jsonl` and `run_config.json`. This is offline video processing, not real-time webcam processing. Audio is not preserved in rendered videos.
+This command streams frames from the input video and writes a per-video output directory such as `outputs/assembly_gazelle/`. It always writes `head_observations.jsonl`, `predictions.jsonl`, and `run_config.json`, with exactly one observation row and one gaze row per written frame. Gazelle and its DINOv2 backbone are constructed lazily on the first non-skipped frame that has at least one usable head, then reused; an all-skipped or all-`no_head` run does not construct them. If their weights are not already cached, that first prediction may download them. This is offline video processing, not real-time webcam processing. Rendered videos contain no audio.
 
-Pass `--save-rendered` to write a rendered `.mp4`; the default video output name is `rendered.mp4`, and `--output-video-name` can choose another `.mp4` file name. The same rendering flags used for images also apply to rendered videos: `--heatmap-alpha`, `--head-box`, `--no-heatmap`, `--no-gaze-arrow`, `--no-gaze-peak`, `--draw-heatmap-contour`, `--heatmap-contour-quantile`, `--heatmap-contour-width`, and `--no-labels`.
+Pass `--save-rendered` to write a rendered `.mp4`; the default video output name is `rendered.mp4`, and `--output-video-name` can choose another `.mp4` file name. `--video-codec mp4v` is the default and preserves the direct OpenCV `VideoWriter` behavior without requiring FFmpeg. The same rendering flags used for images also apply to rendered videos, including `--face-box`, `--face-keypoints`, `--pose-head-points`, `--face-mesh`, and `--no-track-state` with the defaults described above.
+
+For browser-friendly H.264/AVC output, install FFmpeg so `ffmpeg` is available on `PATH`, then select `avc1`:
+
+```powershell
+python main.py `
+  --input samples\assembly.mp4 `
+  --output-dir outputs `
+  --head-source mediapipe `
+  --save-rendered `
+  --video-codec avc1
+```
+
+The `avc1` path streams rendered frames to a temporary `mp4v` video, then invokes FFmpeg. It prefers `h264_nvenc` and falls back to `libx264` if NVENC is unavailable when encoding starts. The H.264 output uses `yuv420p`, `-movflags +faststart`, and `-an`; it atomically replaces the formal output only after successful encoding and safely cleans temporary files on success or failure. FFmpeg capability detection occurs before video/provider/model construction. `--video-codec` has no effect unless `--save-rendered` is enabled. Default unit tests mock FFmpeg and do not launch a real encoder.
+
+To inspect Gazelle output for selected non-conservative MediaPipe states and views, use the diagnostic controls explicitly:
+
+```powershell
+python main.py `
+  --input samples\assembly.mp4 `
+  --output-dir outputs `
+  --head-source mediapipe `
+  --gazelle-head-mode face_pose face_only pose_only back_or_occluded tracked_only `
+  --gaze-render-mode all-predictions `
+  --face-pose-ray `
+  --pose-head-ray `
+  --save-rendered `
+  --video-codec avc1 `
+  --overwrite
+```
+
+This mode is intended for diagnosis and comparison. An active `tracked_only` bridge can be selected, but an expired track cannot be revived. Gazelle predictions from stale, occluded, pose-only, or otherwise non-eligible heads are exploratory and must not be treated as validated eye gaze.
 
 `--head-source none` can show heatmap, contour, and the red X gaze peak, but it cannot show bbox or arrow because no bbox is available. Use `--head-source static` or `--head-source json` plus `--head-box` for bbox and arrow overlays.
 
@@ -287,7 +368,7 @@ python main.py `
   --overwrite
 ```
 
-Video head input sources use the same `--head-source none`, `--head-source static`, and `--head-source json` options as image inference. JSON head data for video should use one record per `frame_index`, either in JSONL or a JSON list. If a frame is missing from JSON head data, the runtime writes a `predictions.jsonl` row with `status="no_head"` and skips model inference for that frame.
+Video head input sources use the same `--head-source none`, `--head-source static`, and `--head-source json` options as image inference, plus `--head-source mediapipe` for per-frame perception and tracking. JSON head data for video should use one record per `frame_index`, either in JSONL or a JSON list. If a frame is missing from JSON head data, its observation and selected gaze row use `no_head`; `frame_step` still takes precedence and writes `skipped`. A MediaPipe frame with heads but no perception matched by the configured `--gazelle-head-mode` writes gaze `status="no_gaze"` without calling Gazelle. Its current or bridged perception overlays can still be written to rendered video.
 
 Use JSON head data:
 
@@ -330,7 +411,7 @@ python main.py `
   --overwrite
 ```
 
-`--frame-step` runs Gazelle only every N frames. Skipped frames still get `predictions.jsonl` rows with `status="skipped"` and are copied unchanged into the rendered video when rendering is enabled. `--max-frames` limits how many frames are written. `--output-fps` is used only when the source video FPS is invalid; otherwise the source FPS is preserved. `--save-heatmaps` is not supported for video in this milestone and exits with `video heatmap export is not implemented yet`.
+Perception and tracking run exactly once on every decoded and written frame. `--frame-step` gates only Gazelle: skipped frames still get their observation and prediction rows, and every rich perception is recorded with `gazelle_selected=false`. The renderer receives perceptions on `ok`, `no_gaze`, `skipped`, and `no_head` frames, allowing head continuity and current reference rays to remain visible without inventing Gazelle output. `--max-frames` limits both JSONL files and the optional rendered video to the same written-frame count. `--output-fps` is used only when the source video FPS is invalid; otherwise the source FPS is preserved. `--save-heatmaps` is not supported for video in this milestone.
 
 ### Real Smoke Tests
 
@@ -368,7 +449,7 @@ python main.py `
   --overwrite
 ```
 
-These commands construct the real Gazelle predictor and DINOv2 backbone, load the Gazelle checkpoint, run inference, and write output directories. If `models/checkpoints` or `models/torch_hub` are empty, the first run may download the Gazelle checkpoint, DINOv2 PyTorch Hub repository, and DINOv2 weights. Re-running the same commands should reuse the cache. CPU smoke tests are supported with `--device cpu`; when constructing DINOv2 on CPU, the runtime temporarily disables xFormers so a CUDA-only xFormers wheel does not force an unsupported CPU attention kernel.
+These commands construct the real Gazelle predictor and DINOv2 backbone once per image run or once on the first usable video frame, load the Gazelle checkpoint, run inference, and write output directories. Checkpoint resolution itself does not construct DINOv2. If `models/checkpoints` or `models/torch_hub` are empty, the first run may download the Gazelle checkpoint, DINOv2 PyTorch Hub repository, and DINOv2 weights. Re-running the same commands should reuse the cache. CPU smoke tests are supported with `--device cpu`; when constructing DINOv2 on CPU, the runtime temporarily disables xFormers so a CUDA-only xFormers wheel does not force an unsupported CPU attention kernel. CUDA construction keeps xFormers enabled and skips only the optional Triton probe when Triton is unavailable. Repeated programmatic construction may reuse the backend already selected in that process, but switching between incompatible CPU/prepare-only and xFormers-enabled CUDA modes requires a fresh process.
 
 ### Programmatic Single-Frame Predictor
 
@@ -408,7 +489,7 @@ Runtime head behavior is intentionally strict:
 
 The programmatic predictor API remains available for direct in-memory use. The CLI image and offline video pipelines above are user-facing wrappers around it.
 
-The following runtime features are planned but not available yet in this milestone: real-time webcam input, automatic head detection, tracking, ROI/process logic, Multi-Pose integration, audio remuxing, raw video heatmap export, and high-performance asynchronous inference.
+The following runtime features are planned but not available yet in this milestone: real-time webcam perception/tracking, ROI/process logic, Multi-Pose integration, audio remuxing, raw video heatmap export, and high-performance asynchronous inference.
 
 
 ## Usage

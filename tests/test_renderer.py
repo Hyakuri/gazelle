@@ -1,14 +1,31 @@
+from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 import torch
-from PIL import Image
+from PIL import Image, ImageDraw
 
-from gazelle.runtime.contracts import GazePrediction
+from gazelle.runtime.contracts import GazePrediction, GazeStatus
+from gazelle.runtime.perception.contracts import (
+    HeadPerception,
+    HeadPerceptionState,
+    HeadViewState,
+    NormalizedLandmark,
+    ReferenceRay2D,
+    ReferenceRayProjectionStatus,
+    ReferenceRaySource,
+)
 from gazelle.runtime.renderer import (
+    FACE_BOX_COLOR,
+    FACE_KEYPOINT_COLOR,
+    FACE_MESH_COLOR,
+    FACE_POSE_RAY_COLOR,
     PEAK_MARKER_COLOR,
+    POSE_HEAD_POINT_COLOR,
+    POSE_HEAD_RAY_COLOR,
     PredictionRenderer,
     RenderOptions,
     build_prediction_label,
@@ -43,6 +60,41 @@ def make_prediction(
     )
 
 
+def make_perception(state=HeadPerceptionState.FACE_POSE):
+    return HeadPerception(
+        person_id=1,
+        head_bbox=(0.15, 0.15, 0.85, 0.85),
+        face_bbox=(0.30, 0.25, 0.70, 0.65),
+        confidence=0.87,
+        state=state,
+        view_state=HeadViewState.FRONTAL,
+        observed=state is not HeadPerceptionState.TRACKED_ONLY,
+        missed_frames=1 if state is HeadPerceptionState.TRACKED_ONLY else 0,
+        missed_ms=120.0 if state is HeadPerceptionState.TRACKED_ONLY else 0.0,
+        face_keypoints=tuple(
+            NormalizedLandmark(x=x, y=y)
+            for x, y in (
+                (0.40, 0.35),
+                (0.60, 0.35),
+                (0.50, 0.45),
+                (0.42, 0.55),
+                (0.58, 0.55),
+                (0.50, 0.62),
+            )
+        ),
+        pose_head_landmarks=(
+            NormalizedLandmark(x=0.50, y=0.30),
+            NormalizedLandmark(x=0.35, y=0.72),
+            NormalizedLandmark(x=0.65, y=0.72),
+        ),
+        face_landmarks=(
+            NormalizedLandmark(x=0.45, y=0.40),
+            NormalizedLandmark(x=0.55, y=0.40),
+            NormalizedLandmark(x=0.50, y=0.50),
+        ),
+    )
+
+
 class RendererTest(unittest.TestCase):
     def test_render_options_defaults(self):
         options = RenderOptions()
@@ -54,8 +106,460 @@ class RendererTest(unittest.TestCase):
         self.assertTrue(options.draw_gaze_arrow)
         self.assertFalse(options.draw_heatmap_contour)
         self.assertTrue(options.draw_labels)
+        self.assertFalse(options.draw_face_box)
+        self.assertFalse(options.draw_face_keypoints)
+        self.assertFalse(options.draw_pose_head_points)
+        self.assertFalse(options.draw_face_mesh)
+        self.assertTrue(options.draw_track_state)
+        self.assertFalse(options.draw_face_pose_ray)
+        self.assertFalse(options.draw_pose_head_ray)
+        self.assertEqual(options.gaze_render_mode, "valid-only")
         self.assertEqual(options.heatmap_contour_quantile, 0.90)
         self.assertIsNone(options.heatmap_contour_width)
+
+    def test_empty_perceptions_preserve_legacy_render_bytes(self):
+        renderer = PredictionRenderer()
+        image = Image.new("RGB", (64, 48), color=(20, 20, 20))
+        predictions = [make_prediction()]
+
+        legacy = renderer.render(image, predictions)
+        explicit = renderer.render(image, predictions, perceptions=())
+
+        self.assertEqual(legacy.tobytes(), explicit.tobytes())
+
+    def test_perception_head_box_is_drawn_without_optional_layers(self):
+        image = Image.new("RGB", (64, 64), color=(20, 20, 20))
+        options = RenderOptions(
+            draw_heatmap=False,
+            draw_gaze_peak=False,
+            draw_gaze_arrow=False,
+            draw_labels=False,
+            draw_track_state=False,
+        )
+
+        rendered = PredictionRenderer(options).render(image, (), (make_perception(),))
+
+        self.assertNotEqual(rendered.tobytes(), image.tobytes())
+
+    def test_optional_perception_geometry_layers_change_pixels(self):
+        image = Image.new("RGB", (64, 64), color=(20, 20, 20))
+        perception = make_perception()
+        base_options = {
+            "draw_heatmap": False,
+            "draw_gaze_peak": False,
+            "draw_gaze_arrow": False,
+            "draw_labels": False,
+            "draw_track_state": False,
+        }
+        baseline = PredictionRenderer(RenderOptions(**base_options)).render(
+            image, (), (perception,)
+        )
+
+        for option_name in (
+            "draw_face_box",
+            "draw_face_keypoints",
+            "draw_pose_head_points",
+            "draw_face_mesh",
+        ):
+            with self.subTest(option_name=option_name):
+                enabled = dict(base_options)
+                enabled[option_name] = True
+                rendered = PredictionRenderer(RenderOptions(**enabled)).render(
+                    image, (), (perception,)
+                )
+                self.assertNotEqual(rendered.tobytes(), baseline.tobytes())
+
+    def test_two_independent_reference_rays_use_distinct_colors(self):
+        image = Image.new("RGB", (101, 101), color=(20, 20, 20))
+        face_ray = ReferenceRay2D(
+            source=ReferenceRaySource.FACE_POSE,
+            origin=(0.5, 0.5),
+            direction=(1.0, 0.0),
+            endpoint=(0.8, 0.5),
+            confidence=0.9,
+            projection_status=ReferenceRayProjectionStatus.AVAILABLE,
+        )
+        pose_ray = ReferenceRay2D(
+            source=ReferenceRaySource.POSE_HEAD,
+            origin=(0.5, 0.5),
+            direction=(0.0, 1.0),
+            endpoint=(0.5, 0.8),
+            confidence=0.8,
+            projection_status=ReferenceRayProjectionStatus.AVAILABLE,
+        )
+        perception = replace(
+            make_perception(),
+            face_pose_reference_ray=face_ray,
+            pose_head_reference_ray=pose_ray,
+        )
+        options = RenderOptions(
+            draw_heatmap=False,
+            draw_gaze_peak=False,
+            draw_gaze_arrow=False,
+            draw_labels=False,
+            draw_track_state=False,
+            draw_face_pose_ray=True,
+            draw_pose_head_ray=True,
+        )
+
+        rendered = PredictionRenderer(options).render(image, (), (perception,))
+
+        self.assertEqual(rendered.getpixel((65, 50)), FACE_POSE_RAY_COLOR)
+        self.assertEqual(rendered.getpixel((50, 65)), POSE_HEAD_RAY_COLOR)
+
+    def test_out_of_frame_prediction_suppresses_gazelle_geometry(self):
+        image = Image.new("RGB", (64, 64), color=(20, 20, 20))
+        prediction = replace(
+            make_prediction(),
+            gaze_status=GazeStatus.OUT_OF_FRAME,
+        )
+        options = RenderOptions(
+            draw_head_box=False,
+            draw_labels=False,
+        )
+
+        rendered = PredictionRenderer(options).render(image, (prediction,))
+
+        self.assertEqual(rendered.tobytes(), image.tobytes())
+
+    def test_all_predictions_mode_draws_out_of_frame_gazelle_geometry(self):
+        image = Image.new("RGB", (64, 64), color=(20, 20, 20))
+        prediction = replace(
+            make_prediction(),
+            gaze_status=GazeStatus.OUT_OF_FRAME,
+        )
+        options = RenderOptions(
+            gaze_render_mode="all-predictions",
+            draw_head_box=False,
+            draw_labels=False,
+        )
+
+        rendered = PredictionRenderer(options).render(image, (prediction,))
+
+        self.assertNotEqual(rendered.tobytes(), image.tobytes())
+        self.assertEqual(prediction.gaze_status, GazeStatus.OUT_OF_FRAME)
+        self.assertEqual(prediction.inout_score, 0.93)
+
+    def test_all_predictions_mode_draws_out_of_frame_geometry_with_perception(self):
+        image = Image.new("RGB", (64, 64), color=(20, 20, 20))
+        prediction = replace(
+            make_prediction(),
+            gaze_status=GazeStatus.OUT_OF_FRAME,
+        )
+        common = dict(
+            draw_head_box=False,
+            draw_labels=False,
+            draw_track_state=False,
+        )
+        perception = make_perception()
+
+        valid_only = PredictionRenderer(
+            RenderOptions(gaze_render_mode="valid-only", **common)
+        ).render(image, (prediction,), (perception,))
+        all_predictions = PredictionRenderer(
+            RenderOptions(gaze_render_mode="all-predictions", **common)
+        ).render(image, (prediction,), (perception,))
+
+        self.assertNotEqual(all_predictions.tobytes(), valid_only.tobytes())
+
+    def test_all_predictions_mode_controls_each_gazelle_geometry_layer(self):
+        image = Image.new("RGB", (64, 64), color=(20, 20, 20))
+        prediction = replace(
+            make_prediction(),
+            gaze_status=GazeStatus.OUT_OF_FRAME,
+        )
+        cases = (
+            {
+                "draw_heatmap": True,
+                "draw_heatmap_contour": False,
+                "draw_gaze_arrow": False,
+                "draw_gaze_peak": False,
+            },
+            {
+                "draw_heatmap": False,
+                "draw_heatmap_contour": True,
+                "draw_gaze_arrow": False,
+                "draw_gaze_peak": False,
+            },
+            {
+                "draw_heatmap": False,
+                "draw_heatmap_contour": False,
+                "draw_gaze_arrow": True,
+                "draw_gaze_peak": False,
+            },
+            {
+                "draw_heatmap": False,
+                "draw_heatmap_contour": False,
+                "draw_gaze_arrow": False,
+                "draw_gaze_peak": True,
+            },
+        )
+
+        for options_override in cases:
+            with self.subTest(options_override=options_override):
+                options = RenderOptions(
+                    gaze_render_mode="all-predictions",
+                    draw_head_box=False,
+                    draw_labels=False,
+                    **options_override,
+                )
+                rendered = PredictionRenderer(options).render(
+                    image,
+                    (prediction,),
+                )
+                self.assertNotEqual(rendered.tobytes(), image.tobytes())
+
+    def test_prediction_renderer_rejects_invalid_gaze_render_mode(self):
+        with self.assertRaisesRegex(ValueError, "gaze_render_mode"):
+            PredictionRenderer(RenderOptions(gaze_render_mode="everything"))
+
+    def test_track_state_label_changes_pixels(self):
+        image = Image.new("RGB", (96, 64), color=(20, 20, 20))
+        perception = make_perception()
+        common = dict(
+            draw_heatmap=False,
+            draw_gaze_peak=False,
+            draw_gaze_arrow=False,
+            draw_labels=False,
+        )
+        without_label = PredictionRenderer(
+            RenderOptions(draw_track_state=False, **common)
+        ).render(image, (), (perception,))
+        with_label = PredictionRenderer(
+            RenderOptions(draw_track_state=True, **common)
+        ).render(image, (), (perception,))
+
+        self.assertNotEqual(with_label.tobytes(), without_label.tobytes())
+
+    def test_tracked_only_box_is_dashed_and_reduced_alpha(self):
+        image = Image.new("RGB", (64, 64), color=(20, 20, 20))
+        options = RenderOptions(
+            draw_heatmap=False,
+            draw_gaze_peak=False,
+            draw_gaze_arrow=False,
+            draw_labels=False,
+            draw_track_state=False,
+        )
+        observed = PredictionRenderer(options).render(image, (), (make_perception(),))
+        tracked = PredictionRenderer(options).render(
+            image,
+            (),
+            (make_perception(HeadPerceptionState.TRACKED_ONLY),),
+        )
+        observed_pixels = np.asarray(observed)
+        tracked_pixels = np.asarray(tracked)
+        original_pixels = np.asarray(image)
+        observed_changed = np.any(observed_pixels != original_pixels, axis=2)
+        tracked_changed = np.any(tracked_pixels != original_pixels, axis=2)
+
+        self.assertLess(int(tracked_changed.sum()), int(observed_changed.sum()))
+        self.assertTrue(np.any(tracked_changed))
+        self.assertFalse(
+            np.any(
+                np.all(
+                    tracked_pixels[tracked_changed]
+                    == np.asarray(stable_color_for_person(1)),
+                    axis=1,
+                )
+            )
+        )
+
+    def test_rendering_does_not_mutate_perception_or_prediction_bbox(self):
+        image = Image.new("RGB", (64, 64), color=(20, 20, 20))
+        prediction = make_prediction(bbox=(0.05, 0.05, 0.20, 0.20), heatmap=None)
+        perception = make_perception()
+        prediction_bbox = prediction.bbox
+        perception_before = perception
+
+        PredictionRenderer().render(image, (prediction,), (perception,))
+
+        self.assertEqual(prediction.bbox, prediction_bbox)
+        self.assertEqual(perception, perception_before)
+
+    def test_perception_contract_exact_layer_call_order(self):
+        image = Image.new("RGB", (64, 64), color=(20, 20, 20))
+        prediction = make_prediction()
+        perception = replace(
+            make_perception(),
+            face_keypoints=make_perception().face_keypoints
+            + (NormalizedLandmark(x=0.75, y=0.75),),
+        )
+        options = RenderOptions(
+            draw_head_box=True,
+            draw_heatmap_contour=True,
+            draw_face_box=True,
+            draw_face_keypoints=True,
+            draw_pose_head_points=True,
+            draw_face_mesh=True,
+        )
+        events = []
+        transparent = Image.new("RGBA", image.size, (0, 0, 0, 0))
+        person_color = stable_color_for_person(perception.person_id)
+
+        def record_rectangle(draw_context, xy, **kwargs):
+            color = kwargs.get("outline") or kwargs.get("fill")
+            rgb = tuple(color[:3])
+            if kwargs.get("outline") is not None:
+                events.append(
+                    "perception_head_box" if rgb == person_color else "face_box"
+                )
+            else:
+                events.append("perception_label_background")
+
+        def record_ellipse(draw_context, xy, **kwargs):
+            rgb = tuple(kwargs["fill"][:3])
+            names = {
+                FACE_KEYPOINT_COLOR: "face_keypoint",
+                POSE_HEAD_POINT_COLOR: "pose_head_point",
+                FACE_MESH_COLOR: "face_mesh_point",
+            }
+            events.append(names[rgb])
+
+        with patch(
+            "gazelle.runtime.renderer.heatmap_to_overlay",
+            side_effect=lambda *args, **kwargs: events.append("heatmap") or transparent,
+        ), patch(
+            "gazelle.runtime.renderer.heatmap_to_topk_mask",
+            return_value=np.ones((2, 2), dtype=bool),
+        ), patch(
+            "gazelle.runtime.renderer.heatmap_mask_to_contour_overlay",
+            side_effect=lambda *args, **kwargs: events.append("contour") or transparent,
+        ), patch(
+            "gazelle.runtime.renderer.draw_prediction",
+            side_effect=lambda *args, **kwargs: events.append("gaze_geometry"),
+        ), patch.object(
+            ImageDraw.ImageDraw,
+            "rectangle",
+            autospec=True,
+            side_effect=record_rectangle,
+        ), patch.object(
+            ImageDraw.ImageDraw,
+            "ellipse",
+            autospec=True,
+            side_effect=record_ellipse,
+        ), patch.object(
+            ImageDraw.ImageDraw,
+            "text",
+            autospec=True,
+            side_effect=lambda *args, **kwargs: events.append("perception_label"),
+        ), patch(
+            "gazelle.runtime.renderer.draw_prediction_label",
+            side_effect=lambda *args, **kwargs: events.append("gaze_label"),
+        ):
+            PredictionRenderer(options).render(image, (prediction,), (perception,))
+
+        self.assertEqual(
+            events,
+            [
+                "heatmap",
+                "contour",
+                "gaze_geometry",
+                "perception_head_box",
+                "face_box",
+                *("face_keypoint" for _ in range(6)),
+                *("pose_head_point" for _ in range(3)),
+                *("face_mesh_point" for _ in range(3)),
+                "perception_label_background",
+                "perception_label",
+                "gaze_label",
+            ],
+        )
+
+    def test_perception_contract_draws_only_first_six_face_keypoints(self):
+        image = Image.new("RGB", (21, 21), color=(20, 20, 20))
+        first_six = tuple(NormalizedLandmark(x=0.25, y=0.25) for _ in range(6))
+        perception = replace(
+            make_perception(),
+            face_keypoints=first_six + (NormalizedLandmark(x=0.75, y=0.75),),
+        )
+        options = RenderOptions(
+            draw_heatmap=False,
+            draw_gaze_peak=False,
+            draw_gaze_arrow=False,
+            draw_labels=False,
+            draw_face_keypoints=True,
+            draw_track_state=False,
+        )
+
+        rendered = PredictionRenderer(options).render(image, (), (perception,))
+
+        self.assertEqual(rendered.getpixel((5, 5)), FACE_KEYPOINT_COLOR)
+        self.assertEqual(rendered.getpixel((15, 15)), image.getpixel((15, 15)))
+
+    def test_perception_contract_clamps_out_of_range_bbox_and_landmark(self):
+        image = Image.new("RGB", (21, 21), color=(20, 20, 20))
+        common = RenderOptions(
+            draw_heatmap=False,
+            draw_gaze_peak=False,
+            draw_gaze_arrow=False,
+            draw_labels=False,
+            draw_track_state=False,
+        )
+        bbox_perception = replace(
+            make_perception(),
+            head_bbox=(-0.5, -0.5, 1.5, 1.5),
+        )
+        landmark_perception = replace(
+            make_perception(),
+            face_keypoints=(NormalizedLandmark(x=-0.5, y=1.5),),
+        )
+
+        bbox_rendered = PredictionRenderer(common).render(
+            image, (), (bbox_perception,)
+        )
+        landmark_rendered = PredictionRenderer(
+            replace(common, draw_face_keypoints=True)
+        ).render(image, (), (landmark_perception,))
+
+        person_color = stable_color_for_person(bbox_perception.person_id)
+        for corner in ((0, 0), (20, 0), (0, 20), (20, 20)):
+            with self.subTest(corner=corner):
+                self.assertEqual(bbox_rendered.getpixel(corner), person_color)
+        self.assertEqual(landmark_rendered.getpixel((0, 20)), FACE_KEYPOINT_COLOR)
+
+    def test_perception_contract_collections_keep_own_ids_colors_and_positions(self):
+        image = Image.new("RGB", (100, 60), color=(20, 20, 20))
+        predictions = (
+            make_prediction(
+                person_id=101,
+                bbox=(0.05, 0.10, 0.20, 0.40),
+                heatmap=None,
+                gaze_peak=None,
+            ),
+            make_prediction(
+                person_id=202,
+                bbox=(0.80, 0.10, 0.95, 0.40),
+                heatmap=None,
+                gaze_peak=None,
+            ),
+        )
+        perceptions = (
+            replace(
+                make_perception(),
+                person_id=202,
+                head_bbox=(0.05, 0.60, 0.20, 0.90),
+            ),
+            replace(
+                make_perception(),
+                person_id=999,
+                head_bbox=(0.80, 0.60, 0.95, 0.90),
+            ),
+        )
+        options = RenderOptions(
+            draw_heatmap=False,
+            draw_head_box=True,
+            draw_gaze_peak=False,
+            draw_gaze_arrow=False,
+            draw_labels=False,
+            draw_track_state=False,
+        )
+
+        rendered = PredictionRenderer(options).render(image, predictions, perceptions)
+
+        self.assertEqual(rendered.getpixel((5, 6)), stable_color_for_person(101))
+        self.assertEqual(rendered.getpixel((80, 6)), stable_color_for_person(202))
+        self.assertEqual(rendered.getpixel((80, 36)), stable_color_for_person(999))
+        self.assertEqual(rendered.getpixel((5, 36)), stable_color_for_person(202))
 
     def test_stable_color_is_repeatable(self):
         self.assertEqual(stable_color_for_person(7), stable_color_for_person(7))
@@ -157,6 +661,23 @@ class RendererTest(unittest.TestCase):
         rendered = renderer.render(image, [make_prediction(heatmap=None)])
 
         self.assertEqual(rendered.mode, "RGB")
+        self.assertNotEqual(rendered.tobytes(), image.tobytes())
+
+    def test_render_predictions_accepts_all_predictions_mode(self):
+        image = Image.new("RGB", (24, 24), color=(20, 20, 20))
+        prediction = replace(
+            make_prediction(),
+            gaze_status=GazeStatus.OUT_OF_FRAME,
+        )
+
+        rendered = render_predictions(
+            image,
+            (prediction,),
+            gaze_render_mode="all-predictions",
+            draw_head_box=False,
+            draw_labels=False,
+        )
+
         self.assertNotEqual(rendered.tobytes(), image.tobytes())
 
     def test_render_predictions_does_not_mutate_original_image(self):
