@@ -15,9 +15,13 @@ Use relevant skills within the user's authorized scope without starting a
 second competing workflow. Do not incidentally change global instructions,
 skills, plugins, model settings, or permissions while doing repository work.
 
-For machine migration or cross-agent collaboration, read `docs/HANDOFF.md`
-and `docs/AGENT_WORKFLOW.md` on demand. `CLAUDE.md` imports this file; keep
-project policy here rather than maintaining different rules for each agent.
+Start every session by reading `docs/collab/STATE.md`. It names the current
+stage and branch, whose turn it is, the active task record, and what to do
+next. `docs/collab/COLLABORATION_PLAN_CN.md` defines the procedure and extends
+`docs/AGENT_WORKFLOW.md`. Do not write files while the `writer` field in
+`docs/collab/STATE.md` names another agent. For machine migration, read
+`docs/HANDOFF.md` on demand. `CLAUDE.md` imports this file; keep project
+policy here rather than maintaining different rules for each agent.
 
 ## Sources Of Truth
 
