@@ -3,6 +3,8 @@
 
 For complete runtime setup, every CLI option, input/output schemas, and runnable image/video workflows, see the [Project Usage Guide](docs/USAGE.md).
 
+For another computer or agent, start with the [Handoff Guide](docs/HANDOFF.md) and [Shared Agent Workflow](docs/AGENT_WORKFLOW.md).
+
 [中文说明](README_CN.md)
 
 [Gaze-LLE: Gaze Target Estimation via Large-Scale Learned Encoders](https://arxiv.org/abs/2412.09586) \

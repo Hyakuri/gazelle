@@ -1,5 +1,7 @@
 # Project Usage Guide
 
+For machine migration and cross-agent development, see the [Handoff Guide](HANDOFF.md) and [Shared Agent Workflow](AGENT_WORKFLOW.md).
+
 ## 1. Scope and current capabilities
 
 Gazelle performs local gaze-target inference on one supported image or an offline video file. Head input can come from the single-person fallback, repeated static boxes, JSON/JSONL records, or MediaPipe face/pose perception. The runtime writes independent head observations, Gazelle predictions, configuration metadata, and optional visual output. It is not a webcam or real-time pipeline.

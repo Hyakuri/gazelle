@@ -1,5 +1,7 @@
 # 项目使用指南
 
+迁移电脑和跨 agent 开发请参阅[交接指南](HANDOFF_CN.md)与[共用协作流程](AGENT_WORKFLOW_CN.md)。
+
 ## 1. 范围和当前能力
 
 Gazelle 对一张受支持图像或一个离线视频文件执行本地注视目标推理。头部输入可来自单人回退、重复静态框、JSON/JSONL record 或 MediaPipe face/pose 感知。运行时写出独立头部观测、Gazelle prediction、配置元数据和可选可视化；它不是 webcam/real-time 管线。

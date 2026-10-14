@@ -3,6 +3,8 @@
 
 有关完整的 runtime 环境设置、全部 CLI 选项、输入/输出 schema 以及可运行的图像/视频工作流，请参阅[项目使用指南](docs/USAGE_CN.md)。
 
+迁移电脑或切换 agent 时，请先阅读[交接指南](docs/HANDOFF_CN.md)和[跨 Agent 协作流程](docs/AGENT_WORKFLOW_CN.md)。
+
 [English README](README.md)
 
 [Gaze-LLE: Gaze Target Estimation via Large-Scale Learned Encoders](https://arxiv.org/abs/2412.09586)
