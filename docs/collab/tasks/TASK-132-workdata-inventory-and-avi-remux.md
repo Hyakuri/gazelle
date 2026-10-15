@@ -18,7 +18,7 @@
 1. **摄像机身份配置** `tools/workdata/camera_roles.json`（提交到仓库）：
    - 物理编号 `cam_a`、`cam_b`、`cam_e`，以及每台的识别特征：文件名规则、时钟样式（A 紧贴左边缘，B 向右缩进，E 带星期与 `CAM3`）、MP4 容器帧率（A 为 30，B 为 50）。
    - 按会话的覆盖规则：`20260903` 中 `カメラ1` 对应 `cam_b`，`カメラ2` 对应 `cam_a`。
-   - `front` 与 `right` 的语义映射留空（`null`），等用户回答 Q7 后由 Claude 填写。
+   - 角色映射（用户 2026-10-15 确认：カメラ2 是前方，カメラ1 是右侧，設備カメラ是两张工作台之间的全局摄像机）：`front` 为 `cam_b`，`right` 为 `cam_a`，`overview` 为 `cam_e`。映射以物理编号为准；`20260903` 的文件名互换由上一条覆盖规则纠正，所以该文件夹中名为カメラ1 的文件才是前方摄像机。
 2. **清单** `python -m tools.workdata.inventory --root <源目录> --out <数据根>\inventory\inventory.json`：
    - 每个文件记录：会话文件夹、相对路径、大小、修改时间、SHA-256（按大小与修改时间缓存，未变化时不重算）、ffprobe 视频流信息（编码、宽高、`r_frame_rate`、`avg_frame_rate`、`nb_frames`、`duration`、视频流 `start_time`）、是否有音轨、前 60 秒小于 64 字节的包所占比例、分段序号（文件名中的 `-1`、`-2`、`-3`）、物理摄像机编号与判定来源（`filename` 或 `override`）、`needs_remux`。
    - 只读源目录，输出写到数据根；目标文件存在时原子替换。

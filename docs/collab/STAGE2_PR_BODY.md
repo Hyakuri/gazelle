@@ -6,7 +6,7 @@ Make the three-camera work recordings usable and trustworthy as input, synchroni
 
 ## Project goal (confirmed by the user on 2026-10-15)
 
-Three fixed monocular cameras film one workstation: two on the desks facing the worker (front and right) and one in the corner looking down at both desks. The system will fuse the three views to estimate, over time, which work region the worker attends to: pick-up desk, front work area, placement area, other in-cell targets, away from work, or absent. It will report time shares, dwell durations, transitions, and off-task time. Processing is offline. Multi-Pose integration is out of scope for now; multi-person inference and real-time processing are later goals.
+Three fixed monocular cameras film one workstation: two on the desks facing the worker (front: カメラ2, right: カメラ1) and the overview camera 設備カメラ between the two desks, looking down at both. Camera positions are the same in every recording. The system will fuse the three views to estimate, over time, which work region the worker attends to: pick-up desk, front work area, placement area, other in-cell targets, away from work, or absent. It will report time shares, dwell durations, transitions, and off-task time. Processing is offline. Multi-Pose integration is out of scope for now; multi-person inference and real-time processing are later goals.
 
 ## Findings that shaped this stage
 
@@ -23,17 +23,19 @@ Details: `docs/collab/analysis/2026-10-15-workdata-analysis.md`.
 | --- | --- | --- |
 | 1 | TASK-131 Reader: container timestamps, strict monotonicity, fail on truncated decode | ready |
 | 1 | TASK-132 Work-data inventory and lossless AVI remux | ready |
+| 1 | TASK-123 Region marking tool for the overview camera | ready after TASK-132 |
 | 1 | TASK-001 Validate arguments before `--overwrite` deletes output | ready |
+| User | Draw the regions on the overview camera (about 10 minutes) | after round 1 review |
 | 2 | TASK-133 Burned-in clock OCR, time maps, sync check | ready after TASK-132 |
 | 2 | TASK-134 5 Hz synchronized proxies | ready after TASK-133 |
 | 2 | TASK-121 Multi-view region labelling tool (D12 r2) | ready after TASK-134 |
-| User | Answer Q7 and Q8, then label 26 one-minute segments (about 2 hours) | pending |
+| User | Label 26 one-minute segments (about 2 hours) | after round 2 review |
 | 3 | TASK-102 Confirm new tracks on their first frame (D2) | ready |
 | 3 | TASK-002 Face ray and roll sign alignment | ready |
 | 3 | TASK-101 Face–pose association fix (D1) | blocked on TASK-102 |
 | — | Stage acceptance by Claude, final acceptance by the user | not started |
 
-Pending user input: Q7 (which face camera is front and which is right), Q8 (region classes), Q9 (worker identity and future recordings), and D13–D15 for stage 3. D4 and the revised D12 were adopted by the coordinator and can be vetoed.
+User decisions on 2026-10-15: the front camera is カメラ2 and the right camera is カメラ1; the user will draw the regions on the overview camera; each date has one worker and the camera positions are fixed; D4, D12 r2, and D13–D15 are approved. The stage 3 design is approved, and its task contracts will be written at stage 2 acceptance.
 
 ## How this PR is used
 
@@ -55,7 +57,7 @@ Work videos stay read-only on the local drive. Derived data, labels, and outputs
 
 ## 项目目标（用户 2026-10-15 确认）
 
-三台固定单目摄像机拍摄同一工位：两台放在桌面上对着作业者（前方与右侧），一台在夹角处俯视两张桌面。系统融合三个视角，逐时刻判断作业者注视的作业区域：取货台、前方作业区、放置区、工作区内其他目标、离开工作或不在岗；并报告时间占比、停留时长、切换次数与离开工作的时间。以离线处理为主。暂不考虑 Multi-Pose 接口；多人推断与实时处理是后续目标。
+三台固定单目摄像机拍摄同一工位：两台放在桌面上对着作业者，前方为カメラ2，右侧为カメラ1；全局摄像机設備カメラ在两张工作台之间俯视两张桌面。各次录制的机位相同。系统融合三个视角，逐时刻判断作业者注视的作业区域：取货台、前方作业区、放置区、工作区内其他目标、离开工作或不在岗；并报告时间占比、停留时长、切换次数与离开工作的时间。以离线处理为主。暂不考虑 Multi-Pose 接口；多人推断与实时处理是后续目标。
 
 ## 影响本阶段安排的发现
 
@@ -72,17 +74,19 @@ Work videos stay read-only on the local drive. Derived data, labels, and outputs
 | --- | --- | --- |
 | 1 | TASK-131 读取器：容器时间戳、严格递增、解码截断即失败 | ready |
 | 1 | TASK-132 作业数据清单与 AVI 无损重封装 | ready |
+| 1 | TASK-123 全局摄像机画面中的区域标记工具 | TASK-132 之后 ready |
 | 1 | TASK-001 在 `--overwrite` 删除输出前校验参数 | ready |
+| 用户 | 在全局摄像机画面上画出区域（约 10 分钟） | 第 1 轮审查后 |
 | 2 | TASK-133 画面时钟识别、时间映射、同步检验 | TASK-132 之后 ready |
 | 2 | TASK-134 5 Hz 同步代理视频 | TASK-133 之后 ready |
 | 2 | TASK-121 多视角区域标注工具（D12 r2） | TASK-134 之后 ready |
-| 用户 | 回答 Q7、Q8，然后标注 26 个一分钟片段（约 2 小时） | 待前置 |
+| 用户 | 标注 26 个一分钟片段（约 2 小时） | 第 2 轮审查后 |
 | 3 | TASK-102 新轨迹首帧即确认（D2） | ready |
 | 3 | TASK-002 面部射线与 roll 符号对齐 | ready |
 | 3 | TASK-101 人脸与姿态关联修正（D1） | 等 TASK-102 |
 | — | Claude 阶段验收，用户最终验收 | 未开始 |
 
-待用户输入：Q7（哪台人脸摄像机是前方、哪台是右侧）、Q8（区域类别）、Q9（作业者身份与后续录制），以及第 3 阶段的 D13 至 D15。D4 与修订后的 D12 由协调者先行采用，用户可以否决。
+用户 2026-10-15 的决定：前方摄像机为カメラ2，右侧为カメラ1；区域由用户在全局摄像机画面上画出；同一日期为同一作业者，机位固定；批准 D4、D12 r2 与 D13 至 D15。第 3 阶段设计已批准，任务契约在阶段 2 验收时编写。
 
 ## 本 PR 的用法
 

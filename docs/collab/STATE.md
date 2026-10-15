@@ -12,8 +12,8 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 | writer | none |
 | next_actor | codex |
 | current_task | `docs/collab/tasks/TASK-131-video-reader-timestamps-and-truncation.md` |
-| after_current | `docs/collab/tasks/TASK-132-workdata-inventory-and-avi-remux.md`，然后 `docs/collab/tasks/TASK-001-overwrite-safe-validation.md`，然后停止并把 `next_actor` 改为 `claude` |
-| last_pushed | 尚未推送。本地有 6 个阶段提交，最后一个的主题是 `Prepare the stage draft PR and collaboration state` |
+| after_current | `docs/collab/tasks/TASK-132-workdata-inventory-and-avi-remux.md`，然后 `docs/collab/tasks/TASK-123-overview-region-marking-tool.md`，然后 `docs/collab/tasks/TASK-001-overwrite-safe-validation.md`，然后停止并把 `next_actor` 改为 `claude` |
+| last_pushed | 尚未推送。本地有 7 个阶段提交，最后一个的主题是 `Record user decisions on cameras, regions, and stage 3` |
 | last_accepted | `bbec056`（迁移验收基线，Gate A/B/C 通过） |
 | 更新 | 2026-10-15，Claude |
 
@@ -23,24 +23,27 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 | --- | --- | --- | --- |
 | Codex 第 1 轮 | TASK-131 读取器：容器时间戳、严格递增、截断即失败 | ready | GZ-07、GZ-21，P0 |
 | Codex 第 1 轮 | TASK-132 作业数据清单与 AVI 无损重封装 | ready | 数据 P0、GZ-22 |
+| Codex 第 1 轮 | TASK-123 全局摄像机画面中的区域标记工具 | ready | 依赖 TASK-132；用户 Q8 的回答 |
 | Codex 第 1 轮 | TASK-001 参数在 `--overwrite` 删除前校验 | ready | GZ-04 |
-| Claude | 审查第 1 轮 | 未开始 | |
+| Claude | 审查第 1 轮，试用区域标记工具 | 未开始 | |
+| 用户 | 用 TASK-123 的工具画出区域，约 10 分钟 | 待前置 | 可与第 2 轮并行 |
 | Codex 第 2 轮 | TASK-133 画面时钟识别、时间映射与同步检验 | ready | 依赖 TASK-132 |
 | Codex 第 2 轮 | TASK-134 5 Hz 同步代理视频 | ready | 依赖 TASK-133 |
-| Codex 第 2 轮 | TASK-121 多视角同步片段的区域标注工具（D12 r2） | ready | 依赖 TASK-134 |
+| Codex 第 2 轮 | TASK-121 多视角同步片段的区域标注工具（D12 r2） | ready | 依赖 TASK-134 与用户的区域文件 |
 | Claude | 审查第 2 轮，完整试标 pilot 片段 | 未开始 | |
-| 用户 | 回答 Q7、Q8；标注 26 段，约 2 小时 | 待前置 | 可与第 3 轮并行 |
+| 用户 | 标注 26 段，约 2 小时 | 待前置 | 可与第 3 轮并行 |
 | Codex 第 3 轮 | TASK-102 新轨迹首帧立即确认（D2） | ready | GZ-03 |
 | Codex 第 3 轮 | TASK-002 面部射线与 roll 符号对齐 | ready | GZ-02 |
 | Codex 第 3 轮 | TASK-101 人脸与姿态关联修正（D1） | blocked | 等 TASK-102 审查通过；GZ-01 |
 | Claude | 阶段 2 验收：离线门、作业数据真实 smoke、同步精度、修复前后对比 | 未开始 | |
 
-第 3 阶段（多摄像机注视区域推断）的设计提案见 [ROADMAP.md](ROADMAP.md)，等你批准 D13 至 D15 后再写契约。
+第 3 阶段（多摄像机注视区域推断）的设计已于 2026-10-15 获批（D13 至 D15），任务契约在阶段 2 验收时编写，见 [ROADMAP.md](ROADMAP.md)。
+摄像机角色：前方为カメラ2（`cam_b`），右侧为カメラ1（`cam_a`），全局为設備カメラ（`cam_e`）；一律按物理编号取文件。
 
 ## 给 Codex 的说明
 
 - **本轮第一步：首次推送并创建 draft PR。** 用户已于 2026-10-15 要求开 draft PR；Claude 的推送被本机工具权限拦截，所以由你执行。
-  1. 确认当前分支是 `feature/stage2-correctness`，`git status` 干净，`git log --oneline bbec056..HEAD` 恰好列出 6 个提交：`61067da`、`e4c6f6c`、`9e59c90`、`5034bae`、`9d540ba`，以及主题为 `Prepare the stage draft PR and collaboration state` 的提交。不一致时停止并报告。
+  1. 确认当前分支是 `feature/stage2-correctness`，`git status` 干净，`git log --oneline bbec056..HEAD` 恰好列出 7 个提交：`61067da`、`e4c6f6c`、`9e59c90`、`5034bae`、`9d540ba`、`7f743c3`，以及主题为 `Record user decisions on cameras, regions, and stage 3` 的提交。不一致时停止并报告。
   2. 执行 `git push -u origin feature/stage2-correctness`，再用 `git ls-remote --heads origin feature/stage2-correctness` 确认。推送被拒绝时停止并报告，不 force push。
   3. 创建 draft PR：
 
@@ -60,6 +63,7 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 
 - `next_actor` 为 `claude` 时：按提交 SHA 审查 `last_accepted` 之后的任务，复跑离线门，核对真实检查的数字。
 - 审查 TASK-131 时，独立复跑 29 个 MP4 分段前 600 帧的时间戳检查与原始 AVI 的截断检查。
+- 审查 TASK-123 时，用 `--regions-path` 指向临时文件，在内置浏览器画出 4 个默认区域并核对参考图。通过后在「给用户的说明」写明区域标记的启动命令。
 - 审查 TASK-121 时，用 `--labels-path` 指向临时文件，在内置浏览器完整试标 pilot 片段。通过后在「给用户的说明」写明标注启动方法。
 - 在阶段节点更新 `docs/collab/STAGE2_PR_BODY.md` 的状态表，由 Codex 同步到 GitHub。
 - 待办：TASK-134 完成后，用 `bbec056` 的导出快照在一段同步代理上做修复前基线运行，作为 TASK-101、TASK-102 的对照。
@@ -68,11 +72,11 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 
 当前不需要你操作代码。下一步请对 Codex 说“继续”：它会先推送阶段分支并创建 draft PR，之后进展汇总在该 PR 页面，编号会写入控制块 `pr`。
 
-- **请在开始标注前回答**（见 [PROJECT_GOALS_CN.md](PROJECT_GOALS_CN.md) §5）：
-  1. Q7：哪台是前方摄像机、哪台是右侧摄像机。证据显示加工时作业者正对文件名为カメラ2 的摄像机，与我之前的记录相反。
-  2. Q8：注视区域的类别与边界。
-- **稍后回答**：Q9（各次录制是否同一名作业者，今后是否继续录制、机位是否不变）；第 3 阶段的 D13 至 D15（见 [ROADMAP.md](ROADMAP.md)）。
-- **可以否决的先行调整**：D12 改为作业数据上的连续片段区域标注，撤回 sample2；D4 时间戳修复并入 TASK-131。
+- **已记录你 2026-10-15 的决定**：カメラ2 为前方、カメラ1 为右侧、設備カメラ为全局；区域由你在全局摄像机画面上标记；同一日期为同一作业者，机位固定；批准 D4、D12 r2 与 D13 至 D15。
+- **接下来轮到你的两件事**：
+  1. 第 1 轮审查通过后，用区域标记工具画出取货台、作业台、放置区、工作区，约 10 分钟。启动命令届时写在这里。
+  2. 第 2 轮审查通过后，标注 26 个一分钟片段，约 2 小时，可分多次。
+- **可选**：若某名作业者出现在多个日期，提供每个日期的匿名作业者编号（例如 W1、W2），即可做严格的按作业者留一评估；不提供时按日期评估。
 - **过渡期提醒**：TASK-131、TASK-132 完成前，不要用当前代码直接处理 `E:\Gazelle_Workdata` 的视频。AVI 只会处理 1 帧却显示成功，部分 MP4 会在第 3 帧报错退出。
 
 ## 已完成
@@ -87,7 +91,8 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 | 项目目标确认（v2，依据用户 2026-10-15 的回答） | 已确认 | `PROJECT_GOALS_CN.md` |
 | 作业数据分析：清单、编码、时间戳、同步、视角、样例来源 | 已实际运行（只读） | `analysis/2026-10-15-workdata-analysis.md` |
 | D1、D2 设计规范与任务契约 | 已提出，方向已获用户批准 | `../superpowers/specs/2026-10-15-face-pose-association-and-track-confirmation-design.md` |
-| 验证集规范 r2 与第 3 阶段设计提案 | 已提出，等待用户确认 | `../superpowers/specs/2026-10-15-workdata-validation-set-design.md`、`../superpowers/specs/2026-10-15-multicamera-attention-design.md` |
+| 验证集规范 r2 与第 3 阶段设计 | 已获用户批准（2026-10-15） | `../superpowers/specs/2026-10-15-workdata-validation-set-design.md`、`../superpowers/specs/2026-10-15-multicamera-attention-design.md` |
+| 用户决定：摄像机角色、区域标记方式、作业者与机位、D4、D12 r2、D13 至 D15 | 已确认 | `PROJECT_GOALS_CN.md` §4 |
 
 ## 注意
 

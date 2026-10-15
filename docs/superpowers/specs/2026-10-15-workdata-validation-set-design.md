@@ -11,15 +11,20 @@ image-space gaze points. The coordinator replaced it after two new facts:
    different workplace and that the real target data is available
    (`docs/collab/analysis/2026-10-15-workdata-analysis.md`).
 
-The user may veto this revision. Labelling does not start before the user
-answers Q7 (camera roles) and Q8 (region classes) in
-`docs/collab/PROJECT_GOALS_CN.md`.
+The user approved revision 2 on 2026-10-15. Labelling starts after TASK-121
+passes review and the user has drawn the region polygons with TASK-123.
+
+Camera roles, confirmed by the user on 2026-10-15: the front desk camera is
+`cam_b` (usually named カメラ2), the right desk camera is `cam_a` (usually named
+カメラ1), and the overview camera between the desks is `cam_e` (設備カメラ).
+Tools select files by physical camera ID, never by file name, because the
+names are swapped in folder `20260903`.
 
 ## 中文摘要
 
 - **数据**：E 盘作业数据，只读。使用 TASK-134 生成的 5 Hz 同步代理视频，三台摄像机共用一条时间轴。
 - **单位**：连续 60 秒片段。每次录制 4 段，2026-08-24 那次只有 30 分钟，取 2 段，共 26 段；另加 1 段试标片段。在三机重叠时段内分层随机抽取，种子 20261015。
-- **标注**：每 0.2 秒一个时间步。标注者同时看到三个视角，按数字键在注视区域发生变化的时刻打点。类别按 Q8 确认，默认为取货台、作业台、放置区、工作区内其他、离开工作、不在岗、无法判断。另外记录他人入镜的区间。
+- **标注**：每 0.2 秒一个时间步。标注者同时看到前方、右侧与全局三个视角，按数字键在注视区域发生变化的时刻打点。类别由你在全局摄像机画面上画出的区域生成（TASK-123）；按默认区域，类别为取货台、作业台、放置区、工作区内其他、离开工作、不在岗、无法判断。另外记录他人入镜的区间。
 - **工作量**：每段约 4 到 5 分钟，共约 2 小时，可分多次完成。
 - **隐私**：代理视频、抽出的帧与标注只保存在本机仓库之外；证据文件只含汇总指标。
 - **用途**：评估第 3 阶段的区域推断，包括逐时间步准确率、注视片段的时长误差、各区域时间占比误差，按录制日期留一交叉验证。
@@ -72,7 +77,12 @@ Rules:
 
 ## 4. Label schema
 
-### 4.1 Classes (default; final set after Q8)
+### 4.1 Classes
+
+The labelling classes are derived from the region polygons that the user
+draws on the overview camera with TASK-123: one class per target region in the
+order drawn, then `cell_other`, `away`, `absent`, and `unknown`. The table
+shows the result for the default regions.
 
 | Key | Label | Definition |
 | --- | --- | --- |
@@ -114,9 +124,9 @@ A per-step array is derived from the runs; it is never stored separately.
 
 - Local server on `127.0.0.1` using the standard library and packages already
   in the `Gazelle` environment; inline HTML and JavaScript.
-- Shows cameras A, B, and E at the same step, with E largest. Shows
-  `roi_reference.png` from the dataset root when present, otherwise the text
-  definitions.
+- Shows the front, right, and overview cameras at the same step, with the
+  overview largest. Shows `roi_reference.png` from the dataset root when
+  present, otherwise the text definitions.
 - Controls: play and pause at 1× and 0.5×; step by 0.2 s and 1 s; number keys
   set the label from the current step until the next change point; delete a
   change point; undo; a timeline bar with coloured runs; jump to the next
@@ -145,18 +155,21 @@ A per-step array is derived from the runs; it is never stored separately.
   labelled time share over labelled steps.
 - Off-task detection: precision and recall of `away` against all work classes.
 - Splits: leave-one-session-out. 95% intervals by a seeded bootstrap over
-  segments with 1000 resamples.
+  segments with 1000 resamples. Each recording date has a single worker and
+  workers differ across dates (user, 2026-10-15), so leave-one-session-out
+  approximates leave-one-worker-out. If the user later provides anonymous
+  worker IDs per date, also report leave-one-worker-out.
 - Changing any definition requires user approval.
 
 ## 8. Effort and schedule
 
 About 4 to 5 minutes per segment and about 2 hours in total, split across
-sittings. Labelling starts after TASK-121 passes review and the user answers
-Q7 and Q8.
+sittings. Labelling starts after TASK-121 passes review and the user draws the
+regions with TASK-123.
 
 ## 9. Revision history
 
 | Revision | Date | Content |
 | --- | --- | --- |
 | r1 | 2026-10-15 | 100 frames from sample1 and 200 from sample2, image-space gaze points, single-camera gating evaluation (D10). Withdrawn. |
-| r2 | 2026-10-15 | This document. |
+| r2 | 2026-10-15 | This document. Approved by the user the same day, together with the camera roles and the region-marking approach. |

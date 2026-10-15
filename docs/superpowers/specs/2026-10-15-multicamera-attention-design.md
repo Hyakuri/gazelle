@@ -1,8 +1,10 @@
-# Multi-Camera Attention Region Design (proposal)
+# Multi-Camera Attention Region Design
 
-Status: proposal by the coordinator (Claude), 2026-10-15. It needs user
-approval of decisions D13, D14, and D15 in `docs/collab/ROADMAP.md` before any
-stage-3 task contract is written. Nothing here is implemented.
+Status: approved. The coordinator (Claude) proposed it on 2026-10-15 and the
+user approved decisions D13, D14, and D15 as recommended on the same day.
+Nothing here is implemented yet. The stage-3 task contracts (TASK-141 to
+TASK-144) will be written at stage 2 acceptance, against the actual output
+schemas of TASK-123, TASK-133, TASK-134, and TASK-121.
 
 Inputs: `docs/collab/PROJECT_GOALS_CN.md` (v2),
 `docs/collab/analysis/2026-10-15-workdata-analysis.md`, and
@@ -11,9 +13,11 @@ Inputs: `docs/collab/PROJECT_GOALS_CN.md` (v2),
 ## 中文摘要
 
 - **问题**：逐时刻判断作业者在看哪个作业区域，并统计占比、时长、切换与离开工作。单台摄像机做不到，需要三台融合。
-- **流程**：数据层（清单、重封装、时钟映射、5 Hz 同步代理）；单机证据（A、B 提供头部检测与跟踪、头部姿态、Gaze-LLE 热图与 in/out；E 提供姿态关键点与双手位置）；逐时间步特征表；可解释分类器；时序平滑；停留片段与统计；复核视频与报告。
+- **流程**：数据层（清单、重封装、时钟映射、5 Hz 同步代理）；单机证据（前方与右侧摄像机提供头部检测与跟踪、头部姿态、Gaze-LLE 热图与 in/out；全局摄像机提供姿态关键点与双手位置）；逐时间步特征表；可解释分类器；时序平滑；停留片段与统计；复核视频与报告。
 - **评估**：用区域标注按录制日期留一交叉验证，并与只用单台摄像机、只用头部姿态、只用 Gaze-LLE 的方案比较。原 D10 的门控比较也在这里完成。
-- **决策**：D13 分析时间轴为 5 Hz、1080p；D14 区域类别与连续片段标注；D15 融合方法为特征加可解释分类器加时序平滑，几何标定留作后续。
+- **决策**：用户 2026-10-15 已批准。D13 分析时间轴为 5 Hz、1080p；D14 区域类别与连续片段标注，区域由用户在全局摄像机画面上画出；D15 融合方法为特征加可解释分类器加时序平滑，几何标定留作后续。
+- **摄像机角色**：前方为カメラ2（物理编号 `cam_b`），右侧为カメラ1（`cam_a`），全局为設備カメラ（`cam_e`）。
+- **契约**：TASK-141 至 TASK-144 在阶段 2 验收时按阶段 2 工具的实际输出格式编写。
 - **风险**：鱼眼畸变、遮挡、作业者与日期之间的差异、标注噪声、俯视摄像机缺少头部、类别不平衡。
 
 ## 1. Problem
@@ -21,9 +25,15 @@ Inputs: `docs/collab/PROJECT_GOALS_CN.md` (v2),
 For each step `t` on the common clock, estimate the attention region
 `r(t)` of the worker, with class probabilities, from three fixed cameras:
 
-- A and B: face cameras on the desks. They see the face but not the desks.
-- E: corner overview camera. It sees the desks, hands, and torso but rarely
-  the head.
+- Front camera `cam_b` (usually named カメラ2) and right camera `cam_a`
+  (usually named カメラ1): face cameras on the desks. They see the face but
+  not the desks.
+- Overview camera `cam_e` (設備カメラ), between the two desks. It sees the
+  desks, hands, and torso but rarely the head.
+
+The analysis report calls these cameras B, A, and E respectively. The roles
+were confirmed by the user on 2026-10-15; the camera positions are fixed for
+all recordings.
 
 Outputs per recording: a step timeline, attention episodes with durations, and
 summary statistics: time share per region, dwell-time distribution,
@@ -31,10 +41,11 @@ transition counts, the share of `away`, and the share of `absent`.
 
 ## 2. Constraints from the data
 
-- Gaze-LLE needs the head and the target in the same image. In A and B, desk
-  targets are out of frame; in E, the head is out of frame. Per-camera
+- Gaze-LLE needs the head and the target in the same image. In the front and right
+  cameras, desk targets are out of frame; in the overview camera, the head is
+  out of frame. Per-camera
   heatmap peaks therefore cannot name a desk region.
-- Out-of-frame in A or B does not mean off-task.
+- Out-of-frame in the front or right camera does not mean off-task.
 - All three lenses are fisheye and uncalibrated.
 - Recordings span seven dates and at least two workers.
 - The burned-in clocks agree within one second; container time is not
@@ -50,23 +61,25 @@ recording shows the same clock instant.
 
 ### 3.2 Per-camera evidence (TASK-141)
 
-- A and B: run the existing CLI on each proxy with
+- Front and right cameras: run the existing CLI on each proxy with
   `--head-source mediapipe --max-heads 1 --gazelle-head-mode all`, without
   rendering. Per step, derive: face detected; landmarks available; yaw,
   pitch, and roll from `facial_transformation_matrix` with the sign
   conventions fixed by TASK-002; head box centre and size; Gaze-LLE in/out
   score; heatmap peak; heatmap mass inside per-camera image regions (for
   example the aisle or the jig) drawn once on a reference frame.
-- E: run MediaPipe Pose on the proxy and export shoulders, elbows, wrists,
+- Overview camera: run MediaPipe Pose on the proxy and export shoulders, elbows, wrists,
   and visibility. This needs a new exporter; the head provider stays
-  unchanged. Derive hands-in-region flags from region polygons drawn on an E
-  reference frame, and the shoulder-line angle.
+  unchanged. Derive hands-in-region flags from the region polygons that the
+  user draws on the overview reference frame with TASK-123, and the
+  shoulder-line angle.
 - Missing evidence stays missing: a value plus an availability flag, never a
   fabricated value.
 
 ### 3.3 Fusion and temporal model (TASK-142)
 
-- Baselines: (b1) head-pose sectors from A and B; (b2) E hands-in-region;
+- Baselines: (b1) head-pose sectors from the front and right cameras;
+  (b2) overview hands-in-region;
   (b3) Gaze-LLE features only.
 - Main model: multinomial logistic regression and gradient-boosted trees from
   scikit-learn (1.6.1, already in the `Gazelle` environment) on the step
@@ -77,19 +90,23 @@ recording shows the same clock instant.
 
 ### 3.4 Evaluation (TASK-143)
 
-Metrics from the validation-set design §7, leave-one-session-out. Ablations:
+Metrics from the validation-set design §7, leave-one-session-out. Each date
+has one worker and workers differ across dates, so this approximates
+leave-one-worker-out. Ablations:
 each camera alone, each feature family alone, with and without smoothing.
 The former D10 question becomes a feature comparison here: `eligible`,
-`observed`, and `all` head selection in A and B.
+`observed`, and `all` head selection in the front and right cameras.
 
 ### 3.5 Outputs and review (TASK-144)
 
 Outside the repository, per recording: `attention_steps.jsonl`,
 `attention_episodes.jsonl`, `attention_summary.json`, and a review video with
-A, B, and E side by side and the predicted label overlaid. Outputs record the
+the front, right, and overview views side by side and the predicted label overlaid. Outputs record the
 code commit, configuration, model version, and time-map version.
 
 ## 4. Decisions
+
+All three were approved by the user on 2026-10-15 as recommended.
 
 | Decision | Recommendation | Alternatives |
 | --- | --- | --- |
@@ -99,7 +116,8 @@ code commit, configuration, model version, and time-map version.
 
 Rationale for D13: attention episodes of interest last 0.4 seconds or more,
 so 0.2-second steps resolve them, and the frame count drops by about 80%.
-Faces in A and B remain 150 to 300 pixels wide at 1080p.
+Faces in the front and right cameras remain 150 to 300 pixels wide at
+1080p.
 
 ## 5. Risks
 
@@ -114,8 +132,12 @@ Faces in A and B remain 150 to 300 pixels wide at 1080p.
   frames. MediaPipe runs on CPU; Gaze-LLE runs on the shared GPU after the
   free-memory check.
 
-## 6. Open questions
+## 6. Resolved and open questions
 
-Q7 (front and right camera roles), Q8 (region classes and boundaries), and Q9
-(worker identity across recordings, future recordings, stable camera
-positions) in `docs/collab/PROJECT_GOALS_CN.md`.
+- Q7, resolved: front is `cam_b`, right is `cam_a`, overview is `cam_e`.
+- Q8, resolved in approach: the user will draw the regions on the overview
+  camera with TASK-123; the class list follows from that file.
+- Q9, resolved: one worker per date, different workers across dates, fixed
+  camera positions.
+- Optional: anonymous worker IDs per date would allow a strict
+  leave-one-worker-out evaluation.

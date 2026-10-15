@@ -3,7 +3,8 @@
 状态：ready（依赖 TASK-133）
 创建：2026-10-15（Asia/Tokyo）　协调者：Claude　实现者：Codex　验收：Claude
 依据：[作业数据分析](../analysis/2026-10-15-workdata-analysis.md) §4、§6；[验证集规范 r2](../../superpowers/specs/2026-10-15-workdata-validation-set-design.md)；[多摄像机设计提案](../../superpowers/specs/2026-10-15-multicamera-attention-design.md) §3.1。
-决策：D13（5 Hz、1080p）尚待用户批准。本任务只生成标注与评估所需的数据，参数可配置；若用户改选其他频率，重新运行即可，不需要改代码。
+决策：D13（画面时钟上的 5 Hz、1920×1080）用户 2026-10-15 批准。参数仍保持可配置，以后改频率只需重新运行。
+摄像机角色：前方 `cam_b`、右侧 `cam_a`、全局 `cam_e`（用户 2026-10-15 确认）。代理视频文件名使用角色名，例如 `proxy_front.mp4`、`proxy_right.mp4`、`proxy_overview.mp4`，旁注与 `session.json` 同时记录角色与物理编号。
 授权：2026-10-14 本地运算授权；2026-10-15 用户提供 `E:\Gazelle_Workdata` 供分析，只读使用。
 
 ## 1. 契约
@@ -19,7 +20,7 @@
 1. **时间网格**：`t_k = t0 + k × step`，默认 `step = 0.2` 秒；`t0` 为重叠起点向上取整到 `step` 的倍数；帧数 `N` 使网格完全落在重叠时段内。`--step-hz` 与 `--size` 可配置，默认 5 与 1920×1080。
 2. **取帧**：对每台摄像机、每个 `t_k`，选择映射后时钟时刻最接近 `t_k` 的源帧，可跨分段。最近源帧与 `t_k` 相差超过 `0.5 × step` 时仍取最近帧，但标记为缺口。
 3. **解码与编码**：按分段顺序流式解码，不把整段视频读入内存；由 FFmpeg 缩放后经管道传给 Python，或使用 OpenCV。编码使用现有 FFmpeg 的 libx264（CPU），CRF 20、`yuv420p`、恒定帧率等于 `step-hz`、不含音频；先写临时文件，校验后原子改名。
-4. **旁注文件**：每段代理一个 `proxy_<cam>.frames.json`，逐帧记录 `k`、`t_k`、源文件、源 PTS、时间差、缺口标记。会话文件 `session.json` 记录网格参数、`t0`、`N`、三台摄像机、时间映射版本、代码提交 SHA。
+4. **旁注文件**：每段代理一个 `proxy_<角色>.frames.json`，逐帧记录 `k`、`t_k`、源文件、源 PTS、时间差、缺口标记。会话文件 `session.json` 记录网格参数、`t0`、`N`、三台摄像机、时间映射版本、代码提交 SHA。
 5. **可恢复**：按会话与摄像机断点续跑；已有且校验通过的输出跳过；`--force` 才重做。长时间运行时进程优先级低于正常。
 6. **测试**（默认隔离）：网格计算；跨分段的最近帧选择与缺口标记；旁注 schema；FFmpeg 命令参数；原子发布；不读真实视频，不调用真实 FFmpeg。
 7. **真实运行**（仅 CPU，预计数小时）：全部 7 次录制。输出到 `C:\Users\yun\Documents\Claude_Code\gazelle_data\workdata\proxies\<会话>\`。实施报告记录每次录制的 `N`、各摄像机缺口数、用时、输出大小。
