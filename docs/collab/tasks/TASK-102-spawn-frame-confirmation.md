@@ -49,11 +49,11 @@
 
 - 修改：`gazelle/runtime/perception/tracking.py`、`gazelle/runtime/perception/contracts.py`、`gazelle/runtime/perception/provider.py`（仅为传递 `provisional`）、`gazelle/runtime/perception/outputs.py`、对应测试文件、`tests/test_usage_docs.py`、四份用户文档的相关段落。
 - 按 [协作方案](../COLLABORATION_PLAN_CN.md) §4 在阶段分支提交并推送。
-- 运行下方离线验证；运行下方真实 smoke（已获本地运算授权，仅用缓存资源，输出写到仓库外）。
+- 运行下方离线验证；运行下方真实 smoke（已获本地运算授权，仅用缓存资源，输出写到仓库外）。可只读使用作业数据补充真实 smoke：TASK-131 合入后，用 FFmpeg 流复制从 MP4 分段或 TASK-134 的代理视频截取 15 秒片段到 `C:\Users\yun\Documents\Claude_Code\gazelle_runs\` 再运行，不写入 `E:\Gazelle_Workdata\`。sample1 只作冒烟输入；sample2 不属于目标场景，不再使用。运行任何 GPU 推理前按协作方案 §5 检查空闲显存。
 
 ### 禁止
 
-新建分支或 PR、合并、force push；修改 Conda 环境；下载；修改上面未列出的文件；处理用户独立目录中的视频。
+新建分支或 PR、合并、force push；修改 Conda 环境；下载；修改上面未列出的文件；写入或修改用户独立目录或 `E:\Gazelle_Workdata\` 中的任何文件。
 
 ### 验收标准
 
@@ -90,7 +90,7 @@ git status --short
 - 需真实 smoke：是。
 - 文档同步：需要，四份文档加 `tests/test_usage_docs.py`。
 - 风险与回退：IoU 关联在拥挤场景可能错配；一帧误检会出现一帧。回退方式是 `git revert` 本任务的提交。
-- 依赖：无。可在 TASK-001 之后直接执行。
+- 依赖：无。作业数据补充 smoke 需要 TASK-131 已合入。
 
 ## 2. 实施报告（Codex 追加，不要修改上文）
 
