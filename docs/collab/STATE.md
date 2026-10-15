@@ -13,7 +13,7 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 | next_actor | codex |
 | current_task | `docs/collab/tasks/TASK-131-video-reader-timestamps-and-truncation.md` |
 | after_current | `docs/collab/tasks/TASK-132-workdata-inventory-and-avi-remux.md`，然后 `docs/collab/tasks/TASK-123-overview-region-marking-tool.md`，然后 `docs/collab/tasks/TASK-001-overwrite-safe-validation.md`，然后停止并把 `next_actor` 改为 `claude` |
-| last_pushed | 尚未推送。本地有 7 个阶段提交，最后一个的主题是 `Record user decisions on cameras, regions, and stage 3` |
+| last_pushed | 尚未推送。本地有 8 个阶段提交，最后一个的主题是 `Revise contracts after Codex takeover review` |
 | last_accepted | `bbec056`（迁移验收基线，Gate A/B/C 通过） |
 | 更新 | 2026-10-15，Claude |
 
@@ -42,8 +42,9 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 
 ## 给 Codex 的说明
 
+- **本轮第零步：环境预检。** 按协作方案 §3.1 第 0 步与 §5「Codex 运行环境」逐项检查。任何一项不通过，就停止并在回复中列出缺少的权限，不修改配置，不写仓库文件。
 - **本轮第一步：首次推送并创建 draft PR。** 用户已于 2026-10-15 要求开 draft PR；Claude 的推送被本机工具权限拦截，所以由你执行。
-  1. 确认当前分支是 `feature/stage2-correctness`，`git status` 干净，`git log --oneline bbec056..HEAD` 恰好列出 7 个提交：`61067da`、`e4c6f6c`、`9e59c90`、`5034bae`、`9d540ba`、`7f743c3`，以及主题为 `Record user decisions on cameras, regions, and stage 3` 的提交。不一致时停止并报告。
+  1. 确认当前分支是 `feature/stage2-correctness`，`git status` 干净，`git log -1 --format=%s` 为 `Revise contracts after Codex takeover review`，且 `git diff --name-only bbec056..HEAD` 中没有 `.py` 文件。不一致时停止并报告。
   2. 执行 `git push -u origin feature/stage2-correctness`，再用 `git ls-remote --heads origin feature/stage2-correctness` 确认。推送被拒绝时停止并报告，不 force push。
   3. 创建 draft PR：
 
@@ -70,7 +71,9 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 
 ## 给用户的说明
 
-当前不需要你操作代码。下一步请对 Codex 说“继续”：它会先推送阶段分支并创建 draft PR，之后进展汇总在该 PR 页面，编号会写入控制块 `pr`。
+当前不需要你操作代码。下一步请按 [QUICKSTART_CN.md](QUICKSTART_CN.md)「一次性设置」让 Codex 在新目录中工作：新开会话并信任该目录，在 `C:\Users\yun\.codex\config.toml` 加入三个可写目录，然后说一次采用范式的话，再说“继续”。Codex 会先做环境预检，再推送阶段分支并创建 draft PR；之后进展汇总在该 PR 页面，编号会写入控制块 `pr`。
+
+- **2026-10-15 契约修订**：Codex 接手核对时指出两处问题，均已修正。TASK-131 的截断容差改为按要求的帧数判断，并写明逐帧时间戳算法；TASK-121、TASK-123、TASK-132 至 TASK-134 改为在四份用户文档的「研究数据工具」小节中说明各工具。
 
 - **已记录你 2026-10-15 的决定**：カメラ2 为前方、カメラ1 为右侧、設備カメラ为全局；区域由你在全局摄像机画面上标记；同一日期为同一作业者，机位固定；批准 D4、D12 r2 与 D13 至 D15。
 - **接下来轮到你的两件事**：
@@ -93,6 +96,7 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 | D1、D2 设计规范与任务契约 | 已提出，方向已获用户批准 | `../superpowers/specs/2026-10-15-face-pose-association-and-track-confirmation-design.md` |
 | 验证集规范 r2 与第 3 阶段设计 | 已获用户批准（2026-10-15） | `../superpowers/specs/2026-10-15-workdata-validation-set-design.md`、`../superpowers/specs/2026-10-15-multicamera-attention-design.md` |
 | 用户决定：摄像机角色、区域标记方式、作业者与机位、D4、D12 r2、D13 至 D15 | 已确认 | `PROJECT_GOALS_CN.md` §4 |
+| Codex 只读接手核对（HEAD `ef203a4`）：理解一致；指出 TASK-131 截断容差错误、研究工具文档同步冲突、会话写权限仍在旧目录 | 契约问题已由 Claude 修正；权限待用户设置 | `tasks/TASK-131-video-reader-timestamps-and-truncation.md`、`QUICKSTART_CN.md` |
 
 ## 注意
 

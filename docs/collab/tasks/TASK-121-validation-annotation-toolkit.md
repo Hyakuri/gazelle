@@ -40,7 +40,6 @@
 - 不改运行时代码（`gazelle/`）与 CLI。
 - 不做区域推断与评估（第 3 阶段）。
 - 不在界面中显示任何模型预测。
-- 不改四份用户文档。
 
 ### 依据材料
 
@@ -54,7 +53,7 @@
 
 ### 允许动作
 
-新建 `tools/validation/**` 与 `tests/test_validation_*.py`；读取数据根；在 `C:\Users\yun\Documents\Claude_Code\gazelle_validation\` 下创建数据集；按协作方案 §4 提交并推送（只提交代码、测试、默认类别配置与指南），并在 draft PR 发英中双语评论。
+新建 `tools/validation/**` 与 `tests/test_validation_*.py`；更新四份用户文档的「研究数据工具」小节与 `tests/test_usage_docs.py`；读取数据根；在 `C:\Users\yun\Documents\Claude_Code\gazelle_validation\` 下创建数据集；按协作方案 §4 提交并推送（只提交代码、测试、默认类别配置与指南），并在 draft PR 发英中双语评论。
 
 ### 禁止
 
@@ -87,7 +86,7 @@ git status --short
 
 - 需独立审查：是（Claude 审查代码并实际试用界面）。
 - 需真实运行：生成数据集，仅 CPU。
-- 文档同步：标注指南；四份用户文档不变，原因是这是研究工具，不改变运行时行为。
+- 文档同步：需要。在四份用户文档的「研究数据工具」小节（TASK-132 建立）中加入本任务的工具：写明用途、在仓库根目录运行的入口命令、读取什么、写到哪里、是否调用 FFmpeg、是否使用 GPU 或网络，并链接 `tools/validation/ANNOTATION_GUIDE_CN.md`。`README.md` 与 `README_CN.md` 只放简介与指向 USAGE 的链接；`docs/USAGE.md` 与 `docs/USAGE_CN.md` 放工具表。中英文语义一致；`tests/test_usage_docs.py` 在两份 USAGE 中锁定本任务的入口模块名。原因：这些工具由用户或 Codex 直接运行，属于用户可见的用法，适用 AGENTS.md 的文档同步规则（2026-10-15 按 Codex 接手核对修正）。
 - 风险与回退：工具问题只影响标注效率与数据集，不影响运行时；回退方式是 `git revert`，数据集目录可删除重建。
 - 依赖：TASK-134；TASK-123 的工具与用户画好的正式区域文件。区域文件尚未画好时，先用默认类别完成开发与测试，正式数据集等区域文件就绪后再生成。
 

@@ -44,7 +44,7 @@
 
 ### 依据材料
 
-- 基线：`feature/mediapipe-head-tracking` @ `bbec056`，加上 `docs/collab/STATE.md` 记录的未提交 overlay。
+- 基线：阶段分支 `feature/stage2-correctness` 执行时的 HEAD。它在 `bbec056` 之上只有文档提交，原先的交接 overlay 已在其中提交（2026-10-15 更正）。
 - 代码：`gazelle/runtime/config.py:274-395`、`gazelle/runtime/heads.py:14-170`、`gazelle/runtime/geometry.py:24-42`、`gazelle/runtime/pipeline.py:67-145`、`gazelle/runtime/cli.py:54-99`。
 - 测试：`tests/test_runtime_cli.py`（退出码 2 的写法见 `:302-310`、`:590-596`）、`tests/test_image_pipeline.py:187-194`、`:369-375`、`tests/test_usage_docs.py:515-553`。
 - 文档：`docs/USAGE.md:141`、`:148-151`、`:288`、`:473` 及 `docs/USAGE_CN.md` 同行；`README.md:182`；`README_CN.md:191`。

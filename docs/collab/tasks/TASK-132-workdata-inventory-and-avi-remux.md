@@ -18,6 +18,7 @@
 1. **摄像机身份配置** `tools/workdata/camera_roles.json`（提交到仓库）：
    - 物理编号 `cam_a`、`cam_b`、`cam_e`，以及每台的识别特征：文件名规则、时钟样式（A 紧贴左边缘，B 向右缩进，E 带星期与 `CAM3`）、MP4 容器帧率（A 为 30，B 为 50）。
    - 按会话的覆盖规则：`20260903` 中 `カメラ1` 对应 `cam_b`，`カメラ2` 对应 `cam_a`。
+   - 文件名中的日文模式只写在这个 JSON 配置里，Python 代码保持 ASCII（AGENTS.md）。
    - 角色映射（用户 2026-10-15 确认：カメラ2 是前方，カメラ1 是右侧，設備カメラ是两张工作台之间的全局摄像机）：`front` 为 `cam_b`，`right` 为 `cam_a`，`overview` 为 `cam_e`。映射以物理编号为准；`20260903` 的文件名互换由上一条覆盖规则纠正，所以该文件夹中名为カメラ1 的文件才是前方摄像机。
 2. **清单** `python -m tools.workdata.inventory --root <源目录> --out <数据根>\inventory\inventory.json`：
    - 每个文件记录：会话文件夹、相对路径、大小、修改时间、SHA-256（按大小与修改时间缓存，未变化时不重算）、ffprobe 视频流信息（编码、宽高、`r_frame_rate`、`avg_frame_rate`、`nb_frames`、`duration`、视频流 `start_time`）、是否有音轨、前 60 秒小于 64 字节的包所占比例、分段序号（文件名中的 `-1`、`-2`、`-3`）、物理摄像机编号与判定来源（`filename` 或 `override`）、`needs_remux`。
@@ -48,7 +49,7 @@
 
 ### 允许动作
 
-新建 `tools/__init__.py`、`tools/workdata/**`、`tests/test_workdata_*.py`；读取源目录；写数据根；按协作方案 §4 提交并推送，并在 draft PR 发英中双语评论。
+新建 `tools/__init__.py`、`tools/workdata/**`、`tests/test_workdata_*.py`；更新四份用户文档的「研究数据工具」小节与 `tests/test_usage_docs.py`；读取源目录；写数据根；按协作方案 §4 提交并推送，并在 draft PR 发英中双语评论。
 
 ### 禁止
 
@@ -80,7 +81,7 @@ git status --short
 
 - 需独立审查：是（数据完整性）。
 - 需真实运行：是，仅 CPU 与磁盘。
-- 文档同步：四份用户文档不变，原因是这些工具服务于本项目的数据准备，不改变运行时行为；用法写在 `tools/workdata/README_CN.md`。
+- 文档同步：需要。在四份用户文档中新建「研究数据工具」小节：写明用途、在仓库根目录运行的入口命令、读取什么、写到哪里、是否调用 FFmpeg、是否使用 GPU 或网络，并链接 `tools/workdata/README_CN.md`。`README.md` 与 `README_CN.md` 只放简介与指向 USAGE 的链接；`docs/USAGE.md` 与 `docs/USAGE_CN.md` 放工具表。中英文语义一致；`tests/test_usage_docs.py` 在两份 USAGE 中锁定本任务的入口模块名。原因：这些工具由用户或 Codex 直接运行，属于用户可见的用法，适用 AGENTS.md 的文档同步规则（2026-10-15 按 Codex 接手核对修正）。
 - 风险与回退：重封装只复制视频流，源文件不变；问题只影响缓存，删除缓存即可重建。
 - 依赖：无。
 

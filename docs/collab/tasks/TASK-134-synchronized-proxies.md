@@ -40,7 +40,7 @@ TASK-132 的清单与重封装结果；TASK-133 的时间映射与重叠时段�
 
 ### 允许动作
 
-新建与修改 `tools/workdata/proxies.py` 及其测试 `tests/test_workdata_*.py`；读取源目录与数据根；写数据根；按协作方案 §4 提交并推送，并在 draft PR 发英中双语评论。
+新建与修改 `tools/workdata/proxies.py` 及其测试 `tests/test_workdata_*.py`；更新四份用户文档的「研究数据工具」小节与 `tests/test_usage_docs.py`；读取源目录与数据根；写数据根；按协作方案 §4 提交并推送，并在 draft PR 发英中双语评论。
 
 ### 禁止
 
@@ -71,7 +71,7 @@ git status --short
 
 - 需独立审查：是（同步正确性）。
 - 需真实运行：是，仅 CPU。
-- 文档同步：四份用户文档不变，原因同 TASK-132；用法写入 `tools/workdata/README_CN.md`。
+- 文档同步：需要。在四份用户文档的「研究数据工具」小节（TASK-132 建立）中加入本任务的工具：写明用途、在仓库根目录运行的入口命令、读取什么、写到哪里、是否调用 FFmpeg、是否使用 GPU 或网络，并链接 `tools/workdata/README_CN.md`。`README.md` 与 `README_CN.md` 只放简介与指向 USAGE 的链接；`docs/USAGE.md` 与 `docs/USAGE_CN.md` 放工具表。中英文语义一致；`tests/test_usage_docs.py` 在两份 USAGE 中锁定本任务的入口模块名。原因：这些工具由用户或 Codex 直接运行，属于用户可见的用法，适用 AGENTS.md 的文档同步规则（2026-10-15 按 Codex 接手核对修正）。
 - 风险与回退：编码耗时长，与用户的其他实验争用 CPU，以低优先级运行；代理视频可删除重建。
 - 依赖：TASK-133。
 

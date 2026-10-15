@@ -22,16 +22,50 @@
 1. `gazelle/runtime/media.py` 中 `VideoFrameReader.__iter__` 的时间戳规则：
    - R1：输出的 `timestamp_ms` 有限、非负，按整数毫秒取整（`int(round(x))`）后严格递增。
    - R2：`POS_MSEC` 有限、非负且取整后大于上一帧时，原样使用，保留可变帧率的真实间隔。
-   - R3：个别不递增的值（包括下标 1 重复的 0）用满足 R1 的最小增量修补，且不推后之后的正常值。示例：原始 `[0, 0, 30, 98, 130]` 输出 `[0, 1, 30, 98, 130]`；原始 `[500, 480, 520]` 输出 `[500, 501, 520]`。
-   - R4：整段 `POS_MSEC` 不可用时（非有限、负数，或从下标 2 起仍持续为 0），退回现有的 `frame_index * 1000 / fps`，同样满足 R1。判定规则写进代码注释与测试。
+   - R3：个别不递增的值（包括下标 1 重复的 0）用满足 R1 的最小增量修补，且不推后之后的正常值。
+   - R4：`POS_MSEC` 缺失时按上一帧加一个标称帧间隔估计，同样满足 R1。
    - R5：每帧记录时间戳来源，取值为 `container`、`repaired`、`fps_fallback` 之一。`VideoFrame` 新增带默认值的字段，现有构造方式保持兼容。
-2. `gazelle/runtime/pipeline.py` 的截断检测：
-   - 期望帧数：`metadata.frame_count` 可用时，未设置 `--max-frames` 取 `frame_count`，设置了取 `min(max_frames, frame_count)`；`frame_count` 不可用时不检测。
-   - 若 `frames_read < expected - tolerance`，其中 `tolerance = max(2, ceil(0.005 * frame_count))`，则先写出 `run_config.json`（`decode_complete` 为 false），关闭资源，再抛出明确错误，CLI 以非零码退出。已写出的 JSONL 保留。
-   - 错误信息包含已读帧数、期望帧数、输入路径，并提示“文件可能含无法解码的数据包；AVI 空包的处理见 USAGE”。
-3. 视频 `run_config.json` 新增三个键：`frames_expected`（未知时为 `null`）、`decode_complete`（布尔）、`timestamp_sources`（三种来源的计数对象）。
-4. 四份用户文档：说明时间戳取自容器并做最小修补；解码提前停止即失败；`run_config.json` 的三个新键（更新 USAGE 中的键表与计数）；给出 AVI 空包的无损重封装命令（作业数据分析 §3.1）。`tests/test_usage_docs.py` 锁定三个新键名与重封装命令中的 `noise=drop`。
-5. 测试（默认隔离，不读真实视频）：用 fake capture 覆盖 R1 至 R5 的全部示例、整段回退、中间夹有 NaN、取整碰撞（例如 10.2 与 10.4）；截断检测的正例、反例与 `--max-frames` 情况；`run_config.json` 新键；现有 `tests/test_media.py`、`tests/test_video_pipeline.py` 全部通过。
+   - 逐帧算法（r2，2026-10-15 写明，供实现与测试直接对照）。记 `raw` 为该帧的 `POS_MSEC`，`p` 为上一帧输出值取整后的整数毫秒，`fps` 为 `resolve_video_fps(metadata.fps)`：
+     1. 第一帧：`raw` 有限且非负时输出 `raw`（`container`），否则输出 `0.0`（`fps_fallback`）。
+     2. 之后各帧：`raw` 有限、非负且 `int(round(raw)) > p` 时输出 `raw`（`container`）。
+     3. 否则，若 `raw` 有限、非负，且不属于“下标不小于 2 而 `raw` 为 0”，输出 `p + 1`（`repaired`）。
+     4. 其余情况（非有限、负数，或下标不小于 2 而 `raw` 为 0）输出 `p + 1000 / fps`（`fps_fallback`）。
+   - 单测逐条断言下表。数值单位为毫秒，后缀字母表示来源：`c` 为 `container`，`r` 为 `repaired`，`f` 为 `fps_fallback`。
+
+     | 原始 `POS_MSEC` | fps | 输出 |
+     | --- | --- | --- |
+     | `[0, 0, 30, 98, 130]` | 20 | `[0 c, 1 r, 30 c, 98 c, 130 c]` |
+     | `[500, 480, 520]` | 30 | `[500 c, 501 r, 520 c]` |
+     | `[10.2, 10.4]` | 30 | `[10.2 c, 11 r]` |
+     | `[0, 0, 0, 0, 0]` | 30 | `[0 c, 1 r, 34.333 f, 67.333 f, 100.333 f]` |
+     | `[0, 33.3, NaN, 100]` | 30 | `[0 c, 33.3 c, 66.333 f, 100 c]` |
+     | `[-5, 33.3, 66.7]` | 30 | `[0 f, 33.3 c, 66.7 c]` |
+     | `[0, 0, 0, 33.3, 66.7]` | 30 | `[0 c, 1 r, 34.333 f, 35 r, 66.7 c]` |
+
+     此前“整段不可用时按 `frame_index * 1000 / fps` 推算”的旧规则由第 4 步取代；对时间戳完全不可用的视频，结果仍是近似恒定帧率的递增序列。
+2. `gazelle/runtime/pipeline.py` 的截断检测（r2，2026-10-15 修正。r1 用整段帧数计算容差，`--max-frames` 较小时永远不会报错，由 Codex 接手核对时发现）：
+   - `metadata.frame_count` 不可用时不检测，`frames_required` 与 `decode_complete` 记为 `null`。
+   - 容差只用于抵消容器帧数的估计误差：`count_tolerance = max(2, ceil(0.005 * frame_count))`。
+   - 设置了 `--max-frames` 且 `max_frames <= frame_count - count_tolerance` 时，`frames_required = max_frames`，一帧都不能少；其余情况 `frames_required = frame_count - count_tolerance`。
+   - `frames_read < frames_required` 即判为截断：先写出 `run_config.json`（`decode_complete` 为 false），关闭资源，不做 H.264 终结，再抛出明确错误，CLI 以非零码退出。已写出的 JSONL 保留。
+   - 错误信息包含已读帧数、要求帧数、容器帧数与输入路径，并提示“文件可能含无法解码的数据包；AVI 空包的处理见 USAGE”。
+   - 单测逐条断言下表：
+
+     | 容器帧数 | `--max-frames` | 实际读出 | 结果 |
+     | --- | --- | --- | --- |
+     | 108219 | 无 | 1 | 截断 |
+     | 108219 | 50 | 1 | 截断 |
+     | 33600 | 300 | 300 | 正常 |
+     | 33600 | 300 | 299 | 截断 |
+     | 33600 | 33590 | 33550 | 正常（`max_frames` 接近结尾时使用容差） |
+     | 1000 | 无 | 996 | 正常 |
+     | 30 | 无 | 1 | 截断 |
+     | 30 | 100 | 30 | 正常 |
+     | 未知 | 无 | 1 | 不检测 |
+
+3. 视频 `run_config.json` 新增四个键：`container_frame_count`（未知时为 `null`）、`frames_required`（不检测时为 `null`）、`decode_complete`（布尔，不检测时为 `null`）、`timestamp_sources`（三种来源的计数对象）。
+4. 四份用户文档：说明时间戳取自容器并做最小修补；解码提前停止即失败及其判定规则；`run_config.json` 的四个新键（更新 USAGE 中的键表与计数）；给出 AVI 空包的无损重封装命令（作业数据分析 §3.1）。`tests/test_usage_docs.py` 锁定四个新键名与重封装命令中的 `noise=drop`。
+5. 测试（默认隔离，不读真实视频）：用 fake capture 覆盖第 1 条表格中的全部时间戳用例与第 2 条表格中的全部截断用例；截断时不做 H.264 终结；`run_config.json` 新键；现有 `tests/test_media.py`、`tests/test_video_pipeline.py` 全部通过。
 
 ### 非目标
 

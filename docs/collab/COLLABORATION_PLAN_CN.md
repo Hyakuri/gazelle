@@ -1,4 +1,4 @@
-# Claude × Codex 协同开发方案（v0.4，2026-10-15）
+# Claude × Codex 协同开发方案（v0.5，2026-10-15）
 
 本文件是 Claude 与 Codex 共用的协作规则，补充而不替代 `AGENTS.md`。冲突时的优先级：用户当前指令，然后 `AGENTS.md`，然后本文件。
 用户的《当前对话执行范式 v1.1》按其自身规则只在明确采用的对话中生效，本文件不代替采用（见 §6）。
@@ -32,10 +32,11 @@ Codex 把结果提交并推送到 GitHub 阶段分支留档，并在阶段分支
 
 ### 3.1 Codex 一轮
 
+0. 新的 Codex 会话第一次执行前，以及权限设置变更后，先做环境预检（§5「Codex 运行环境」）。任何一项不通过就停止，在回复中列出缺少的权限；不修改任何配置，不写仓库文件。
 1. 读 STATE.md。若 `writer` 不是 `none`，或 `next_actor` 不是 `codex`，停止并说明原因。
 2. 把 `writer` 改为 `codex`。
 3. 若工作区有 Claude 留下的未提交文档改动（`docs/collab/**`、`docs/superpowers/specs/**`、`AGENTS.md`、`CLAUDE.md`），先只提交这些路径，提交信息为 `Record coordinator updates`，然后推送。
-4. 执行 `current_task`：实施、测试、离线门全部通过后按任务提交并推送。
+4. 执行 `current_task`：实施、测试、离线门全部通过后按任务提交并推送。发现契约与 `AGENTS.md`、代码事实或其他契约矛盾时，不自行改写契约：停止该任务，在实施报告中写明证据，把 `next_actor` 改为 `claude`。
 5. 在任务文件末尾追加「实施报告」，写明提交 SHA、命令与结果、证据类型、未运行的检查；提交并推送。
 6. 更新 STATE.md 中归 Codex 维护的字段：任务状态改为 `ready-for-review`、`last_pushed` 写最新 SHA。
 7. 若控制块的 `after_current` 指定了下一个任务，把 `current_task` 换成它并回到第 4 步；否则把 `next_actor` 改为 `claude`。
@@ -101,6 +102,20 @@ Codex 把结果提交并推送到 GitHub 阶段分支留档，并在阶段分支
 - `C:\Users\yun\Documents\GitHub\gazelle\samples\` 下的 sample1 只作冒烟输入；sample2 不属于目标场景，不再用于验证或评估。不得写入该目录。
 - 运行输出写到 `C:\Users\yun\Documents\Claude_Code\gazelle_runs\`，验证集写到 `C:\Users\yun\Documents\Claude_Code\gazelle_validation\`。上述目录都在 Git 之外，也不上传到任何服务。
 - 作业视频含可识别的作业者面部。仓库中的报告只写汇总数字、文件名与时钟读数，不放图像，不写人名与企业名。
+
+**Codex 运行环境**
+
+Codex 会话的工作区必须是 `C:\Users\yun\Documents\Claude_Code\hyakuri-gazelle`，旧目录的会话不能继续用于本项目。设置方法见 [QUICKSTART_CN.md](QUICKSTART_CN.md)。预检逐项确认：
+
+| 项目 | 检查方法 | 需要的权限 |
+| --- | --- | --- |
+| 工作区 | `git rev-parse --show-toplevel` 指向上面的目录 | 本目录可写 |
+| 数据目录 | 在 `gazelle_data`、`gazelle_runs`、`gazelle_validation` 与 `%TEMP%` 中各新建并删除一个空文件 | 这四处可写 |
+| 作业数据 | 列出 `E:\Gazelle_Workdata\秋田大学様解析用動画\` 下的 7 个文件夹 | 只读 |
+| 解释器 | `C:\Users\yun\anaconda3\envs\Gazelle\python.exe --version` | 可执行 |
+| FFmpeg | `ffmpeg -version` 与 `ffprobe -version` | 可执行 |
+| GitHub | `git ls-remote origin` 与 `gh auth status` | 网络 |
+| GPU | `nvidia-smi --query-gpu=memory.used,memory.total --format=csv` | 只读，仅记录 |
 
 ## 6. 执行范式与证据分级
 
