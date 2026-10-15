@@ -144,3 +144,15 @@
 | P3 | `gazelle/runtime/perception/outputs.py:264` | head_frame_to_json_dict 省略 gazelle_selected_indices 时用硬编码 ('eligible',) 重算 gazelle_selected，忽略配置的 selector | 结论：代码读法正确，但“缺陷”定性不成立，属于已批准设计下的 caller 契约，而非仓库缺陷。  1. 引用代码确认：`gazelle/runtime/perception/outputs.py:264-269` 在 `gazelle_selected_indices is None` 且 result 含 rich perceptions 时，调用 `select_gazelle_head_indices(result)`；`gaz… |
 | P2 | `gazelle/runtime/pipeline.py:452` | 普通推理的 --force-download 刷新被推迟到首个选中头帧，晚于 --overwrite 删除旧输出与 JSONL 流式写出，尽管存在不构造模型的早期解析点 | 结论：控制流描述属实，但"这是违反 AGENTS.md 不变量的设计缺陷"不成立；它是被文档明确记录、被测试钉住、且被已批准 spec 要求的既定顺序，并且不是 `--force-download` 特有的问题，建议的修复也无法达成其声称的保证。  1. 代码确实如所述（已核对）：`gazelle/runtime/pipeline.py:361-365` `create_output_dir(overwrite=...)` -> `:1… |
 | P3 | `gazelle/runtime/perception/fusion.py:82` | 缺失 visibility/presence 时 fusion 与 reference_rays 采用相反默认（0.0 vs 1.0），潜在导致 pose-only 候选 image 可见、video 永不入轨 | 结论：代码字面与报告一致，但报告的核心解释（"两处采用相反默认 → 口径不一致 → 应统一"）不成立，触发前提在本项目受支持的输入下不存在，且两条子结论有误。作为缺陷/设计不一致项予以否定；残留的只是 spec 未写明"pose 分数全部缺失"这一角落情形，属可选加固，不是修复项。  1. 代码字面核实（成立） - gazelle/runtime/perception/fusion.py:82 `return _clipped_conf… |
+
+## 4. 2026-10-15 追加：作业数据证据
+
+依据：[作业数据分析](2026-10-15-workdata-analysis.md)。以下条目已在本机作业数据上实际运行验证。
+
+| 编号 | 级别 | 位置 | 问题 | 处理 |
+| --- | --- | --- | --- | --- |
+| GZ-21（新） | P0 | `gazelle/runtime/media.py:148`、`gazelle/runtime/pipeline.py:402` | `VideoFrameReader` 在第一次 `read()` 失败时结束迭代，管线不比较已读帧数与 `metadata.frame_count`。作业数据的 11 个 AVI 只解出 1 帧，运行仍正常完成 | TASK-131 |
+| GZ-07（升级为 P0） | P0 | `gazelle/runtime/media.py:155` | 可变帧率 MP4 的下标 1 返回 `POS_MSEC = 0`，回退值 `1000 / fps` 大于下标 2 的真实时间戳，MediaPipe 后端随即中止。作业数据 29 个 MP4 分段中 12 个触发 | TASK-131 |
+| GZ-22（新） | P1 | 数据 | 摄像机身份不能由文件名确定：2026-09-03 文件夹中两台人脸摄像机的编号互换 | TASK-132、TASK-133 |
+
+驳回结论的更正：第 3 节中“`mediapipe_backend.py:328` 遇非递增时间戳硬中止整段视频”一条，当时以“支持的输入下不触发”为由驳回。作业数据证明该前提不成立，此条改为确认，并入 GZ-07。
