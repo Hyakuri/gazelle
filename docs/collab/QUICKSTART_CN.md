@@ -1,6 +1,7 @@
 # 用户操作说明（最短版）
 
 两个 agent 都从 `docs/collab/STATE.md` 读取当前阶段与下一步，你不需要粘贴任何文件。
+进展与每个任务的报告汇总在 GitHub 上阶段分支的 draft PR 页面，编号见 STATE.md 控制块的 `pr`。
 完整规则见 [COLLABORATION_PLAN_CN.md](COLLABORATION_PLAN_CN.md)。
 
 ## Codex
