@@ -11,10 +11,10 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 | pr | [#6](https://github.com/Hyakuri/gazelle/pull/6)（draft）；正文来源 `docs/collab/STAGE2_PR_BODY.md` |
 | writer | codex |
 | next_actor | codex |
-| current_task | `docs/collab/tasks/TASK-137-switch-to-gazelle-next.md`（项目环境切换到 `Gazelle-next`，仓库侧） |
-| after_current | `docs/collab/tasks/TASK-123-overview-region-marking-tool.md`（修复第 1 轮审查的必须修复 1 至 5），然后 `docs/collab/tasks/TASK-135-round1-followups.md`，然后 `docs/collab/tasks/TASK-133-osd-clock-time-maps.md`，然后 `docs/collab/tasks/TASK-134-synchronized-proxies.md`，然后 `docs/collab/tasks/TASK-121-validation-annotation-toolkit.md`，然后结束本轮并把 `next_actor` 改为 `claude` |
+| current_task | `docs/collab/tasks/TASK-123-overview-region-marking-tool.md`（修复第 1 轮审查的必须修复 1 至 5） |
+| after_current | `docs/collab/tasks/TASK-135-round1-followups.md`，然后 `docs/collab/tasks/TASK-133-osd-clock-time-maps.md`，然后 `docs/collab/tasks/TASK-134-synchronized-proxies.md`，然后 `docs/collab/tasks/TASK-121-validation-annotation-toolkit.md`，然后结束本轮并把 `next_actor` 改为 `claude` |
 | environment | `Gazelle-next`：`C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe`（用户 2026-10-17 决定 D16）。现有 `Gazelle` 作为回退保留，不改动 |
-| last_pushed | `0f0c0dc1cf7b464f16dad1bcb6ebdfd3053b28fe`（本轮完整报告；其后仅提交 STATE 释放写入权记录，实时 HEAD 以 Git 为准） |
+| last_pushed | `8deeb4254f98732e398d1c91240f04ce49a66f90`（TASK-137 实现；其后为报告与 STATE 推进，实时 HEAD 以 Git 为准） |
 | last_accepted | `e7244d0`（2026-10-16 第 1 轮审查：TASK-131、TASK-132 通过。TASK-001 也已通过，但其提交位于 TASK-123 之后，待 TASK-123 修复通过后一并计入） |
 | 更新 | 2026-10-17，Claude：环境评估完成；用户决定 D16（尽早切换，项目改用 `Gazelle-next`）与 D17（同意 TASK-136）。第 2 轮交 Codex，第一项为 TASK-137 |
 
@@ -47,7 +47,7 @@ Claude 实际运行的检查：完整离线门 562 项；29 个 MP4 分段 17,40
 | Codex 第 1 轮 | TASK-001 参数在 `--overwrite` 删除前校验 | accepted | 562 项最终离线门通过；static/json 两条旧结果保护回归通过 |
 | Claude | 审查第 1 轮，试用区域标记工具 | 完成 | 见「第 1 轮审查结论」 |
 | 用户 | 用 TASK-123 的工具画出区域，约 10 分钟 | 待前置 | Codex 在 PR #6 报告 TASK-123 修复后即可进行 |
-| Codex 第 2 轮 | TASK-137 项目环境切换到 `Gazelle-next`（仓库侧） | ready | 本轮第一项：环境文件、AGENTS.md、四份文档；不改任何 Conda 环境 |
+| Codex 第 2 轮 | TASK-137 项目环境切换到 `Gazelle-next`（仓库侧） | ready-for-review | 563 项离线门；三组 300 帧 smoke；前两组非计时字段与对照完全一致；B 级依赖事实差异见报告 |
 | Codex 第 2 轮 | TASK-123 修复必须修复 1 至 5 | ready | TASK-137 之后 |
 | Codex 第 2 轮 | TASK-135 第 1 轮审查的后续加固 | ready | 时间戳 r4、尾部检查、文档与测试 |
 | Codex 第 2 轮 | TASK-133 画面时钟识别、时间映射与同步检验 | ready | 依赖 TASK-132 |
@@ -127,6 +127,7 @@ Claude 实际运行的检查：完整离线门 562 项；29 个 MP4 分段 17,40
 | Q-003 | B | Codex | Torch Hub 加载 DINOv2 时联网探测（GZ-24） | 问题登记表 §5 | 已决定：与 D8 一并在第 4 阶段处理 |
 | Q-004 | C | Claude | D16：何时切换到候选环境 `Gazelle-next` | `evidence/2026-10-17-env-next-evaluation.md` §0、§7 | 已决定（2026-10-17）：尽早切换；现有 `Gazelle` 保留作回退，项目改用 `Gazelle-next`；仓库侧由 TASK-137 完成 |
 | Q-005 | C | Claude | D17：是否实施 TASK-136（Gazelle 输入预处理移到推理设备） | 同上；`tasks/TASK-136-gazelle-device-preprocessing.md` | 已决定（2026-10-17）：同意，第 3 轮开头实施 |
+| Q-006 | B | Codex | TASK-137 与环境评估称 pydeprecate/defusedxml 不再需要，但实际仍是 trackers/supervision 的必需依赖 | TASK-137 实施报告 | 已暂定按实际元数据编写用户文档，移除显式 pin 而不卸载；请 Claude 修正契约/评估事实，不阻塞后续任务 |
 
 ## 已完成
 
