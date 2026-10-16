@@ -184,6 +184,70 @@ git status --short
 - **未运行与交接**：实现、聚焦单测、完整离线门、29 个 MP4 前 600 帧检查、原始 AVI 截断 CLI 检查、300 帧 GPU smoke 均未运行；TASK-132、TASK-123、TASK-001 未启动。按协作方案 §3.1 第 4 步，报告冲突并交回 Claude；`next_actor=claude`，`writer=none`，`current_task` 留在 TASK-131，任务不标为 `ready-for-review`。
 - **状态标签**：已静态检查；已实际运行（契约最小复现与首次发布）；尚未实施；待 Claude 修订契约及后续独立验收。
 
+### 2026-10-16 契约 r3 实施与验证（Codex）
+
+- **基线与提交**：从 `1972b204aa97ef12fd3b61c9123c20b79f0aee29` 实施；`7530d9b55586c483d558d31bbc0d4b0a7d1bed33` — `Repair video timestamps and reject truncated decoding` 已提交并推送到原分支。实施报告与 STATE 另作记录提交。主线程 Inline Execution，无子代理。
+- **变更**：读取器按 r3 保留/修补/回退并记录来源；管线保存四个新诊断键，截断时关闭资源、保留 JSONL、抛错并跳过 H.264。未改逐帧 JSONL schema、MediaPipe 严格时间戳检查或科学指标。同步四份用户文档与文档测试。
+- **离线检查**：现有 Gazelle Python，字节码在 `%TEMP%\gazelle-task-131-pycache`。新增测试先在旧实现失败（5 项，subtest failures 6 / errors 19）；实施后聚焦 `python -m unittest tests.test_media tests.test_video_pipeline tests.test_usage_docs -v` 为 **82 项通过**。完整门 `python -m compileall main.py gazelle tests`、`python -m unittest discover -s tests -v`（**537 项，3.888 s，无 skip**）、`python main.py --help`、`python main.py --list-models`、`git diff --check` 全部退出 0。非致命输出：无效测试视频的 OpenCV `moov atom not found` 与 Git LF/CRLF 提示；断言错误路径产生的 usage 输出为预期。日志位于仓库外 `C:\Users\yun\Documents\Claude_Code\gazelle_runs\task-131`。
+- **CPU 实测命令**：`& 'C:\Users\yun\anaconda3\envs\Gazelle\python.exe' 'C:\Users\yun\Documents\Claude_Code\gazelle_runs\task-131\check_timestamps.py'`，进程优先级 BelowNormal，退出 0；脚本只通过生产 `VideoFrameReader` 流式读取每段前 600 帧并校验 `int(round(timestamp_ms))`。下表为每段结果（合计 29 段、17,400 帧、0 违规）；机器可读证据在同目录 `check_timestamps.json`。
+- **原始 AVI CLI 实测**：外部 `offline_cli.py` 通过 `runpy` 执行仓库 `main.py`，参数 `--input <raw>/20260911/20260911_設備カメラ.avi --output-dir <runs>/avi-truncation --head-source json --head-data <runs>/empty_heads.json --max-frames 50 --device cpu`。退出 **1**；实际报错为 `read 1 frames, required 50, container reports 108619`，包含输入路径与 undecodable packets / USAGE 提示。容器实际值 108619 与契约示例 108219 不同，判定仍正确。两份 JSONL 各 1 行，`decode_complete=false`；空 heads 的 JSON provider 使模型从未构造。OpenCV 原始 HEVC 空包产生 NAL 解码错误，为预期失败证据。
+- **GPU smoke 命令**：同一外部 runner，参数 `--input <raw>/20260911/20260911表情解析用カメラ1-1.mp4 --output-dir <runs>/mp4-smoke-cached --head-source mediapipe --max-heads 1 --max-frames 300 --device cuda --cache-dir models`，未加 `--save-rendered`。退出 **0**；`frames_read=frames_written=300`；两份 JSONL 各 300 行；`container_frame_count=33600`、`frames_required=300`、`decode_complete=true`；来源 299 container / 1 repaired / 0 fallback。head observation 状态 `ok=299,no_head=1`；prediction 状态 `ok=73,no_gaze=226,no_head=1`。这是功能 smoke，不代表准确率。
+- **真实外部活动**：GPU 开始前 RTX 4080 SUPER 查询为 5793/16376 MiB、利用率 5%；重跑前 5733/16376 MiB、13%，进程清单无其他训练 Python。实际构造 Gazelle/DINOv2、运行 CUDA 推理，MediaPipe 使用 CPU XNNPACK。复用 Gazelle checkpoint、DINOv2 repo/weights、MediaPipe 三个缓存；无下载、安装或环境修改。Python 网络 audit 拦截 Hub 默认分支探测，最终日志 `NETWORK_AUDIT=["urllib.Request"]`。首次 runner 用 RuntimeError 拦截使加载失败；查阅现有 torch.hub 实现后改用 URLError，使其走原生缓存回退，第二次成功。MediaPipe 原生 clearcut 遥测出现连接失败日志（Python hook 不覆盖原生网络），因此不声称整个进程完全离线；没有成功上传的证据。真实 FFmpeg 可执行程序未在本任务编解码；OpenCV 实际解码视频。不输出渲染视频，不上传源数据与派生物。
+- **反证式复核**：12 组 r3 时间戳表、未知/微小帧数、请求上限与尾部容差、JSONL 保留、资源关闭、不调用 H.264、无头不构造模型均由回归覆盖。2000/1000000 FPS 与非有限 fallback 不再输出不递增时间戳。四个新键与重封装命令已被文档测试锁定。
+- **未运行与状态**：未作正式实验，未作独立验收。Codex 已静态检查、已实际运行；实现可交审，Claude 与用户独立 checkout 验收仍待进行。
+
+#### 自主决定（A）
+
+- 容器仅 1/2 帧时，`N-tolerance` 可为负；将最少帧数夹到 0，保留原容差意图，避免负的诊断计数，补充两条边界。
+- 极小 FPS 的浮点间隔可能溢出；显式报错，不产生违反 R1 的无限值，未限制正常 FPS 范围。
+- 原始 AVI 检查使用空 JSON heads，隔离截断错误并避免无意义模型推理；真实模型功能由另一个获授权 GPU smoke 检验。
+- 用现有 torch.hub 的 URLError 缓存回退完成不下载 smoke；仅外部检查脚本变化，没有改产品模型边界。长 CPU 检查期间准备后续任务，不改已提交 TASK-131 实现。
+
+#### 范围外改动
+
+无产品范围外改动；外部检查脚本、日志与测试产物留在授权 runs 目录。
+
+#### 待 Claude 判断（B）
+
+无阻塞契约问题。请独立确认上述 A 决定，并复跑 CPU 与 AVI 检查。MediaPipe 原生遥测连接失败是现有依赖活动，尚未扩展为产品修复。
+
+#### 待用户决定（C）
+
+无。
+
+| 分段 | 帧数 | container | repaired | fps_fallback | 违规 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `20260903/20260903表情解析用カメラ1-1.mp4` | 600 | 599 | 1 | 0 | 0 |
+| `20260903/20260903表情解析用カメラ1-2.mp4` | 600 | 599 | 1 | 0 | 0 |
+| `20260903/20260903表情解析用カメラ1-3.mp4` | 600 | 599 | 1 | 0 | 0 |
+| `20260903/20260903表情解析用カメラ2-1.mp4` | 600 | 599 | 1 | 0 | 0 |
+| `20260903/20260903表情解析用カメラ2-2.mp4` | 600 | 599 | 1 | 0 | 0 |
+| `20260903/20260903表情解析用カメラ2-3.mp4` | 600 | 599 | 1 | 0 | 0 |
+| `20260911/20260911表情解析用カメラ1-1.mp4` | 600 | 599 | 1 | 0 | 0 |
+| `20260911/20260911表情解析用カメラ1-2.mp4` | 600 | 599 | 1 | 0 | 0 |
+| `20260911/20260911表情解析用カメラ1-3.mp4` | 600 | 599 | 1 | 0 | 0 |
+| `20260911/20260911表情解析用カメラ2-1.mp4` | 600 | 599 | 1 | 0 | 0 |
+| `20260911/20260911表情解析用カメラ2-2.mp4` | 600 | 599 | 1 | 0 | 0 |
+| `20260911/20260911表情解析用カメラ2-3.mp4` | 600 | 599 | 1 | 0 | 0 |
+| `20260925/20260925表情解析用カメラ1-1.mp4` | 600 | 599 | 1 | 0 | 0 |
+| `20260925/20260925表情解析用カメラ1-2.mp4` | 600 | 599 | 1 | 0 | 0 |
+| `20260925/20260925表情解析用カメラ1-3.mp4` | 600 | 599 | 1 | 0 | 0 |
+| `20260925/20260925表情解析用カメラ2-1.mp4` | 600 | 599 | 1 | 0 | 0 |
+| `20260925/20260925表情解析用カメラ2-2.mp4` | 600 | 599 | 1 | 0 | 0 |
+| `20260925/20260925表情解析用カメラ2-3.mp4` | 600 | 599 | 1 | 0 | 0 |
+| `20261002/20261002表情解析用カメラ1-1.mp4` | 600 | 599 | 1 | 0 | 0 |
+| `20261002/20261002表情解析用カメラ1-2.mp4` | 600 | 599 | 1 | 0 | 0 |
+| `20261002/20261002表情解析用カメラ1-3.mp4` | 600 | 599 | 1 | 0 | 0 |
+| `20261002/20261002表情解析用カメラ2-1.mp4` | 600 | 599 | 1 | 0 | 0 |
+| `20261002/20261002表情解析用カメラ2-2.mp4` | 600 | 599 | 1 | 0 | 0 |
+| `20261009/20261009表情解析カメラ1-1.mp4` | 600 | 599 | 1 | 0 | 0 |
+| `20261009/20261009表情解析カメラ1-2.mp4` | 600 | 600 | 0 | 0 | 0 |
+| `20261009/20261009表情解析カメラ1-3.mp4` | 600 | 599 | 1 | 0 | 0 |
+| `20261009/20261009表情解析カメラ2-1.mp4` | 600 | 599 | 1 | 0 | 0 |
+| `20261009/20261009表情解析カメラ2-2.mp4` | 600 | 599 | 1 | 0 | 0 |
+| `20261009/20261009表情解析カメラ2-3.mp4` | 600 | 599 | 1 | 0 | 0 |
+
+
 ## 3. 审查结论（Claude 追加）
 
 ### 2026-10-16 契约澄清（审查 `c5bd358` 的冲突报告）
