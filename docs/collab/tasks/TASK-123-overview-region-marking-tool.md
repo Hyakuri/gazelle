@@ -126,6 +126,34 @@ git status --short
 无本轮实施决策。正式画区域属于计划中的用户后续步骤，等待 Claude 先审查工具。
 
 
+### 2026-10-17 第 2 轮修复报告（Codex）
+
+- **接手与提交**：STATE 指定 TASK-137 后实施必须修复 1–5；沿用 `feature/stage2-correctness`。实现 `e11f32284a07fa76fc8bded194b5504772593dd7` — `Fix region editing, layered references, and completion validation` 已推送，未修改 Claude 的契约与审查结论。
+- **五项修复**：cell 底层、全部顶点最后绘制、按最小包含区域选择；参考图逐层填充后统一画边线与文字；click.detail 处理双击，避免重复顶点；导出要求 1–6 targets 与恰好一个 cell，成功后生成 `.complete.json`（version=1、completed_at、regions_sha256），`completed_document()` 校验哈希、完整区域与草稿；类别最多数字键 1–9，unknown=0，自定义颜色避开固定类别与已有目标。TASK-121 应复用此完成检查。
+- **其他审查项**：中文错误提示；相同内容不写入或轮换备份；请求令牌在解析正文前检查；HTTP 大小、类型、深层 JSON 与数值溢出保护；完整草稿 schema 校验；候选抽取先匹配有效 remux report，检查时间严格递增且接近请求，保留 manifest 上一版。四份用户文档与 ROI_GUIDE_CN 同步；同时补正 TASK-137 漏掉的两句研究工具环境名称。
+- **离线命令与结果**（`$py=C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe`，`PYTHONPYCACHEPREFIX=%TEMP%\gazelle-task123r2-pycache`）：`& $py -m compileall main.py gazelle tests tools`、`& $py -m unittest discover -s tests -v`、`& $py main.py --help`、`& $py main.py --list-models`、`git diff --check` 均 exit 0；最终 **569 tests / 4.246 s / no skips**。ROI 聚焦 12 项通过。`node tests/roi_page_test.cjs`（现有 Node 24.19.0，无第三方包）通过叠放、命中、拖动、删除顶点、双击、颜色事件回归；不把 Node 加入 Python 默认测试依赖。
+- **红绿与失败记录**：首轮 Python 回归 11 项中 3 failures/2 errors，HTTP 补测 12 项中 2 failures，候选校验补测 1 failure，修复后通过；JS 在旧实现上首先因 cell 顺序失败。最终自查发现指针捕获后的 click 会清除顶点选择，新增回归在修复前 `-1 != 0` 失败，修复后通过并用浏览器实际删除顶点。文档测试曾误用未定义 ROOT（31 项中 1 error），改为已有常量后完整门通过。非致命 warning：既有 OpenCV `moov atom not found`、Git LF/CRLF 提示。`Get-NetTCPConnection` 普通沙盒拒绝访问，改用 `netstat -ano` 确认并清理本轮服务，未提权冒充预检通过。
+- **真实 CPU 抽帧**：以 BelowNormal 运行 `& $py -m tools.validation.extract_roi_candidates --inventory C:\Users\yun\Documents\Claude_Code\gazelle_data\workdata\inventory\inventory.json --remux-root C:\Users\yun\Documents\Claude_Code\gazelle_data\workdata\remux --out-root C:\Users\yun\Documents\Claude_Code\gazelle_data\workdata\roi\codex_candidates_r2`，exit 0；批准的 7 次录制各 12 张，共 **84 张**，清单哈希/尺寸校验通过。保留原 candidates.json 与图片；新出现的第 8 个日期未扩入本轮研究集合。
+- **主线程浏览器实测**：合成 1920×1080 图片与临时 `roi\codex_regression_20261017\browser_trial.json`，服务仅监听 127.0.0.1:8766；按三个目标、cell 最后的顺序，双击闭合三角形恰好 3 顶点，内部区域命中/拖动成功，四顶点目标删除为 3 后撤销恢复 4；删除整个目标与撤销、重载恢复、导出均通过。导出 2 张参考图与类别，4 种边线颜色均存在，完成检查通过，浏览器 error log 为空。截图 `browser-proof.png`、临时区域与图像均只留外部目录。正式 `roi_regions.json` 未创建。两次服务与浏览器页均关闭（停止服务导致进程 exit 1 属主动清理）。
+- **外部活动**：仅本机 CPU/OpenCV/Pillow/浏览器；未运行模型、GPU、FFmpeg 可执行程序；无下载、包安装、Conda 修改、模型缓存变更或作业数据上传。GitHub 仅推送源码/文档与报告。候选图、合成试用产物保留供独立复核。日志 `%TEMP%\gazelle-task123r2-*.log`。
+- **反证式复核**：检查反序重叠边线、零/七目标拒绝、六目标数字范围、大小写颜色冲突、哈希篡改、无效草稿、相同内容备份不变、字体失败不产生完成标记、旧候选清单在抽帧失败后保持不变。真实浏览器结果只是 Codex 实测，不等于 Claude 独立验收。
+
+#### 自主决定（A）
+
+完成标记为同名 `.complete.json`，导出全部成功后才写入；任意文件改动或活动草稿使其失效。候选时间允许偏差为 `max(1 ms, 2 nominal frame intervals)`，覆盖现有 84 帧的最大偏差 87.499125 ms；全量真实重抽通过。备份采用内容改变时才轮换。增加独立 Node 事件回归脚本作为现有浏览器/Python 测试的补充。
+
+#### 范围外改动
+
+无相邻功能扩展；`tests/roi_page_test.cjs` 是浏览器回归所需的额外测试入口，未添加依赖。没有修改 Gazelle 运行时。
+
+#### 待 Claude 判断（B）
+
+无阻塞契约问题。请独立复核五项修复及完成标记接口。审查建议中的“最小区域面积”尚无批准阈值，本轮保留非零面积规则；是否增加面积下限留待 Claude 设计，不以任意阈值改变研究区域。
+
+#### 待用户决定（C）
+
+无新的实施授权。区域工具已修复，用户可以开始画区域；正式区域由用户决定，不由 Codex 合成试画替代。状态：已实现、已实际运行、ready-for-review，独立验收待 Claude。
+
 ## 3. 审查结论（Claude 追加）
 
 ### 2026-10-16 第 1 轮审查
