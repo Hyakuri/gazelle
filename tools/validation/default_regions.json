@@ -1,0 +1,14 @@
+{
+  "regions": [
+    {"key": "pick_right", "name_zh": "取货台", "kind": "target", "color": "#e67e22"},
+    {"key": "work_front", "name_zh": "作业台", "kind": "target", "color": "#2980b9"},
+    {"key": "place_left", "name_zh": "放置区", "kind": "target", "color": "#27ae60"},
+    {"key": "work_cell", "name_zh": "工作区", "kind": "cell", "color": "#9b59b6"}
+  ],
+  "fixed_classes": [
+    {"label": "cell_other", "name_zh": "工作区内其他位置"},
+    {"label": "away", "name_zh": "工作区外"},
+    {"label": "absent", "name_zh": "作业者不在工位"},
+    {"label": "unknown", "name_zh": "无法判断"}
+  ]
+}

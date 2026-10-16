@@ -509,6 +509,10 @@ Use low process priority for long runs. See the [Chinese guide](../tools/workdat
 | --- | --- | --- | --- |
 | `tools.workdata.inventory` | Source AVI/MP4; prior inventory hash cache | Atomic inventory JSON, camera roles and packet statistics | ffprobe |
 | `tools.workdata.remux` | Inventory and source AVI | Video-only MP4 and `remux_report.json` | ffprobe, FFmpeg, OpenCV decode checks |
+| `tools.validation.extract_roi_candidates` | Inventory, validated overview remuxes | 12 JPEGs/session and `roi/candidates.json` | CPU OpenCV/Pillow; no FFmpeg executable |
+| `tools.validation.roi_server` | Candidates and optional saved regions | Atomic region/draft files, backups; reference/class export on request | Local browser at 127.0.0.1 only |
+| `tools.validation.roi_regions` | Region definitions | Validation or derived classes JSON | CPU only |
+| `tools.validation.render_roi_reference` | Regions and candidate images | Reference PNG, session overlays, classes JSON | Pillow and an existing CJK font |
 
 ```powershell
 $raw = 'E:\Gazelle_Workdata\秋田大学様解析用動画'
@@ -521,6 +525,23 @@ Use `--ffprobe` on either entry and `--ffmpeg` on remux to override PATH lookup.
 Valid existing remuxes are skipped unless `--force` is supplied; failed refreshes
 preserve existing files. Outputs are published only after packet count, duration,
 PTS and head/middle/tail decode checks pass. Derived data must never enter Git.
+
+Region tools do not call models, GPU, an FFmpeg executable, or external network
+services. The editor uses only loopback HTTP and inline page resources. See the
+[region guide](../tools/validation/ROI_GUIDE_CN.md); run from the repository root:
+
+```powershell
+python -m tools.validation.extract_roi_candidates --inventory "$data\inventory\inventory.json" --remux-root "$data\remux" --out-root "$data\roi"
+python -m tools.validation.roi_server --candidates "$data\roi\candidates.json" --annotator local
+python -m tools.validation.roi_regions validate "$data\roi\roi_regions.json"
+python -m tools.validation.render_roi_reference --regions-path "$data\roi\roi_regions.json" --candidates "$data\roi\candidates.json" --out-root "$data\roi"
+```
+
+Use `--regions-path "$data\roi\review_trial.json"` for a trial: it has separate
+backups/drafts and exports to `review_trial_export`. Simply loading the page does
+not create formal regions. Choose a reference, draw polygons, check every session,
+then export references/classes. Invalid or self-intersecting polygons cannot be
+saved; keep the original candidate manifest when resuming. Stop the server with Ctrl+C.
 
 ## 15. Validation commands
 

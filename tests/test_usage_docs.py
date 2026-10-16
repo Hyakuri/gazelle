@@ -495,6 +495,14 @@ class UsageDocumentationTest(unittest.TestCase):
             for token in ('tools.workdata.inventory', 'tools.workdata.remux', '../tools/workdata/README_CN.md'):
                 self.assertIn(token, text, str(path))
 
+    def test_region_tool_entry_points_are_documented(self):
+        for path in (ENGLISH_GUIDE, CHINESE_GUIDE):
+            text = self._read(path)
+            for token in ('tools.validation.extract_roi_candidates', 'tools.validation.roi_server',
+                          'tools.validation.roi_regions', 'tools.validation.render_roi_reference',
+                          '../tools/validation/ROI_GUIDE_CN.md', '127.0.0.1'):
+                self.assertIn(token, text, str(path))
+
     def test_facial_transformation_matrix_contract_is_precise(self):
         required = (
             "serializer preserves supplied row lengths",

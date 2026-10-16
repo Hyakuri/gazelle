@@ -507,6 +507,10 @@ Perception quality 依赖 visible-face evidence。`pose_only` 使用近似 pose-
 | --- | --- | --- | --- |
 | `tools.workdata.inventory` | 原始 AVI/MP4、旧清单哈希缓存 | 原子清单 JSON、摄像机身份与包统计 | ffprobe |
 | `tools.workdata.remux` | 清单与原始 AVI | 不含音频的 MP4、`remux_report.json` | ffprobe、FFmpeg、OpenCV 解码检查 |
+| `tools.validation.extract_roi_candidates` | 清单、已校验的全局摄像机重封装视频 | 每会话 12 张 JPEG、`roi/candidates.json` | CPU OpenCV/Pillow；不调用 FFmpeg 可执行程序 |
+| `tools.validation.roi_server` | 候选帧、可选已有区域 | 原子区域/草稿文件、备份；按需导出参考图与类别 | 仅 127.0.0.1 本机浏览器 |
+| `tools.validation.roi_regions` | 区域定义 | 校验或派生类别 JSON | 仅 CPU |
+| `tools.validation.render_roi_reference` | 区域与候选帧 | 参考 PNG、各会话叠加图、类别 JSON | Pillow、已有中文字体 |
 
 ```powershell
 $raw = 'E:\Gazelle_Workdata\秋田大学様解析用動画'
@@ -518,6 +522,20 @@ python -m tools.workdata.remux --inventory "$data\inventory\inventory.json" --ou
 两个入口支持 `--ffprobe`，重封装另支持 `--ffmpeg` 覆盖 PATH 查找。已有有效重封装默认跳过；
 `--force` 才重做，失败仍保留旧文件。通过包数、时长、PTS 和头中尾解码检查后才发布输出。
 所有派生数据不得进入 Git。
+
+区域工具不调用模型、GPU、FFmpeg 可执行程序或外部网络。编辑器只使用本机回环 HTTP，页面资源内联。
+参见[区域指南](../tools/validation/ROI_GUIDE_CN.md)，从仓库根目录运行：
+
+```powershell
+python -m tools.validation.extract_roi_candidates --inventory "$data\inventory\inventory.json" --remux-root "$data\remux" --out-root "$data\roi"
+python -m tools.validation.roi_server --candidates "$data\roi\candidates.json" --annotator local
+python -m tools.validation.roi_regions validate "$data\roi\roi_regions.json"
+python -m tools.validation.render_roi_reference --regions-path "$data\roi\roi_regions.json" --candidates "$data\roi\candidates.json" --out-root "$data\roi"
+```
+
+试用时加 `--regions-path "$data\roi\review_trial.json"`，其备份、草稿独立，导出写入 `review_trial_export`。
+仅打开页面不会创建正式区域。选择参考帧、画多边形、核对各日期后导出参考图与类别。
+无效或自相交多边形不能保存；续标请保留原候选清单。Ctrl+C 停止服务。
 
 ## 15. 验证命令
 

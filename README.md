@@ -318,6 +318,12 @@ videos and write derived files outside the repository, invoking ffprobe/FFmpeg
 on CPU without GPU, models, or network access. See the research data tools in
 [USAGE](docs/USAGE.md) and the [Chinese tool guide](tools/workdata/README_CN.md).
 
+Overview region tools extract local candidate frames and provide a browser editor
+at `127.0.0.1`, with autosave and reference/class export. Read the
+[region guide](tools/validation/ROI_GUIDE_CN.md) and [USAGE](docs/USAGE.md) for
+repository-root commands. Images and region files stay in the external data root;
+these tools use CPU/OpenCV/Pillow, no FFmpeg executable, models, GPU, or external network.
+
 Video timestamps preserve valid container times, minimally repair rounded collisions,
 and estimate missing times from the previous rounded millisecond plus at least 1 ms
 or one source-frame interval. `run_config.json` records `container_frame_count`,
