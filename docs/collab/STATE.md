@@ -11,9 +11,9 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 | pr | [#6](https://github.com/Hyakuri/gazelle/pull/6)（draft）；正文来源 `docs/collab/STAGE2_PR_BODY.md` |
 | writer | codex |
 | next_actor | codex |
-| current_task | `docs/collab/tasks/TASK-132-workdata-inventory-and-avi-remux.md` |
-| after_current | `docs/collab/tasks/TASK-123-overview-region-marking-tool.md`，然后 `docs/collab/tasks/TASK-001-overwrite-safe-validation.md`，然后结束本轮并把 `next_actor` 改为 `claude` |
-| last_pushed | `7530d9b55586c483d558d31bbc0d4b0a7d1bed33`（TASK-131 实现；报告与 STATE 记录随后提交） |
+| current_task | `docs/collab/tasks/TASK-123-overview-region-marking-tool.md` |
+| after_current | `docs/collab/tasks/TASK-001-overwrite-safe-validation.md`，然后结束本轮并把 `next_actor` 改为 `claude` |
+| last_pushed | `1936ef2b4cd842b7c87857d0e85643c38c154d4a`（TASK-132 实现；报告与 STATE 记录随后提交） |
 | last_accepted | `bbec056`（迁移验收基线，Gate A/B/C 通过） |
 | 更新 | 2026-10-16，Claude：TASK-131 契约 r3；分级自主；常设批准 |
 
@@ -22,7 +22,7 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 | 轮次 | 任务 | 状态 | 说明 |
 | --- | --- | --- | --- |
 | Codex 第 1 轮 | TASK-131 读取器：容器时间戳、严格递增、截断即失败 | ready-for-review | 537 项离线测试；29 段各 600 帧无违规；AVI 失败与 300 帧 GPU smoke 均已实测 |
-| Codex 第 1 轮 | TASK-132 作业数据清单与 AVI 无损重封装 | ready | 数据 P0、GZ-22 |
+| Codex 第 1 轮 | TASK-132 作业数据清单与 AVI 无损重封装 | ready-for-review | 40 文件清单；11/11 重封装校验通过；生产读取器 600 帧检查通过 |
 | Codex 第 1 轮 | TASK-123 全局摄像机画面中的区域标记工具 | ready | 依赖 TASK-132；用户 Q8 的回答 |
 | Codex 第 1 轮 | TASK-001 参数在 `--overwrite` 删除前校验 | ready | GZ-04 |
 | Claude | 审查第 1 轮，试用区域标记工具 | 未开始 | |
