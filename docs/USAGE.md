@@ -498,6 +498,30 @@ Perception quality depends on visible-face evidence. The `pose_only` path uses a
 
 There is no webcam/real-time mode, automatic ROI/process logic, Multi-Pose integration, audio remuxing, raw video heatmap export, or high-performance asynchronous inference. MediaPipe/tracking runs locally after assets are cached, and rendered video has no audio.
 
+### Research data tools
+
+Run from the repository root in the existing Gazelle environment. Keep the source
+read-only and choose a data root outside both the repository and source root.
+These tools use CPU/disk only: no models, CUDA, network access, or downloads.
+Use low process priority for long runs. See the [Chinese guide](../tools/workdata/README_CN.md).
+
+| Entry module | Reads | Writes | External tools |
+| --- | --- | --- | --- |
+| `tools.workdata.inventory` | Source AVI/MP4; prior inventory hash cache | Atomic inventory JSON, camera roles and packet statistics | ffprobe |
+| `tools.workdata.remux` | Inventory and source AVI | Video-only MP4 and `remux_report.json` | ffprobe, FFmpeg, OpenCV decode checks |
+
+```powershell
+$raw = 'E:\Gazelle_Workdata\秋田大学様解析用動画'
+$data = 'C:\Users\yun\Documents\Claude_Code\gazelle_data\workdata'
+python -m tools.workdata.inventory --root $raw --out "$data\inventory\inventory.json"
+python -m tools.workdata.remux --inventory "$data\inventory\inventory.json" --out-root "$data\remux"
+```
+
+Use `--ffprobe` on either entry and `--ffmpeg` on remux to override PATH lookup.
+Valid existing remuxes are skipped unless `--force` is supplied; failed refreshes
+preserve existing files. Outputs are published only after packet count, duration,
+PTS and head/middle/tail decode checks pass. Derived data must never enter Git.
+
 ## 15. Validation commands
 
 These checks are offline and do not construct a model. Default tests mock FFmpeg capability probes/transcodes and do not run a real FFmpeg process:

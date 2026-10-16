@@ -497,6 +497,28 @@ Perception quality 依赖 visible-face evidence。`pose_only` 使用近似 pose-
 
 没有 webcam/real-time mode、自动 ROI/process logic、Multi-Pose integration、audio remuxing、raw video heatmap export 或高性能 asynchronous inference。asset 缓存后 MediaPipe/tracking 在本地运行；rendered video 无音频。
 
+### 研究数据工具
+
+在现有 Gazelle 环境、仓库根目录运行。源目录只读，数据根放在仓库与源目录之外。
+工具只使用 CPU 与磁盘，不构造模型、不使用 CUDA、不联网、不下载。
+长时间任务以低优先级运行。参见[中文指南](../tools/workdata/README_CN.md)。
+
+| 入口模块 | 读取 | 写入 | 外部工具 |
+| --- | --- | --- | --- |
+| `tools.workdata.inventory` | 原始 AVI/MP4、旧清单哈希缓存 | 原子清单 JSON、摄像机身份与包统计 | ffprobe |
+| `tools.workdata.remux` | 清单与原始 AVI | 不含音频的 MP4、`remux_report.json` | ffprobe、FFmpeg、OpenCV 解码检查 |
+
+```powershell
+$raw = 'E:\Gazelle_Workdata\秋田大学様解析用動画'
+$data = 'C:\Users\yun\Documents\Claude_Code\gazelle_data\workdata'
+python -m tools.workdata.inventory --root $raw --out "$data\inventory\inventory.json"
+python -m tools.workdata.remux --inventory "$data\inventory\inventory.json" --out-root "$data\remux"
+```
+
+两个入口支持 `--ffprobe`，重封装另支持 `--ffmpeg` 覆盖 PATH 查找。已有有效重封装默认跳过；
+`--force` 才重做，失败仍保留旧文件。通过包数、时长、PTS 和头中尾解码检查后才发布输出。
+所有派生数据不得进入 Git。
+
 ## 15. 验证命令
 
 以下检查 offline 且不构造模型。默认测试会 mock FFmpeg capability probe/transcode，不会运行真实 FFmpeg process：

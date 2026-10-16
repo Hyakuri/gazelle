@@ -311,6 +311,13 @@ python main.py `
 
 ### Video Inference
 
+Local research data tools build a read-only source inventory and losslessly
+remux AVI empty packets. Run `python -m tools.workdata.inventory` and
+`python -m tools.workdata.remux` from the repository root; these read the source
+videos and write derived files outside the repository, invoking ffprobe/FFmpeg
+on CPU without GPU, models, or network access. See the research data tools in
+[USAGE](docs/USAGE.md) and the [Chinese tool guide](tools/workdata/README_CN.md).
+
 Video timestamps preserve valid container times, minimally repair rounded collisions,
 and estimate missing times from the previous rounded millisecond plus at least 1 ms
 or one source-frame interval. `run_config.json` records `container_frame_count`,

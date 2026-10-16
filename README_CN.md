@@ -320,6 +320,11 @@ python main.py `
 
 ### 视频推理
 
+本地研究数据工具可生成只读源清单并无损重封装 AVI 空包。从仓库根目录运行
+`python -m tools.workdata.inventory` 和 `python -m tools.workdata.remux`，读取源视频、
+将派生文件写到仓库外；调用 ffprobe/FFmpeg，仅使用 CPU，不使用 GPU、模型或网络。
+完整命令见 [USAGE 研究数据工具](docs/USAGE_CN.md) 与[中文工具指南](tools/workdata/README_CN.md)。
+
 视频保留有效容器时间戳，对取整冲突做最小修补；时间戳缺失时，在上一帧整数毫秒上
 增加至少 1 ms 或一个源帧间隔。`run_config.json` 记录 `container_frame_count`、
 `frames_required`、`decode_complete` 和 `timestamp_sources`（`container`、

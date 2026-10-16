@@ -1,0 +1,10 @@
+{
+  "filename_patterns": {"1": "カメラ1", "2": "カメラ2", "overview": "設備カメラ"},
+  "default": {"1": "cam_a", "2": "cam_b", "overview": "cam_e"},
+  "overrides": {"20260903": {"1": "cam_b", "2": "cam_a"}},
+  "cameras": {
+    "cam_a": {"role": "right", "clock_style": "flush_left", "mp4_container_fps": 30},
+    "cam_b": {"role": "front", "clock_style": "indented_right", "mp4_container_fps": 50},
+    "cam_e": {"role": "overview", "clock_style": "weekday_and_CAM3", "mp4_container_fps": null}
+  }
+}

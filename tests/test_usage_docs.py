@@ -489,6 +489,12 @@ class UsageDocumentationTest(unittest.TestCase):
             for token in ("container_frame_count", "frames_required", "decode_complete", "timestamp_sources", "noise=drop"):
                 self.assertIn(token, text, str(path))
 
+    def test_workdata_tool_entry_points_are_documented(self):
+        for path in (ENGLISH_GUIDE, CHINESE_GUIDE):
+            text = self._read(path)
+            for token in ('tools.workdata.inventory', 'tools.workdata.remux', '../tools/workdata/README_CN.md'):
+                self.assertIn(token, text, str(path))
+
     def test_facial_transformation_matrix_contract_is_precise(self):
         required = (
             "serializer preserves supplied row lengths",
