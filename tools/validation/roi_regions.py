@@ -131,7 +131,7 @@ def save(path, payload):
 
 def make_classes(payload):
     validate(payload)
-    classes = [dict(label=row['key'], name_zh=row['name_zh']) for row in payload['regions'] if row['kind'] == 'target']
+    classes = [dict(label=row['key'], name_zh=row['name_zh'], color=row['color']) for row in payload['regions'] if row['kind'] == 'target']
     classes += defaults()['fixed_classes']
     return dict(version=1, classes=[dict(key=0 if row['label'] == 'unknown' else i + 1, **row)
                                     for i, row in enumerate(classes)])

@@ -323,6 +323,7 @@ at `127.0.0.1`, with autosave and reference/class export. Read the
 [region guide](tools/validation/ROI_GUIDE_CN.md) and [USAGE](docs/USAGE.md) for
 repository-root commands. Images and region files stay in the external data root;
 these tools use CPU/OpenCV/Pillow, no FFmpeg executable, models, GPU, or external network.
+Exported annotation classes retain region colors for the later annotation tool.
 
 Video timestamps preserve valid container times, minimally repair rounded collisions,
 and estimate missing times from the previous rounded millisecond plus at least 1 ms

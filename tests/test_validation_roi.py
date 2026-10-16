@@ -50,6 +50,8 @@ class RoiRegionsTest(unittest.TestCase):
         classes = regions.make_classes(doc)['classes']
         self.assertEqual([row['label'] for row in classes], ['desk', 'cell_other', 'away', 'absent', 'unknown'])
         self.assertEqual([row['key'] for row in classes], [1, 2, 3, 4, 0])
+        self.assertEqual(classes[0]['color'], '#11aa33')
+        self.assertTrue(all(row['color'].startswith('#') for row in classes))
 
     def test_invalid_polygon_and_region_boundaries(self):
         for polygon in ([[0, 0], [1, 1]], [[0, 0], [2, 0], [0, 1]],

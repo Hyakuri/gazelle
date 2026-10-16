@@ -328,6 +328,7 @@ python main.py `
 全局摄像机区域工具可抽取候选帧，并在 `127.0.0.1` 提供自动保存、参考图与类别导出的浏览器编辑器。
 仓库根目录启动命令见[区域指南](tools/validation/ROI_GUIDE_CN.md) 和 [USAGE](docs/USAGE_CN.md)。
 图像与区域文件留在外部数据根；仅使用 CPU/OpenCV/Pillow，不调用 FFmpeg 可执行程序、模型、GPU 或外部网络。
+导出的标注类别保留区域颜色，供后续标注工具使用。
 
 视频保留有效容器时间戳，对取整冲突做最小修补；时间戳缺失时，在上一帧整数毫秒上
 增加至少 1 ms 或一个源帧间隔。`run_config.json` 记录 `container_frame_count`、

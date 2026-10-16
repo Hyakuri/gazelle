@@ -542,6 +542,7 @@ backups/drafts and exports to `review_trial_export`. Simply loading the page doe
 not create formal regions. Choose a reference, draw polygons, check every session,
 then export references/classes. Invalid or self-intersecting polygons cannot be
 saved; keep the original candidate manifest when resuming. Stop the server with Ctrl+C.
+Exported classes retain target colors and use configured colors for fixed labels.
 
 ## 15. Validation commands
 

@@ -49,5 +49,5 @@ python -m tools.validation.render_roi_reference --regions-path "$data\roi\roi_re
 工具不安装字体。区域文件版本 1，摄像机固定为 cam_e；polygon 为 0–1 归一化坐标，
 key 唯一、cell 至多一个，多边形不能自相交。类别按 target 区域顺序分配数字键，
 之后为 cell_other、away、absent、unknown；unknown 固定为 0。
-`classes.json` 为 `{version: 1, classes: [{key: 数字, label: 英文标签, name_zh: 中文名}]}`。
+`classes.json` 为 `{version: 1, classes: [{key: 数字, label: 英文标签, name_zh: 中文名, color: 颜色}]}`。
 正式标记体验与区域边界仍需用户确认，工具检查不代表科研标签已经验收。

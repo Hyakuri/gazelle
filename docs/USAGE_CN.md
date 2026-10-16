@@ -536,6 +536,7 @@ python -m tools.validation.render_roi_reference --regions-path "$data\roi\roi_re
 试用时加 `--regions-path "$data\roi\review_trial.json"`，其备份、草稿独立，导出写入 `review_trial_export`。
 仅打开页面不会创建正式区域。选择参考帧、画多边形、核对各日期后导出参考图与类别。
 无效或自相交多边形不能保存；续标请保留原候选清单。Ctrl+C 停止服务。
+导出的类别保留目标区域颜色，固定类别颜色来自配置。
 
 ## 15. 验证命令
 
