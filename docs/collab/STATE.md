@@ -11,9 +11,9 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 | pr | [#6](https://github.com/Hyakuri/gazelle/pull/6)（draft）；正文来源 `docs/collab/STAGE2_PR_BODY.md` |
 | writer | codex |
 | next_actor | codex |
-| current_task | `docs/collab/tasks/TASK-123-overview-region-marking-tool.md` |
-| after_current | `docs/collab/tasks/TASK-001-overwrite-safe-validation.md`，然后结束本轮并把 `next_actor` 改为 `claude` |
-| last_pushed | `1936ef2b4cd842b7c87857d0e85643c38c154d4a`（TASK-132 实现；报告与 STATE 记录随后提交） |
+| current_task | `docs/collab/tasks/TASK-001-overwrite-safe-validation.md` |
+| after_current | 完成本轮后把 `next_actor` 改为 `claude`，释放 `writer` |
+| last_pushed | `4220c98fd88d582bfc83901947e7176a710b5bbd`（TASK-123 实现；报告与 STATE 记录随后提交） |
 | last_accepted | `bbec056`（迁移验收基线，Gate A/B/C 通过） |
 | 更新 | 2026-10-16，Claude：TASK-131 契约 r3；分级自主；常设批准 |
 
@@ -23,7 +23,7 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 | --- | --- | --- | --- |
 | Codex 第 1 轮 | TASK-131 读取器：容器时间戳、严格递增、截断即失败 | ready-for-review | 537 项离线测试；29 段各 600 帧无违规；AVI 失败与 300 帧 GPU smoke 均已实测 |
 | Codex 第 1 轮 | TASK-132 作业数据清单与 AVI 无损重封装 | ready-for-review | 40 文件清单；11/11 重封装校验通过；生产读取器 600 帧检查通过 |
-| Codex 第 1 轮 | TASK-123 全局摄像机画面中的区域标记工具 | ready | 依赖 TASK-132；用户 Q8 的回答 |
+| Codex 第 1 轮 | TASK-123 全局摄像机画面中的区域标记工具 | ready-for-review | 84 候选帧和本机页面通过；正式区域不存在；Claude 四区域试用待验收 |
 | Codex 第 1 轮 | TASK-001 参数在 `--overwrite` 删除前校验 | ready | GZ-04 |
 | Claude | 审查第 1 轮，试用区域标记工具 | 未开始 | |
 | 用户 | 用 TASK-123 的工具画出区域，约 10 分钟 | 待前置 | 可与第 2 轮并行 |

@@ -94,6 +94,38 @@ git status --short
 - 未运行的检查、限制、阻塞：
 - 状态标签（v1.1 §12）：
 
+### 2026-10-16 实施与候选帧检查（Codex）
+
+- **提交与范围**：`26b50f289e374460720f52222cb4ecbb08561fea` — `Add local overview region marking and reference export`；`4220c98fd88d582bfc83901947e7176a710b5bbd` — `Preserve region colors in derived annotation classes`，均已推送。工具、默认区域配置、中文指南、6 项 ROI 测试、文档测试与四份用户文档；未修改 Gazelle 运行时。
+- **实现**：每会话 12 个等长区间中点抽帧，记录实际容器时间、请求时间、源与图像哈希；新文件名保留旧候选图，先校验再原子发布 manifest。浏览器页面可选参考帧、画/闭合多边形、拖动/删除顶点、删除区域、撤销、自定义 target、跨日期叠加核对、保存与导出。区域定义与未闭合草稿分开原子保存，各有上一版备份。区域定义校验规范坐标、非退化且不自交、唯一 key、至多一个 cell。类别从配置和 target 顺序生成，unknown=0，保留颜色，供 TASK-121 调用生成函数。
+- **离线验证**：新增测试先因包未实现失败，再通过。最终 `python -m compileall main.py gazelle tests tools`、`python -m unittest discover -s tests -v`（**555 项，3.961 s，无 skip**）、`python main.py --help`、`python main.py --list-models`、`git diff --check` 全部退出 0。ROI 6 项覆盖合法/非法几何、类别/颜色、坐标、原子保存/备份/恢复、候选帧伪来源、错误 manifest 保留旧版本、参考图合成、试用导出隔离、直接调用 HTTP handler（不开端口）、Host/Origin/token 边界。聚焦早期 5 ROI + 17 文档 = 22 项通过；最终新增 HTTP 用例包含在 555 中。node 对外置临时脚本执行 `--check`，退出 0。现有微软雅黑字体加载及中文 mask 检查通过。非致命输出仍为既有 OpenCV 无效视频测试与 Git 换行提示。
+- **真实抽帧命令**：Gazelle Python 执行 `-m tools.validation.extract_roi_candidates --inventory <data>/inventory/inventory.json --remux-root <data>/remux --out-root <data>/roi`，其中 data 为 `C:\Users\yun\Documents\Claude_Code\gazelle_data\workdata`；BelowNormal，退出 **0**。20260821、20260828、20260903、20260911、20260925、20261002、20261009 各 12 张，总计 **84 张 1920x1080 JPEG**。重新运行 `validate_candidates(<data>/roi/candidates.json)`，全部 SHA-256、尺寸、格式与元数据通过。
+- **页面实测命令**：`-m tools.validation.roi_server --candidates <data>/roi/candidates.json --regions-path <data>/roi/codex_pagecheck.json --annotator codex-pagecheck --port 0`。实际地址为 `http://127.0.0.1:4285`。通过内置浏览器只读打开：页面显示“已加载 84 张候选画面”；DOM 有 84 个候选按钮、7 个日期叠加面板；检查时 47 张 lazy 缩略图已解码为 1920x1080，图像 origin 只有本机地址；浏览器 error 日志为空。没有选择参考或画正式区域，没有截图/上传图像。
+- **服务关闭与权限证据**：普通沙盒 `Get-NetTCPConnection` 被拒绝，未提权；改用 `netstat -ano -p tcp` 确认仅 `127.0.0.1:4285 LISTENING`，PID 331148。工具 PTY 的 Ctrl+C 未结束该进程；核对 PID 的 Gazelle Python 路径与本次启动时间后，仅停止该进程；随后无该端口监听，浏览器临时标签已关闭。`roi_regions.json` 与 `codex_pagecheck.json` 均不存在。
+- **外部活动**：真实 CPU OpenCV 解码、Pillow resize/JPEG、磁盘与哈希读取；本机 HTTP 页面与图像读取。未调用 FFmpeg 可执行程序、模型、GPU、下载或安装；未改环境，无外部页面资源或数据上传。派生图像/清单仅保存在授权数据根。图像参考渲染通过合成帧单测；没有代画真实区域。
+- **反证式复核**：重复/保留 key、bool/NaN/越界点、自交/退化多边形、多个 cell、错误 token、异源请求、越界图像 ID、错误抽帧时间均被拒绝；失败保留旧区域/manifest。相同图像哈希的不同时间候选按完整 reference 元数据匹配。试用区域导出不覆盖正式文件。
+- **尚待验收**：Claude 需按契约用临时 regions-path 在浏览器画四个默认区域，确认拖动、删除、撤销、重启恢复、中文参考图与各日期叠加图；用户之后画正式边界。Codex 的页面加载与隔离单测不代替该独立交互/标记体验验收。状态：已静态检查、已实际运行，可交审。
+
+#### 自主决定（A）
+
+- 候选时间取 12 个等间隔区间中点，避开精确 EOF；同时记录实际与请求容器时间。新候选使用独立文件名，避免覆盖已选参考。
+- 未闭合草稿放在同名 .draft.json，正式 schema 只包含已闭合且合法区域；试用文件的导出使用独立子目录。
+- 页面导出按钮复用 CLI 渲染函数，采用本机现有 CJK 字体；类别颜色随 target 保留，固定类别颜色来自 JSON 配置，符合 TASK-121 彩色时间轴使用方式。
+- 只读监听查询被拒绝时使用 netstat；工具 PTY 不能正常传递中断时，核对后停止本次唯一服务 PID，没有更改权限或配置。
+
+#### 范围外改动
+
+无；默认配置与工具代码入 Git，候选帧、实际区域、参考图不入 Git。
+
+#### 待 Claude 判断（B）
+
+无阻塞问题。需要独立审查区域/类别接口与完整浏览器操作，验收仍待进行。
+
+#### 待用户决定（C）
+
+无本轮实施决策。正式画区域属于计划中的用户后续步骤，等待 Claude 先审查工具。
+
+
 ## 3. 审查结论（Claude 追加）
 
 - 审查目标（SHA 范围）：
