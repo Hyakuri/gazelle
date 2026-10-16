@@ -498,7 +498,9 @@ class UsageDocumentationTest(unittest.TestCase):
     def test_workdata_tool_entry_points_are_documented(self):
         for path in (ENGLISH_GUIDE, CHINESE_GUIDE):
             text = self._section(path, 15)
-            for token in ('tools.workdata.inventory', 'tools.workdata.remux', '../tools/workdata/README_CN.md'):
+            for token in ('tools.workdata.inventory', 'tools.workdata.remux',
+                          'tools.workdata.osd_clock', 'tools.workdata.timemap',
+                          'tools.workdata.sync_check', '../tools/workdata/README_CN.md'):
                 self.assertIn(token, text, str(path))
 
     def test_region_tool_entry_points_are_documented(self):

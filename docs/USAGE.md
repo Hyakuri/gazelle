@@ -545,6 +545,9 @@ The report includes `last_pts`, actual decoded counts and `tail_eof`.
 | --- | --- | --- | --- |
 | `tools.workdata.inventory` | Source AVI/MP4; prior inventory hash cache | Atomic inventory JSON, camera roles and packet statistics | ffprobe |
 | `tools.workdata.remux` | Inventory and source AVI | Video-only MP4 and `remux_report.json` | ffprobe, FFmpeg, OpenCV decode checks |
+| `tools.workdata.osd_clock` | One complete local video-frame image | Recognized clock or null on stdout | CPU/OpenCV; no FFmpeg executable |
+| `tools.workdata.timemap` | Inventory, original MP4 and validated remuxes | Anchor caches and per-session time maps | CPU/PyAV (FFmpeg libraries), no FFmpeg executable |
+| `tools.workdata.sync_check` | Time maps and mapped videos | Motion-energy caches and correlation reports | CPU/PyAV; no FFmpeg executable |
 | `tools.validation.extract_roi_candidates` | Inventory, validated overview remuxes | 12 JPEGs/session and `roi/candidates.json` | CPU OpenCV/Pillow; no FFmpeg executable |
 | `tools.validation.roi_server` | Candidates and optional saved regions | Atomic region/draft files, backups; reference/class export on request | Local browser at 127.0.0.1 only |
 | `tools.validation.roi_regions` | Region definitions | Validation or derived classes JSON | CPU only |
@@ -589,6 +592,23 @@ Autosave alone does not complete annotation: successful export writes
 `roi_regions.complete.json` (`version`, `completed_at`, `regions_sha256`). Later
 edits invalidate completion until re-export. Downstream tools use
 `roi_regions.completed_document()` to check the marker and file hash.
+
+Clock commands, from the repository root using the same external `$data`:
+
+```powershell
+python -m tools.workdata.osd_clock --image C:\path\outside-repository\clock.png
+python -m tools.workdata.timemap --inventory "$data\inventory\inventory.json" --remux-root "$data\remux" --out-root "$data\timemaps"
+python -m tools.workdata.sync_check --timemaps "$data\timemaps" --out-root "$data\sync_checks"
+```
+
+These commands use no GPU, model, network or downloads. Video commands set below-normal
+priority, stream native PTS through PyAV, and support `--session` and `--force`.
+Time maps fit first frames after clock-second transitions; unreliable readings stay
+missing. The naive displayed clock is encoded numerically as epoch seconds, without
+claiming calibrated UTC. Motion checks use three 120-second windows at 10 Hz,
+192×108 gray, with ±10-second lag search; `abs(lag) <= 0.5` and `r >= 0.3`
+are both required. A failed check exits nonzero and keeps its report for review;
+it does not silently correct camera clocks. See the [Chinese guide](../tools/workdata/README_CN.md).
 
 ## 16. Validation commands
 

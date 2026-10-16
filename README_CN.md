@@ -321,6 +321,11 @@ python main.py `
 
 ### 研究数据工具
 
+时钟工具 `tools.workdata.osd_clock`、`tools.workdata.timemap` 与
+`tools.workdata.sync_check` 读取画面时钟、拟合原生视频 PTS 并检查运动对齐。
+它们使用 CPU/PyAV，映射与报告写在仓库外；不调用 FFmpeg 可执行程序、GPU、模型或网络。
+无法可靠识别的时钟保持缺失，同步检查失败需复核。
+
 本地研究数据工具可生成只读源清单并无损重封装 AVI 空包。从仓库根目录运行
 `python -m tools.workdata.inventory` 和 `python -m tools.workdata.remux`，读取源视频、
 将派生文件写到仓库外；调用 ffprobe/FFmpeg，仅使用 CPU，不使用 GPU、模型或网络。

@@ -315,6 +315,12 @@ python main.py `
 
 ### Research data tools
 
+The clock tools `tools.workdata.osd_clock`, `tools.workdata.timemap`, and
+`tools.workdata.sync_check` read displayed clocks, fit native video PTS, and check
+motion alignment. They use CPU/PyAV and write maps and reports outside the
+repository; no FFmpeg executable, GPU, model, or network is used. Unreadable
+clocks remain missing, and failed synchronization checks require review.
+
 Local research data tools build a read-only source inventory and losslessly
 remux AVI empty packets. Run `python -m tools.workdata.inventory` and
 `python -m tools.workdata.remux` from the repository root; these read the source

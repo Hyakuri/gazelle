@@ -539,6 +539,9 @@ Perception quality 依赖 visible-face evidence。`pose_only` 使用近似 pose-
 | --- | --- | --- | --- |
 | `tools.workdata.inventory` | 原始 AVI/MP4、旧清单哈希缓存 | 原子清单 JSON、摄像机身份与包统计 | ffprobe |
 | `tools.workdata.remux` | 清单与原始 AVI | 不含音频的 MP4、`remux_report.json` | ffprobe、FFmpeg、OpenCV 解码检查 |
+| `tools.workdata.osd_clock` | 本地完整视频帧图片 | 标准输出中的识别时钟或 null | CPU/OpenCV；不调用 FFmpeg 可执行程序 |
+| `tools.workdata.timemap` | 清单、原始 MP4、已验证的重封装视频 | 锚点缓存与各会话时间映射 | CPU/PyAV（FFmpeg 库），不调用 FFmpeg 可执行程序 |
+| `tools.workdata.sync_check` | 时间映射与对应视频 | 运动能量缓存与互相关报告 | CPU/PyAV；不调用 FFmpeg 可执行程序 |
 | `tools.validation.extract_roi_candidates` | 清单、已校验的全局摄像机重封装视频 | 每会话 12 张 JPEG、`roi/candidates.json` | CPU OpenCV/Pillow；不调用 FFmpeg 可执行程序 |
 | `tools.validation.roi_server` | 候选帧、可选已有区域 | 原子区域/草稿文件、备份；按需导出参考图与类别 | 仅 127.0.0.1 本机浏览器 |
 | `tools.validation.roi_regions` | 区域定义 | 校验或派生类别 JSON | 仅 CPU |
@@ -575,6 +578,21 @@ python -m tools.validation.render_roi_reference --regions-path "$data\roi\roi_re
 `unknown` 为 0。删除后重画会改变顺序。自动保存不表示完成：成功导出才写入
 `roi_regions.complete.json`（`version`、`completed_at`、`regions_sha256`）。后续修改使完成状态失效，
 需重新导出。下游工具用 `roi_regions.completed_document()` 校验完成标记与文件哈希。
+
+时钟工具在仓库根目录运行，沿用上面的外部 `$data`：
+
+```powershell
+python -m tools.workdata.osd_clock --image C:\path\outside-repository\clock.png
+python -m tools.workdata.timemap --inventory "$data\inventory\inventory.json" --remux-root "$data\remux" --out-root "$data\timemaps"
+python -m tools.workdata.sync_check --timemaps "$data\timemaps" --out-root "$data\sync_checks"
+```
+
+这些命令不使用 GPU、模型、网络或下载。视频命令自动设为低于正常优先级，通过 PyAV
+流式读取原生 PTS，支持 `--session` 与 `--force`。映射使用秒位跳变后第一帧作为锚点；
+不可靠读数保持缺失。画面本地时钟仅用 epoch 秒数编码，不表示经过校准的 UTC。
+运动检查取三个 120 秒窗口，采用 10 Hz、192×108 灰度、±10 秒滞后搜索，要求
+`abs(lag) <= 0.5` 且 `r >= 0.3`。失败时非零退出并保留报告供复核，不自动修正摄像机时钟。
+详见[中文工具指南](../tools/workdata/README_CN.md)。
 
 ## 16. 验证命令
 
