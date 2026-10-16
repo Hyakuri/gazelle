@@ -315,6 +315,12 @@ python main.py `
 
 ### Research data tools
 
+`tools.workdata.proxies` creates three 5 Hz, 1920×1080 clock-aligned videos per
+session, with source-frame sidecars and full decode counts. It uses CPU PyAV and
+FFmpeg/libx264, writes outside the repository, and uses no model, GPU or network.
+See [Research data tools](docs/USAGE.md#15-research-data-tools) for commands and
+the provisional policy for internal coverage gaps.
+
 The clock tools `tools.workdata.osd_clock`, `tools.workdata.timemap`, and
 `tools.workdata.sync_check` read displayed clocks, fit native video PTS, and check
 motion alignment. They use CPU/PyAV and write maps and reports outside the

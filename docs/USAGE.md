@@ -548,6 +548,7 @@ The report includes `last_pts`, actual decoded counts and `tail_eof`.
 | `tools.workdata.osd_clock` | One complete local video-frame image | Recognized clock or null on stdout | CPU/OpenCV; no FFmpeg executable |
 | `tools.workdata.timemap` | Inventory, original MP4 and validated remuxes | Anchor caches and per-session time maps | CPU/PyAV (FFmpeg libraries), no FFmpeg executable |
 | `tools.workdata.sync_check` | Time maps and mapped videos | Motion-energy caches and correlation reports | CPU/PyAV; no FFmpeg executable |
+| `tools.workdata.proxies` | Valid time maps and mapped videos | Three H.264 proxies/session, frame sidecars, full source decode counts and `session.json` | CPU/PyAV, FFmpeg/libx264, ffprobe |
 | `tools.validation.extract_roi_candidates` | Inventory, validated overview remuxes | 12 JPEGs/session and `roi/candidates.json` | CPU OpenCV/Pillow; no FFmpeg executable |
 | `tools.validation.roi_server` | Candidates and optional saved regions | Atomic region/draft files, backups; reference/class export on request | Local browser at 127.0.0.1 only |
 | `tools.validation.roi_regions` | Region definitions | Validation or derived classes JSON | CPU only |
@@ -609,6 +610,28 @@ claiming calibrated UTC. Motion checks use three 120-second windows at 10 Hz,
 192×108 gray, with ±10-second lag search; `abs(lag) <= 0.5` and `r >= 0.3`
 are both required. A failed check exits nonzero and keeps its report for review;
 it does not silently correct camera clocks. See the [Chinese guide](../tools/workdata/README_CN.md).
+
+Proxy generation, using the same external `$data`:
+
+```powershell
+python -m tools.workdata.proxies --timemaps "$data\timemaps" --out-root "$data\proxies" --session 20260828
+```
+
+Defaults are `--step-hz 5 --size 1920 1080`, CRF 20, yuv420p, constant frame rate,
+and no audio. The command uses below-normal CPU priority, real FFmpeg/ffprobe,
+and no model, GPU, network or downloads. It streams all source frames to EOF,
+records container versus decoded counts (differences above 0.5% need review),
+and validates temporary videos before publication. Valid matching outputs resume;
+`--force` rebuilds them. Existing outputs that fail validation or have a different
+fingerprint are preserved and require explicit `--force` to replace. Sidecars record the nearest source frame, native PTS,
+time difference and a gap flag when the difference exceeds half a grid step.
+
+Multiple common-coverage intervals are rejected by default. The explicit
+`--allow-internal-gaps` option provisionally retains one continuous clock grid
+across the entire range and records every coverage gap and nearest-frame gap flag;
+it does not compress time. This policy needs coordinator review. Clock-aligned
+proxies alone do not establish physical motion synchronization. See the
+[Chinese tool guide](../tools/workdata/README_CN.md).
 
 ## 16. Validation commands
 

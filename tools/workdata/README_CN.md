@@ -56,3 +56,27 @@ python -m tools.workdata.sync_check --timemaps "$data\timemaps" --out-root "$dat
 比较 A/E 与 B/E 的 ±10 秒互相关。符号定义为 `corr(camera[t + lag], E[t])`；
 要求 `abs(lag) <= 0.5` 且 `r >= 0.3`。失败仍保存窗口、r、滞后与缺口数并非零退出，
 交协调者复核；不会靠修改映射或阈值使检查通过。运动缓存绑定映射和检查实现的哈希。
+
+## 5 Hz 代理视频
+
+```powershell
+python -m tools.workdata.proxies --timemaps "$data\timemaps" --out-root "$data\proxies" --session 20260828
+```
+
+默认 `--step-hz 5 --size 1920 1080`，三个角色文件为 `proxy_front.mp4`（cam_b）、
+`proxy_right.mp4`（cam_a）、`proxy_overview.mp4`（cam_e）。同会话具有相同 N；
+每个网格时刻取最近源帧，超过半步长的时间差记为缺口。网格使用画面时钟，不代表已经证明物理运动同步。
+
+使用 CPU PyAV 顺序解码、FFmpeg libx264/CRF20/yuv420p/CFR 编码，不含音频；
+进程低于正常优先级，无模型、GPU、网络或下载。逐帧旁注记录 k、时钟、源文件、PTS、
+时间差与缺口。所有源文件完整解码到 EOF，记录 OpenCV 容器计数与实际解码计数，
+相差超过 0.5% 或计数不可用时标为需复核。临时输出经 ffprobe 完整帧数、格式、时长检查后
+原子替换，并绑定 SHA-256。`session.json` 记录网格、角色、映射与实现哈希、真实代码提交及工作树状态。
+
+已有匹配输出经哈希、旁注与完整解码验证后跳过；`--force` 强制重建。参数或实现变化会使旧指纹失效，
+旧输出会保留并报错，只有显式 `--force` 才替换；校验失败或视频/旁注不成对时同样处理。
+可用 `--ffmpeg`、`--ffprobe` 指定已有程序；不安装任何依赖。
+
+共同覆盖有内部缺口时默认报错。经协调记录的暂定模式可显式加 `--allow-internal-gaps`：
+保留总体起止的固定网格，记录 `coverage_gaps` 与 `gap_policy=nearest_with_gap_flag_provisional`，
+沿用最近帧规则，不丢弃区间或拼接压缩时间。协调者确认前，这些输出仅作为可重建的试运行结果。

@@ -321,6 +321,11 @@ python main.py `
 
 ### 研究数据工具
 
+`tools.workdata.proxies` 为每次录制生成三段 5 Hz、1920×1080 的画面时钟对齐视频，
+附源帧旁注和全长解码计数。使用 CPU PyAV 与 FFmpeg/libx264，输出在仓库外，
+不使用模型、GPU 或网络。命令与内部覆盖缺口的暂定规则见
+[研究数据工具](docs/USAGE_CN.md#15-研究数据工具)。
+
 时钟工具 `tools.workdata.osd_clock`、`tools.workdata.timemap` 与
 `tools.workdata.sync_check` 读取画面时钟、拟合原生视频 PTS 并检查运动对齐。
 它们使用 CPU/PyAV，映射与报告写在仓库外；不调用 FFmpeg 可执行程序、GPU、模型或网络。

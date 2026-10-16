@@ -3,6 +3,7 @@
 import argparse
 import heapq
 import json
+import math
 from pathlib import Path
 import time
 
@@ -11,6 +12,12 @@ import numpy as np
 from .common import atomic_json, hash_file
 from .timemap import map_time
 from .video_source import VideoSource
+
+
+def has_sampling_gap(delta_seconds,step,target_time):
+    # Epoch-sized floats lose sub-microsecond precision when subtracted.
+    tolerance=max(1e-7,2*math.ulp(float(target_time)))
+    return abs(delta_seconds)>step*.5+tolerance
 
 
 def nearest_frames(frames,times,step):
@@ -32,7 +39,7 @@ def nearest_frames(frames,times,step):
             raise ValueError('No decoded source frames cover the sampling grid')
         chosen=min(candidates,key=lambda r:(abs(r['wall_time']-target),r['wall_time']))
         delta=chosen['wall_time']-target
-        yield dict(chosen,k=k,t_k=float(target),delta_seconds=float(delta),gap=abs(delta)>step*.5+1e-7)
+        yield dict(chosen,k=k,t_k=float(target),delta_seconds=float(delta),gap=has_sampling_gap(delta,step,target))
 
 
 def mapped_frames(files,start,end,source_factory=VideoSource):

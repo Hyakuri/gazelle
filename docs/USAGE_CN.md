@@ -542,6 +542,7 @@ Perception quality 依赖 visible-face evidence。`pose_only` 使用近似 pose-
 | `tools.workdata.osd_clock` | 本地完整视频帧图片 | 标准输出中的识别时钟或 null | CPU/OpenCV；不调用 FFmpeg 可执行程序 |
 | `tools.workdata.timemap` | 清单、原始 MP4、已验证的重封装视频 | 锚点缓存与各会话时间映射 | CPU/PyAV（FFmpeg 库），不调用 FFmpeg 可执行程序 |
 | `tools.workdata.sync_check` | 时间映射与对应视频 | 运动能量缓存与互相关报告 | CPU/PyAV；不调用 FFmpeg 可执行程序 |
+| `tools.workdata.proxies` | 有效时间映射与对应视频 | 每会话三段 H.264 代理、逐帧旁注、源全长解码计数与 `session.json` | CPU/PyAV、FFmpeg/libx264、ffprobe |
 | `tools.validation.extract_roi_candidates` | 清单、已校验的全局摄像机重封装视频 | 每会话 12 张 JPEG、`roi/candidates.json` | CPU OpenCV/Pillow；不调用 FFmpeg 可执行程序 |
 | `tools.validation.roi_server` | 候选帧、可选已有区域 | 原子区域/草稿文件、备份；按需导出参考图与类别 | 仅 127.0.0.1 本机浏览器 |
 | `tools.validation.roi_regions` | 区域定义 | 校验或派生类别 JSON | 仅 CPU |
@@ -593,6 +594,24 @@ python -m tools.workdata.sync_check --timemaps "$data\timemaps" --out-root "$dat
 运动检查取三个 120 秒窗口，采用 10 Hz、192×108 灰度、±10 秒滞后搜索，要求
 `abs(lag) <= 0.5` 且 `r >= 0.3`。失败时非零退出并保留报告供复核，不自动修正摄像机时钟。
 详见[中文工具指南](../tools/workdata/README_CN.md)。
+
+代理生成沿用外部 `$data`：
+
+```powershell
+python -m tools.workdata.proxies --timemaps "$data\timemaps" --out-root "$data\proxies" --session 20260828
+```
+
+默认 `--step-hz 5 --size 1920 1080`、CRF 20、yuv420p、恒定帧率、不含音频。
+命令以低于正常优先级使用 CPU，实际调用 FFmpeg/ffprobe，不使用模型、GPU、网络或下载。
+所有源文件流式解码到 EOF，记录容器与实际解码帧数（差异超过 0.5% 需复核）；
+临时视频校验后发布。匹配且有效的输出可续跑跳过，`--force` 强制重建。已有输出校验失败或指纹不匹配时，
+保留文件并要求显式 `--force` 才替换。
+旁注记录最近源帧、原生 PTS、时间差；超过网格半步长的差异标记为缺口。
+
+共同覆盖包含多个区间时默认拒绝；显式 `--allow-internal-gaps` 暂定保留整体起止间
+连续时钟网格，记录全部覆盖缺口与最近帧缺口标记，不压缩时间。此规则需要协调者复核。
+画面时钟对齐代理本身不能证明物理运动已同步。详见
+[中文工具指南](../tools/workdata/README_CN.md)。
 
 ## 16. 验证命令
 

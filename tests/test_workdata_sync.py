@@ -22,6 +22,10 @@ class SyncTest(unittest.TestCase):
         self.assertEqual([r['source'] for r in rows],['a','a','b','b','b'])
         self.assertEqual([r['gap'] for r in rows],[False,False,False,True,False])
         self.assertAlmostEqual(rows[3]['delta_seconds'],-.17)
+        epoch=1788307200.
+        boundary=list(nearest_frames([dict(wall_time=epoch+.1,source='epoch',pts=.1)],
+                                     [epoch+.2],step=.2))[0]
+        self.assertFalse(boundary['gap'],'half-step equality must survive epoch floating-point rounding')
 
     def test_windows_are_inside_overlap_and_do_not_bridge_gaps(self):
         spans=[(100,300),(500,1000)]
