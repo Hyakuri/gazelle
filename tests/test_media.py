@@ -71,8 +71,8 @@ class MediaTest(unittest.TestCase):
             ([0, 0, 30, 98, 130], 20, [0, 1, 30, 98, 130], "crccc"),
             ([500, 480, 520], 30, [500, 501, 520], "crc"),
             ([10.2, 10.4], 30, [10.2, 11], "cr"),
-            ([0, 0, 0, 0, 0], 30, [0, 1, 34.333333333, 67.333333333, 100.333333333], "crfff"),
-            ([0, 33.3, nan, 100], 30, [0, 33.3, 66.333333333, 100], "ccfc"),
+            ([0, 0, 0, 0, 0], 30, [0, 1, 34.333333333, 67.666666667, 101], "crfff"),
+            ([0, 33.3, nan, 100], 30, [0, 33.3, 66.633333333, 100], "ccfc"),
             ([-5, 33.3, 66.7], 30, [0, 33.3, 66.7], "fcc"),
             ([0, 0, 0, 33.3, 66.7], 30, [0, 1, 34.333333333, 35, 66.7], "crfrc"),
             ([0, nan], 30, [0, 33.333333333], "cf"),
@@ -80,7 +80,7 @@ class MediaTest(unittest.TestCase):
             ([0, nan], 2000, [0, 1], "cf"),
             ([0, nan, nan], 1000000, [0, 1, 2], "cff"),
             ([0, 0, 0, 0], 1500, [0, 1, 2, 3], "crff"),
-            ([float("inf"), -1, None], 0, [0, 33.333333333, 66.333333333], "fff"),
+            ([float("inf"), -1, None], 0, [0, 33.333333333, 66.666666667], "fff"),
         )
         names = {"c": "container", "r": "repaired", "f": "fps_fallback"}
         for raw, fps, expected, sources in cases:
@@ -97,6 +97,22 @@ class MediaTest(unittest.TestCase):
                 rounded = [int(round(frame.timestamp_ms)) for frame in frames]
                 self.assertTrue(all(b > a for a, b in zip(rounded, rounded[1:])))
                 self.assertEqual(capture.release_calls, 1)
+
+    def test_missing_timestamps_have_no_accumulated_rounding_drift(self):
+        for fps in (29.97, 30, 60):
+            with self.subTest(fps=fps), TemporaryDirectory() as tmp:
+                count = round(600 * fps)
+                path = Path(tmp) / 'fake.mp4'
+                path.touch()
+                capture = FakeCapture([float('nan')] * count, fps=fps, frame_count=count)
+                previous = -1
+                with patch('cv2.VideoCapture', return_value=capture), VideoFrameReader(path) as reader:
+                    for frame in reader:
+                        self.assertGreater(round(frame.timestamp_ms), previous)
+                        self.assertEqual(frame.timestamp_source, 'fps_fallback')
+                        previous = round(frame.timestamp_ms)
+                        frame.image.close()
+                self.assertLess(abs(frame.timestamp_ms - (count - 1) * 1000 / fps), 1e-6)
 
     def test_video_frame_keeps_legacy_constructor(self):
         frame = VideoFrame(0, 0.0, Image.new("RGB", (2, 2)))

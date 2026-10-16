@@ -2,6 +2,7 @@ from contextlib import redirect_stderr
 import io
 from pathlib import Path
 import sys
+import subprocess
 from tempfile import TemporaryDirectory
 import unittest
 from types import SimpleNamespace
@@ -21,6 +22,30 @@ from gazelle.runtime.config import (
 
 
 class RuntimeCliTest(unittest.TestCase):
+    def test_truncated_video_cli_exits_nonzero_and_preserves_failure_record(self):
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'truncated.avi'
+            path.touch()
+            script = '''
+import sys
+from unittest.mock import patch
+from gazelle.runtime.cli import main
+from gazelle.runtime.perception.contracts import HeadFrameResult
+from tests.test_media import FakeCapture
+from tests.test_video_pipeline import FakeHeadProvider
+capture = FakeCapture([0], fps=30, frame_count=108219)
+provider = FakeHeadProvider(result_factory=lambda _: HeadFrameResult(heads=()))
+with patch('cv2.VideoCapture', return_value=capture), patch('gazelle.runtime.pipeline.build_head_provider_from_config', return_value=provider), patch('gazelle.runtime.pipeline._build_real_predictor', side_effect=AssertionError('unexpected model')):
+    raise SystemExit(main(['--input', sys.argv[1], '--output-dir', sys.argv[2], '--max-frames', '50']))
+'''
+            result = subprocess.run([sys.executable, '-c', script, str(path), tmp],
+                                    cwd=Path(__file__).resolve().parents[1], capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('Video decode truncated: read 1 frames, required 50, container reports 108219', result.stderr)
+            import json
+            payload = json.loads((Path(tmp) / 'truncated_gazelle/run_config.json').read_text())
+            self.assertIs(payload['decode_complete'], False)
+
     def test_static_json_arguments_are_usage_errors_before_inference(self):
         cases = (
             (['--head-source', 'static'], '--bbox'),

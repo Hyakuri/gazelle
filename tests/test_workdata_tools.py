@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
@@ -28,6 +29,7 @@ class WorkdataToolsTest(unittest.TestCase):
         self.assertEqual(value['small_count'], 2)
         self.assertAlmostEqual(value['small_fraction'], 2 / 3)
         self.assertTrue(value['pts_strict'])
+        self.assertEqual(value['last_pts'], .2)
         for values in (['size=64|pts_time=1', 'size=70|pts_time=1'], ['size=64|pts_time=N/A'], []):
             self.assertFalse(packet_summary(iter(values))['pts_strict'])
 
@@ -41,6 +43,14 @@ class WorkdataToolsTest(unittest.TestCase):
             path.write_bytes(b'longer')
             second = inventory.fingerprint(path, first)
             self.assertNotEqual(first['sha256'], second['sha256'])
+            stat = path.stat()
+            os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
+            with patch.object(inventory, 'hash_file', wraps=common.hash_file) as hashed:
+                third = inventory.fingerprint(path, second)
+            hashed.assert_called_once_with(path)
+            self.assertEqual(second['sha256'], third['sha256'])
+            self.assertEqual(second['size_bytes'], third['size_bytes'])
+            self.assertNotEqual(second['mtime_ns'], third['mtime_ns'])
 
     def test_remux_command_copies_only_video(self):
         self.assertEqual(remux.build_command('ffmpeg-custom', Path('in.avi'), Path('tmp.mp4')), [
@@ -49,18 +59,21 @@ class WorkdataToolsTest(unittest.TestCase):
 
     def test_validation_rejects_packet_duration_pts_and_decode_failures(self):
         source = {'count': 100, 'small_count': 40}
-        target = {'count': 60, 'small_count': 0, 'pts_strict': True}
-        with patch.object(remux, 'probe_metadata', return_value={'duration': 100}), patch.object(
+        target = {'count': 60, 'small_count': 0, 'pts_strict': True, 'last_pts': 99.95}
+        decoded = dict(windows=[30, 30, 59], tail_eof=True, last_timestamp_ms=99950, frame_interval_ms=50)
+        with patch.object(remux, 'probe_metadata', return_value={'duration': 100, 'r_frame_rate': '30/1'}), patch.object(
             remux, 'probe_packets', return_value=target
-        ), patch.object(remux, 'check_decode', return_value=[30, 30, 30]):
+        ), patch.object(remux, 'check_decode', return_value=decoded):
             good = remux.validate_output(Path('fake.mp4'), source, 100, 'ffprobe')
             self.assertTrue(good['valid'])
             for bad in ({**target, 'count': 59}, {**target, 'pts_strict': False}):
                 with patch.object(remux, 'probe_packets', return_value=bad):
                     self.assertFalse(remux.validate_output(Path('fake.mp4'), source, 100, 'ffprobe')['valid'])
             self.assertFalse(remux.validate_output(Path('fake.mp4'), source, 99, 'ffprobe')['valid'])
-            with patch.object(remux, 'check_decode', return_value=[30, 30, 29]):
-                self.assertFalse(remux.validate_output(Path('fake.mp4'), source, 100, 'ffprobe')['valid'])
+            for changes in (dict(windows=[30, 30, 29]), dict(tail_eof=False),
+                            dict(last_timestamp_ms=98000), dict(last_timestamp_ms=99910)):
+                with patch.object(remux, 'check_decode', return_value={**decoded, **changes}):
+                    self.assertFalse(remux.validate_output(Path('fake.mp4'), source, 100, 'ffprobe')['valid'])
 
     def test_atomic_publication_and_failed_force_preserve_existing(self):
         with TemporaryDirectory() as tmp:
@@ -129,16 +142,41 @@ class WorkdataToolsTest(unittest.TestCase):
         self.assertTrue(result['has_audio'])
         self.assertEqual(run.call_args.args[0][0], 'probe-custom')
 
-    def test_tail_check_uses_preroll_to_avoid_vfr_seek_rounding(self):
+    def test_first_minute_small_avi_packet_requires_remux(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / 'raw'
+            session = root / '20260903'
+            session.mkdir(parents=True)
+            (session / (inventory.load_roles()['filename_patterns']['overview'] + '.avi')).write_bytes(b'input')
+            with patch.object(inventory, 'probe_metadata', return_value={'duration': 100}), patch.object(
+                inventory, 'probe_packets', return_value={'count': 100, 'small_count': 1, 'small_fraction': .01}
+            ) as probe:
+                row = inventory.create_inventory(root, Path(tmp) / 'inventory.json')['files'][0]
+            self.assertTrue(row['needs_remux'])
+            self.assertEqual(probe.call_args.kwargs, {'seconds': 60})
+
+    def test_tail_check_reaches_eof_and_rejects_missing_last_thirty_frames(self):
         import cv2
-        capture = Mock()
-        capture.get.return_value = 100
-        capture.read.return_value = (True, object())
-        with patch.object(cv2, 'VideoCapture', return_value=capture):
-            self.assertEqual(remux.check_decode('fake.mp4'), [30, 30, 30])
-        self.assertEqual([call.args[1] for call in capture.set.call_args_list], [0, 35, 40])
-        self.assertEqual(capture.read.call_count, 120)
-        capture.release.assert_called_once()
+        from tests.test_media import FakeCapture
+        class SeekCapture(FakeCapture):
+            def set(self, prop, start):
+                self.index = start  # VFR seek starts one frame late.
+                return True
+        for readable, valid in ((200, True), (170, False), (400, False)):
+            capture = SeekCapture(fps=20, frame_count=200, readable_count=readable)
+            with patch.object(cv2, 'VideoCapture', return_value=capture), patch.object(
+                remux, 'probe_metadata', return_value=dict(duration=10, r_frame_rate='20/1')
+            ), patch.object(remux, 'probe_packets', return_value=dict(count=200, small_count=0, pts_strict=True, last_pts=9.95)):
+                result = remux.validate_output('fake.mp4', dict(count=200, small_count=0), 10, 'ffprobe')
+            self.assertEqual(result['valid'], valid)
+            self.assertEqual(capture.release_calls, 1)
+            if valid:
+                self.assertEqual(result['decoded'], [30, 30, 59])
+                self.assertTrue(result['decode_details']['tail_eof'])
+            elif readable == 170:
+                self.assertFalse(result['checks']['tail_pts'])
+            else:
+                self.assertFalse(result['checks']['decode'])
 
 
 if __name__ == '__main__':

@@ -478,15 +478,16 @@ Landmark、matrix、head-pose value shape：
 | video | `output_fps` | number (non-null) | 用 resolved positive finite writer/tracker FPS override nullable base value。 |
 | video | `frames_read` | integer (non-null) | 新增 decoded frame 的 nonnegative read count。 |
 | video | `frames_written` | integer (non-null) | 新增 observation/prediction record 和 output frame 的 nonnegative written count。 |
-| video | `container_frame_count` | integer or null | 正的容器估算帧数；未知时为 null。 |
-| video | `frames_required` | integer or null | 最少要求的解码帧数；未知时为 null。 |
-| video | `decode_complete` | boolean or null | 是否达到要求帧数；未检查时为 null。 |
+| video | `container_frame_count` | integer or null (nullable) | 正的容器估算帧数；未知时为 null。 |
+| video | `frames_required` | integer or null (nullable) | 最少要求的解码帧数；未知时为 null。 |
+| video | `decode_complete` | boolean or null (nullable) | 是否达到要求帧数；未检查时为 null。 |
 | video | `timestamp_sources` | object (non-null) | `container`、`repaired`、`fps_fallback` 三类整数计数。 |
 
 图像共有 49 个唯一键，视频共有 56 个唯一键。容器帧数为 N 时，
 T = max(2, ceil(0.005 * N))。`--max-frames` 不超过 N - T 时必须读出全部请求帧数；
 否则 `frames_required` 为 max(0, N - T)。未知帧数不检查。截断会以非零码退出，
-保留部分 JSONL 和带有 `decode_complete: false` 的 `run_config.json`，跳过 H.264 终结。
+保留部分 JSONL 和带有 `decode_complete: false` 的 `run_config.json`。启用渲染时，
+`avc1` 跳过 H.264 终结，只留下这些文件；`mp4v` 还会留下不完整的 `rendered.mp4`。
 
 ## 13. 缓存、下载、device 选择和 xFormers 说明
 
@@ -509,14 +510,14 @@ Supply-chain boundary：首次 uncached DINOv2 construction 会对 unpinned `fac
 
 不支持的 suffix、缺少 input/head-data/checkpoint、malformed/duplicate JSON record、无效 box/device、provider prerequisite 都会明确失败。static ID count 必须等于 bbox count。normalized/pixel box 必须 finite，normalization/clipping 后仍非空。output conflict 需另一个 root 或 `--overwrite`；cache/network failure 会停止准备或推理。
 
-读取器保留有限、非负且取整后严格递增（strictly increase after rounding）的容器时间戳。重复、倒退或 sub-millisecond 冲突做最小整数毫秒修补。缺失时间戳（含下标 2 起的零值）用上一帧取整时间加 max(1 ms, 一个源帧间隔)；首帧无效时间戳取零。无法表示有限递增时间时明确报错。这些修补不实现多机同步。
+读取器保留有限、非负且取整后严格递增（strictly increase after rounding）的容器时间戳。重复、倒退或 sub-millisecond 冲突做最小整数毫秒修补。缺失时间戳指非有限值、负数，以及下标 2 起的零值，回退公式为 `max(prev_out + 1000 / fps, p + 1)`：取上一帧未取整输出加一个标称帧间隔、与上一帧取整后加 1 ms 两者中的较大值。首帧无效时间戳取零；下标 1 的零值现在记为 1 ms，不再按帧号推算。无法表示有限递增时间时明确报错。这些修补不实现多机同步。
 
 **known runtime limitation：** source FPS 无效时，即使 `--output-fps` 控制不同的 writer/tracker FPS，reader timestamp fallback 仍是 30 FPS；两个 clock 可能偏离并影响 bridge timing。
 
 AVI 空包可从仓库根目录执行以下无损重封装，替换输入、输出路径：
 
 ```powershell
-ffmpeg -n -fflags +genpts -i "input.avi" -map 0:v:0 -c:v copy -bsf:v "noise=drop=lt(size\,64)" "remuxed.mp4"
+ffmpeg -n -fflags +genpts -i "C:\path\to\read-only-source\input.avi" -map 0:v:0 -c:v copy -bsf:v "noise=drop=lt(size\,64)" "C:\path\outside-repository\remuxed.mp4"
 ```
 
 此命令调用本地 FFmpeg，写入不含音频的新 MP4，保留原始输入；`-n` 保护已有输出。不执行推理、不使用 CUDA、不联网、不下载。
@@ -525,11 +526,14 @@ Perception quality 依赖 visible-face evidence。`pose_only` 使用近似 pose-
 
 没有 webcam/real-time mode、自动 ROI/process logic、Multi-Pose integration、audio remuxing、raw video heatmap export 或高性能 asynchronous inference。asset 缓存后 MediaPipe/tracking 在本地运行；rendered video 无音频。
 
-### 研究数据工具
+## 15. 研究数据工具
 
 在现有 Gazelle-next 环境、仓库根目录运行。源目录只读，数据根放在仓库与源目录之外。
 工具只使用 CPU 与磁盘，不构造模型、不使用 CUDA、不联网、不下载。
 长时间任务以低优先级运行。参见[中文指南](../tools/workdata/README_CN.md)。
+重封装校验要求开头、中间各连续 30 帧；尾部窗口最多读取 120 帧，必须读到 EOF 且连续成功
+不少于 30 帧。最后解码时间与最后一个包的 PTS 相差不得超过 `r_frame_rate` 的一个标称帧间隔。
+报告包含 `last_pts`、实际窗口解码数与 `tail_eof`。
 
 | 入口模块 | 读取 | 写入 | 外部工具 |
 | --- | --- | --- | --- |
@@ -572,7 +576,7 @@ python -m tools.validation.render_roi_reference --regions-path "$data\roi\roi_re
 `roi_regions.complete.json`（`version`、`completed_at`、`regions_sha256`）。后续修改使完成状态失效，
 需重新导出。下游工具用 `roi_regions.completed_document()` 校验完成标记与文件哈希。
 
-## 15. 验证命令
+## 16. 验证命令
 
 以下检查 offline 且不构造模型。默认测试会 mock FFmpeg capability probe/transcode，不会运行真实 FFmpeg process：
 

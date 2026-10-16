@@ -1,5 +1,7 @@
 import argparse
+from fractions import Fraction
 import json
+import math
 from pathlib import Path
 import subprocess
 import time
@@ -17,24 +19,32 @@ def check_decode(path):
     import cv2
     capture = cv2.VideoCapture(str(path))
     try:
+        details = dict(windows=[0, 0, 0], tail_eof=False, last_timestamp_ms=None, frame_interval_ms=None)
         if not capture.isOpened():
-            return [0, 0, 0]
+            return details
         count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
-        results = []
+        fps = capture.get(cv2.CAP_PROP_FPS)
+        if not math.isfinite(fps) or fps <= 0:
+            return details
+        details['frame_interval_ms'] = 1000 / fps
         # VFR frame-number seeks can land one frame late. Decode a wider tail
         # window to EOF, then require its final 30 frames to be continuous.
-        for start, window in ((0, 30), (max(0, count // 2 - 15), 30), (max(0, count - 60), 60)):
+        for index, (start, window) in enumerate(((0, 30), (max(0, count // 2 - 15), 30), (max(0, count - 60), 120))):
             if not capture.set(cv2.CAP_PROP_POS_FRAMES, start):
-                results.append(0)
                 continue
             decoded = 0
             for _ in range(window):
                 ok, _ = capture.read()
                 if not ok:
+                    if index == 2:
+                        details['tail_eof'] = True
                     break
                 decoded += 1
-            results.append(min(30, decoded))
-        return results
+                if index == 2:
+                    timestamp = capture.get(cv2.CAP_PROP_POS_MSEC)
+                    details['last_timestamp_ms'] = timestamp if math.isfinite(timestamp) else None
+            details['windows'][index] = decoded
+        return details
     finally:
         capture.release()
 
@@ -43,11 +53,23 @@ def validate_output(path, input_packets, input_duration, ffprobe):
     metadata = probe_metadata(path, ffprobe)
     packets = probe_packets(path, ffprobe)
     decoded = check_decode(path)
+    last_ms = decoded['last_timestamp_ms']
+    try:
+        rate = float(Fraction(metadata['r_frame_rate']))
+        interval = 1000 / rate if math.isfinite(rate) and rate > 0 else None
+    except (KeyError, ValueError, ZeroDivisionError, TypeError, OverflowError):
+        interval = None
+    decoded['nominal_frame_interval_ms'] = interval
+    last_pts = packets['last_pts']
+    tail_pts = (last_ms is not None and interval is not None and last_pts is not None
+                and abs(last_ms - 1000 * last_pts) <= interval)
     checks = dict(packet_count=packets['count'] == input_packets['count'] - input_packets['small_count'],
                   duration=abs(metadata['duration'] - input_duration) <= input_duration * 0.005,
-                  pts_strict=packets['pts_strict'], decode=decoded == [30, 30, 30])
+                  pts_strict=packets['pts_strict'],
+                  decode=decoded['windows'][:2] == [30, 30] and decoded['windows'][2] >= 30 and decoded['tail_eof'],
+                  tail_pts=tail_pts)
     return dict(valid=all(checks.values()), checks=checks, packets=packets,
-                duration=metadata['duration'], decoded=decoded)
+                duration=metadata['duration'], decoded=decoded['windows'], decode_details=decoded)
 
 
 def remux_one(source, output, ffmpeg='ffmpeg', ffprobe='ffprobe', force=False):

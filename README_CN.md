@@ -319,7 +319,7 @@ python main.py `
   --overwrite
 ```
 
-### 视频推理
+### 研究数据工具
 
 本地研究数据工具可生成只读源清单并无损重封装 AVI 空包。从仓库根目录运行
 `python -m tools.workdata.inventory` 和 `python -m tools.workdata.remux`，读取源视频、
@@ -335,18 +335,24 @@ python main.py `
 `cell_other`、`away`、`absent`（最多 1–9）；`unknown` 为 0。自动保存仍是草稿：
 成功导出才写入含时间与区域 SHA-256 的 `roi_regions.complete.json`；修改后需重新导出才算完成。
 
-视频保留有效容器时间戳，对取整冲突做最小修补；时间戳缺失时，在上一帧整数毫秒上
-增加至少 1 ms 或一个源帧间隔。`run_config.json` 记录 `container_frame_count`、
+### 视频推理
+
+视频保留有效容器时间戳，对取整冲突做最小修补。缺失值指非有限值、负数，以及下标 2 起的零值；
+回退公式为 `max(prev_out + 1000 / fps, p + 1)`，取上一帧未取整输出加一个标称帧间隔、
+与上一帧取整后加 1 ms 两者中的较大值。下标 1 的零值现在记为 1 ms，不再按帧号推算。
+`run_config.json` 记录 `container_frame_count`、
 `frames_required`、`decode_complete` 和 `timestamp_sources`（`container`、
 `repaired`、`fps_fallback` 三类计数）。容器帧数为 N 时，容差
 T = max(2, ceil(0.005 * N))。`--max-frames` 不超过 N - T 时必须完整读出请求帧数；
 其余情况至少读出 max(0, N - T) 帧。未知容器帧数不检查。解码提前失败会以非零码退出，
-保留部分 JSONL 和失败配置，跳过 H.264 终结。
+保留部分 JSONL 和失败配置。启用渲染时，`avc1` 跳过 H.264 终结，只留下 JSONL 和
+`run_config.json`；`mp4v` 还会留下不完整的 `rendered.mp4`。容器帧数未知时，
+`container_frame_count`、`frames_required`、`decode_complete` 为 null。
 
 含微小空包的 AVI 可从仓库根目录执行以下本地无损重封装（替换输入、输出路径）：
 
 ```powershell
-ffmpeg -n -fflags +genpts -i "input.avi" -map 0:v:0 -c:v copy -bsf:v "noise=drop=lt(size\,64)" "remuxed.mp4"
+ffmpeg -n -fflags +genpts -i "C:\path\to\read-only-source\input.avi" -map 0:v:0 -c:v copy -bsf:v "noise=drop=lt(size\,64)" "C:\path\outside-repository\remuxed.mp4"
 ```
 
 命令调用 FFmpeg，写入新的视频流 MP4，不包含音频；保留原始输入并拒绝覆盖已有输出。

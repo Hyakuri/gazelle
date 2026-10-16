@@ -206,7 +206,8 @@ class VideoPipelineTest(unittest.TestCase):
                     if complete is False:
                         with self.assertRaisesRegex(ValueError, "truncated") as error:
                             run_video_pipeline(config)
-                        for token in (str(readable), str(required), str(count), str(path), "USAGE"):
+                        for token in (f'read {readable} frames', f'required {required}',
+                                      f'container reports {count}', str(path), 'undecodable packets', 'USAGE'):
                             self.assertIn(token, str(error.exception))
                     else:
                         result = run_video_pipeline(config)
@@ -229,10 +230,14 @@ class VideoPipelineTest(unittest.TestCase):
             capture = FakeCapture([0, 0, float("nan")], fps=30, frame_count=30)
             provider = FakeHeadProvider(result_factory=lambda _: HeadFrameResult(heads=()))
             writer = FakeVideoWriter()
+            def create_writer(destination, *args, **kwargs):
+                writer.path = Path(destination)
+                writer.path.write_bytes(b'partial encoded frames')
+                return writer
             config = make_config(input_path=str(path), output_dir=tmpdir, save_rendered=True, video_codec="avc1")
             with patch("cv2.VideoCapture", return_value=capture), patch(
                 "gazelle.runtime.pipeline.build_head_provider_from_config", return_value=provider
-            ), patch("gazelle.runtime.pipeline.VideoFrameWriter", return_value=writer), patch(
+            ), patch("gazelle.runtime.pipeline.VideoFrameWriter", side_effect=create_writer), patch(
                 "gazelle.runtime.pipeline.detect_ffmpeg_capabilities", return_value=object()
             ), patch("gazelle.runtime.pipeline.transcode_h264") as transcode:
                 with self.assertRaisesRegex(ValueError, "truncated"):
@@ -245,6 +250,7 @@ class VideoPipelineTest(unittest.TestCase):
             self.assertEqual(capture.release_calls, 1)
             transcode.assert_not_called()
             self.assertFalse(list((Path(tmpdir) / "fake_gazelle").glob("*.mp4")))
+            self.assertFalse(writer.path.exists())
 
     def test_video_pipeline_preserves_ordered_head_observations_for_predictor(self):
         heads = (

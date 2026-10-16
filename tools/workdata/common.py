@@ -73,6 +73,7 @@ def probe_metadata(path, ffprobe='ffprobe'):
 def packet_summary(lines):
     count = small = 0
     previous = None
+    last_pts = None
     strict = True
     for line in lines:
         fields = dict(item.split('=', 1) for item in line.strip().split('|') if '=' in item)
@@ -85,6 +86,7 @@ def packet_summary(lines):
             pts = float(fields.get('pts_time', 'nan'))
         except ValueError:
             pts = float('nan')
+        last_pts = pts if math.isfinite(pts) else None
         if not math.isfinite(pts):
             strict = False
         else:
@@ -92,7 +94,7 @@ def packet_summary(lines):
                 strict = False
             previous = pts
     return dict(count=count, small_count=small, small_fraction=small / count if count else 0.0,
-                pts_strict=strict and count > 0)
+                pts_strict=strict and count > 0, last_pts=last_pts)
 
 
 def probe_packets(path, ffprobe='ffprobe', seconds=None):

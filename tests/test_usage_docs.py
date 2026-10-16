@@ -171,7 +171,7 @@ class UsageDocumentationTest(unittest.TestCase):
                 )
 
     def test_guides_have_matching_numbered_section_structure(self):
-        expected = list(range(1, 16))
+        expected = list(range(1, 17))
         self.assertEqual(expected, self._numbered_sections(ENGLISH_GUIDE))
         self.assertEqual(expected, self._numbered_sections(CHINESE_GUIDE))
 
@@ -486,12 +486,18 @@ class UsageDocumentationTest(unittest.TestCase):
     def test_video_decode_and_timestamp_contract_is_documented(self):
         for path in (ENGLISH_README, CHINESE_README, ENGLISH_GUIDE, CHINESE_GUIDE):
             text = self._read(path)
-            for token in ("container_frame_count", "frames_required", "decode_complete", "timestamp_sources", "noise=drop"):
+            for token in ("container_frame_count", "frames_required", "decode_complete", "timestamp_sources", "noise=drop",
+                          "max(prev_out + 1000 / fps, p + 1)", "outside-repository", "rendered.mp4"):
                 self.assertIn(token, text, str(path))
+        for path in (ENGLISH_GUIDE, CHINESE_GUIDE):
+            rows = self._run_config_addition_rows(path)
+            for scope, name, kind, _ in rows:
+                if name in ('container_frame_count', 'frames_required', 'decode_complete'):
+                    self.assertIn('(nullable)', kind)
 
     def test_workdata_tool_entry_points_are_documented(self):
         for path in (ENGLISH_GUIDE, CHINESE_GUIDE):
-            text = self._read(path)
+            text = self._section(path, 15)
             for token in ('tools.workdata.inventory', 'tools.workdata.remux', '../tools/workdata/README_CN.md'):
                 self.assertIn(token, text, str(path))
 
@@ -587,7 +593,7 @@ class UsageDocumentationTest(unittest.TestCase):
 
     def test_public_validation_commands_use_activated_python(self):
         for guide_path in (ENGLISH_GUIDE, CHINESE_GUIDE):
-            section = self._section(guide_path, 15)
+            section = self._section(guide_path, 16)
             self.assertIn("conda activate Gazelle-next", section)
             self.assertIn("python -m unittest tests.test_usage_docs -v", section)
             self.assertNotRegex(section, re.compile(r"[A-Za-z]:\\Users\\"))

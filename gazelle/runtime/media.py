@@ -149,6 +149,7 @@ class VideoFrameReader:
     def __iter__(self):
         frame_index = 0
         previous_ms = None
+        previous_output = None
         while self._capture is not None:
             ok, frame_bgr = self._capture.read()
             if not ok:
@@ -166,14 +167,15 @@ class VideoFrameReader:
                 timestamp_ms = float(previous_ms + 1)
                 timestamp_source = "repaired"
             else:
-                interval = max(1.0, 1000.0 / resolve_video_fps(self._metadata.fps))
-                timestamp_ms = previous_ms + interval
+                interval = 1000.0 / resolve_video_fps(self._metadata.fps)
+                timestamp_ms = max(previous_output + interval, previous_ms + 1)
                 timestamp_source = "fps_fallback"
             if not math.isfinite(timestamp_ms) or (
                 previous_ms is not None and int(round(timestamp_ms)) <= previous_ms
             ):
                 raise ValueError("Cannot represent a finite increasing video timestamp: {}".format(self.path))
             previous_ms = int(round(timestamp_ms))
+            previous_output = timestamp_ms
 
             frame_rgb = self._cv2.cvtColor(frame_bgr, self._cv2.COLOR_BGR2RGB)
             image = Image.fromarray(frame_rgb).convert("RGB")

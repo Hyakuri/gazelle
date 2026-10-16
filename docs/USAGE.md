@@ -480,16 +480,18 @@ Most CLI names become config names by replacing hyphens with underscores. The ex
 | video | `output_fps` | number (non-null) | Overrides the nullable base value with the resolved positive finite writer/tracker FPS. |
 | video | `frames_read` | integer (non-null) | Added nonnegative count of decoded frames read. |
 | video | `frames_written` | integer (non-null) | Added nonnegative count of observation/prediction records and output frames written. |
-| video | `container_frame_count` | integer or null | Positive container estimate; null when unknown. |
-| video | `frames_required` | integer or null | Minimum required decoded count; null when unknown. |
-| video | `decode_complete` | boolean or null | Whether the required count was met; null when not checked. |
+| video | `container_frame_count` | integer or null (nullable) | Positive container estimate; null when unknown. |
+| video | `frames_required` | integer or null (nullable) | Minimum required decoded count; null when unknown. |
+| video | `decode_complete` | boolean or null (nullable) | Whether the required count was met; null when not checked. |
 | video | `timestamp_sources` | object (non-null) | Integer counts for `container`, `repaired`, and `fps_fallback`. |
 
 There are 49 unique image keys and 56 unique video keys. For container count N,
 T = max(2, ceil(0.005 * N)). `--max-frames` at or before N - T requires exactly
 the requested count; otherwise `frames_required` is max(0, N - T). Unknown
 counts disable the check. Truncation exits nonzero after preserving partial
-JSONL and `run_config.json` with `decode_complete: false`, and skips H.264 finalization.
+JSONL and `run_config.json` with `decode_complete: false`. With rendering enabled,
+`avc1` skips H.264 finalization and leaves only these files; `mp4v` also leaves an
+incomplete `rendered.mp4`.
 
 ## 13. Cache, downloads, device selection, and xFormers notes
 
@@ -512,14 +514,14 @@ The current `Gazelle-next` environment does not install xFormers; DINOv2 uses Py
 
 Unsupported suffixes, missing input/head-data/checkpoint files, malformed/duplicate JSON records, invalid boxes/devices, and provider prerequisites fail clearly. Static ID count must equal bbox count. Normalized/pixel boxes must be finite and remain nonempty after normalization/clipping. Output conflicts require another root or `--overwrite`; cache/network failures stop preparation or inference.
 
-The reader preserves finite nonnegative container timestamps that strictly increase after rounding. Repeated, backward, or sub-millisecond collisions receive the smallest integer-millisecond repair. Missing timestamps (including zero from frame index 2 onward) use the previous rounded time plus max(1 ms, one source-frame interval); an invalid first timestamp becomes zero. An unrepresentable finite increasing time fails explicitly. These repairs do not synchronize cameras.
+The reader preserves finite nonnegative container timestamps that strictly increase after rounding. Repeated, backward, or sub-millisecond collisions receive the smallest integer-millisecond repair. Missing timestamps are nonfinite, negative, or zero from frame index 2 onward. They use `max(prev_out + 1000 / fps, p + 1)`: the larger of the previous unrounded output plus one nominal frame interval and the previous rounded output plus 1 ms. An invalid first timestamp becomes zero; a zero at index 1 becomes 1 ms instead of a frame-index estimate. An unrepresentable finite increasing time fails explicitly. These repairs do not synchronize cameras.
 
 **known runtime limitation:** If source FPS is invalid, the reader's timestamp fallback remains 30 FPS even when `--output-fps` controls a different writer/tracker FPS; the two clocks can diverge and affect bridge timing.
 
 For AVI empty packets, run this lossless remux from the repository root, replacing paths:
 
 ```powershell
-ffmpeg -n -fflags +genpts -i "input.avi" -map 0:v:0 -c:v copy -bsf:v "noise=drop=lt(size\,64)" "remuxed.mp4"
+ffmpeg -n -fflags +genpts -i "C:\path\to\read-only-source\input.avi" -map 0:v:0 -c:v copy -bsf:v "noise=drop=lt(size\,64)" "C:\path\outside-repository\remuxed.mp4"
 ```
 
 This runs local FFmpeg and writes a new video-only MP4 without audio, retaining the original input. `-n` protects existing output. No inference, CUDA, network access, or downloads occur.
@@ -528,12 +530,16 @@ Perception quality depends on visible-face evidence. The `pose_only` path uses a
 
 There is no webcam/real-time mode, automatic ROI/process logic, Multi-Pose integration, audio remuxing, raw video heatmap export, or high-performance asynchronous inference. MediaPipe/tracking runs locally after assets are cached, and rendered video has no audio.
 
-### Research data tools
+## 15. Research data tools
 
 Run from the repository root in the existing Gazelle-next environment. Keep the source
 read-only and choose a data root outside both the repository and source root.
 These tools use CPU/disk only: no models, CUDA, network access, or downloads.
 Use low process priority for long runs. See the [Chinese guide](../tools/workdata/README_CN.md).
+Remux validation requires 30 decoded frames at the start and middle, then a tail
+window ending at EOF (30 or more consecutive frames, at most 120 reads). The last
+decoded timestamp must be within one `r_frame_rate` interval of the last packet PTS.
+The report includes `last_pts`, actual decoded counts and `tail_eof`.
 
 | Entry module | Reads | Writes | External tools |
 | --- | --- | --- | --- |
@@ -584,7 +590,7 @@ Autosave alone does not complete annotation: successful export writes
 edits invalidate completion until re-export. Downstream tools use
 `roi_regions.completed_document()` to check the marker and file hash.
 
-## 15. Validation commands
+## 16. Validation commands
 
 These checks are offline and do not construct a model. Default tests mock FFmpeg capability probes/transcodes and do not run a real FFmpeg process:
 
