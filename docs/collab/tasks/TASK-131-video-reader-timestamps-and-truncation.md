@@ -131,7 +131,7 @@ git status --short
 ## 2. 实施报告（Codex 追加，不要修改上文）
 
 - 接手核对：
-- 提交与推送（SHA）：
+- 提交与推送（SHA）：`08dd48f`（`Record stage draft PR`）；`c5bd358b0999e736fd8aa399e1a37ef5d7e26c3c`（`Report TASK-131 timestamp contract conflict`），均已核对推送成功。本行与 STATE 释放写入权另作交接记录提交；没有实现提交。
 - 变更文件：
 - 命令、退出码、测试数、warnings 与 skips：
 - 真实检查结果：

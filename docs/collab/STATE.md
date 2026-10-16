@@ -9,11 +9,11 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 | stage | 阶段 2：作业数据可用、多机同步、正确性修复，建立区域标注 |
 | branch | `feature/stage2-correctness`（基于 PR #5 head `bbec056`） |
 | pr | [#6](https://github.com/Hyakuri/gazelle/pull/6)（draft）；正文来源 `docs/collab/STAGE2_PR_BODY.md` |
-| writer | codex |
-| next_actor | codex |
+| writer | none |
+| next_actor | claude |
 | current_task | `docs/collab/tasks/TASK-131-video-reader-timestamps-and-truncation.md` |
 | after_current | `docs/collab/tasks/TASK-132-workdata-inventory-and-avi-remux.md`，然后 `docs/collab/tasks/TASK-123-overview-region-marking-tool.md`，然后 `docs/collab/tasks/TASK-001-overwrite-safe-validation.md`，然后停止并把 `next_actor` 改为 `claude` |
-| last_pushed | `42d1e48076178d6db4d837b65267ac20e86f7a39`（首次推送已核对远程 SHA） |
+| last_pushed | `c5bd358b0999e736fd8aa399e1a37ef5d7e26c3c`（TASK-131 契约核对报告；其后仅提交报告 SHA 与本次 STATE 交接记录） |
 | last_accepted | `bbec056`（迁移验收基线，Gate A/B/C 通过） |
 | 更新 | 2026-10-15，Claude |
 
@@ -42,6 +42,7 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 
 ## 给 Codex 的说明
 
+- **2026-10-16 本轮已暂停并交回 Claude**：TASK-131 r2 的精确 fallback 公式与 R1 在 2000 FPS 时冲突，主线程已实际复现并推送实施报告。尚未修改运行时代码或测试；TASK-132、TASK-123、TASK-001 未启动。等待 Claude 澄清后再按新的 STATE 接续，不把任务标为 `ready-for-review`。
 - **2026-10-16 本轮预检与授权例外**：新仓库、三个外部目录与临时目录的创建/删除实测通过；原始数据 7 个目录可读；Python 3.11.15、FFmpeg、ffprobe 可执行。普通沙盒 `codexsandboxonline` 的 `gh` 返回 HTTP 401，用户上下文 `yun` 的认证/API 成功。用户明确批准本轮必要 Git/GitHub 命令经审批在 `yun` 上下文执行；编辑与测试继续在普通沙盒。不修改全局配置、不复制凭证，不将用户上下文成功记为普通沙盒认证通过。GPU 仅查询，接手时占用 5670 / 16376 MiB，推理前另行检查。
 - **首次发布已完成**：阶段分支首次推送与 draft PR #6 创建成功；原始交接步骤保留供追溯，不重复创建 PR。
 - **本轮第零步：环境预检。** 按协作方案 §3.1 第 0 步与 §5「Codex 运行环境」逐项检查。任何一项不通过，就停止并在回复中列出缺少的权限，不修改配置，不写仓库文件。
@@ -64,6 +65,7 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 
 ## 给 Claude 的说明
 
+- **本次交接请先处理 TASK-131 契约冲突**：见本任务「2026-10-16 接手与契约核对报告」。`resolve_video_fps(2000)` 接受 2000 FPS，raw `[0, NaN]` 按 r2 得到 `[0, 0.5]`，取整为 `[0, 0]`，现有 `_video_timestamp` 拒绝。请决定 fallback 是否至少递增 1 个整数毫秒并补充边界测试，或明确输入范围；不要把本次合成复现当作作业视频检查。TASK-131 尚未实施，其他任务也未开始；本轮仅完成环境预检（GitHub 认证使用用户批准的限定例外）、首次推送、draft PR #6 与冲突报告。`last_accepted` 未变。
 - `next_actor` 为 `claude` 时：按提交 SHA 审查 `last_accepted` 之后的任务，复跑离线门，核对真实检查的数字。
 - 审查 TASK-131 时，独立复跑 29 个 MP4 分段前 600 帧的时间戳检查与原始 AVI 的截断检查。
 - 审查 TASK-123 时，用 `--regions-path` 指向临时文件，在内置浏览器画出 4 个默认区域并核对参考图。通过后在「给用户的说明」写明区域标记的启动命令。
