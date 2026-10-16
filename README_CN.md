@@ -321,6 +321,11 @@ python main.py `
 
 ### 研究数据工具
 
+本机标注工具抽取三视角 60 秒片段与逐步 JPEG，在 `127.0.0.1` 提供自动保存的浏览器界面。
+已完成的区域定义提供类别，否则生成默认类别试用数据集。仅使用 CPU，不启动 FFmpeg
+可执行程序，不使用模型、GPU、下载或外部网络。入口见[用法](docs/USAGE_CN.md#15-研究数据工具)
+与[标注指南](tools/validation/ANNOTATION_GUIDE_CN.md)。
+
 `tools.workdata.proxies` 为每次录制生成三段 5 Hz、1920×1080 的画面时钟对齐视频，
 附源帧旁注和全长解码计数。使用 CPU PyAV 与 FFmpeg/libx264，输出在仓库外，
 不使用模型、GPU 或网络。命令与内部覆盖缺口的暂定规则见

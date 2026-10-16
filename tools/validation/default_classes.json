@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "classes": [
+    {"key": 1, "label": "pick_right", "name_zh": "取货台", "color": "#e67e22", "definition": "右侧取货桌"},
+    {"key": 2, "label": "work_front", "name_zh": "作业台", "color": "#2980b9", "definition": "前方的工装、加工中的工件与使用中的工具"},
+    {"key": 3, "label": "place_left", "name_zh": "放置区", "color": "#27ae60", "definition": "前方桌面左侧的成品放置区"},
+    {"key": 4, "label": "cell_other", "name_zh": "工作区内其他", "color": "#9b59b6", "definition": "工作区内其他工具、资料、屏幕与设备"},
+    {"key": 5, "label": "away", "name_zh": "离开工作", "color": "#c0392b", "definition": "工作区外的过道、他人、远处背景或天花板"},
+    {"key": 6, "label": "absent", "name_zh": "不在岗", "color": "#7f8c8d", "definition": "作业者不在工位"},
+    {"key": 0, "label": "unknown", "name_zh": "无法判断", "color": "#bdc3c7", "definition": "证据不足，不能判断；与尚未标注不同"}
+  ]
+}

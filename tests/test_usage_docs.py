@@ -511,6 +511,15 @@ class UsageDocumentationTest(unittest.TestCase):
                           'tools.validation.roi_regions', 'tools.validation.render_roi_reference',
                           '../tools/validation/ROI_GUIDE_CN.md', '127.0.0.1'):
                 self.assertIn(token, text, str(path))
+
+    def test_annotation_tool_entry_points_are_documented(self):
+        for path in (ENGLISH_GUIDE, CHINESE_GUIDE):
+            text = self._section(path, 15)
+            for token in ('tools.validation.sample_segments', 'tools.validation.extract_frames',
+                          'tools.validation.annotate_server', 'tools.validation.labels validate',
+                          '--labels-path', '--allow-incomplete', 'roi_r2_trial',
+                          '../tools/validation/ANNOTATION_GUIDE_CN.md'):
+                self.assertIn(token, text, str(path))
         for path in (ENGLISH_README, CHINESE_README, ENGLISH_GUIDE, CHINESE_GUIDE):
             text = self._read(path)
             for token in ('roi_regions.complete.json', 'cell_other', 'away', 'absent', 'unknown', '1–6', '1–9'):

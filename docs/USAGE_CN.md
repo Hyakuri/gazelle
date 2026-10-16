@@ -546,6 +546,10 @@ Perception quality 依赖 visible-face evidence。`pose_only` 使用近似 pose-
 | `tools.validation.extract_roi_candidates` | 清单、已校验的全局摄像机重封装视频 | 每会话 12 张 JPEG、`roi/candidates.json` | CPU OpenCV/Pillow；不调用 FFmpeg 可执行程序 |
 | `tools.validation.roi_server` | 候选帧、可选已有区域 | 原子区域/草稿文件、备份；按需导出参考图与类别 | 仅 127.0.0.1 本机浏览器 |
 | `tools.validation.roi_regions` | 区域定义 | 校验或派生类别 JSON | 仅 CPU |
+| `tools.validation.sample_segments` | 代理会话/旁注、代理哈希、可选已完成区域 | 固定种子片段清单、类别与可选区域参考图 | CPU；不解码视频、不调用 FFmpeg 可执行程序 |
+| `tools.validation.extract_frames` | manifest 与对应代理视频 | 带哈希的 1920×720 三视角 JPEG，或数据集校验 | CPU/OpenCV；不调用 FFmpeg 可执行程序 |
+| `tools.validation.annotate_server` | 已抽帧数据集、可选已有标注 | 修改后原子写入标注与上一版备份 | 仅 127.0.0.1 本机浏览器 |
+| `tools.validation.labels validate` | 数据集与标注 JSON | 严格覆盖/schema 校验 | CPU；不解码媒体、不调用 FFmpeg 可执行程序 |
 | `tools.validation.render_roi_reference` | 区域与候选帧 | 参考 PNG、各会话叠加图、类别 JSON | Pillow、已有中文字体 |
 
 ```powershell
@@ -612,6 +616,34 @@ python -m tools.workdata.proxies --timemaps "$data\timemaps" --out-root "$data\p
 连续时钟网格，记录全部覆盖缺口与最近帧缺口标记，不压缩时间。此规则需要协调者复核。
 画面时钟对齐代理本身不能证明物理运动已同步。详见
 [中文工具指南](../tools/workdata/README_CN.md)。
+
+三视角标注在仓库根目录、Gazelle-next 环境中运行：
+
+```powershell
+$dataset = 'C:\Users\yun\Documents\Claude_Code\gazelle_validation\roi_r2_trial'
+python -m tools.validation.sample_segments --proxies-root "$data\proxies" --dataset-root $dataset --regions-path "$data\roi\roi_regions.json"
+python -m tools.validation.extract_frames --dataset-root $dataset
+python -m tools.validation.extract_frames --dataset-root $dataset --validate-only
+python -m tools.validation.annotate_server --dataset-root $dataset --labels-path "$dataset\review_trial.json" --annotator reviewer
+# 标注后关闭本机服务，再运行：
+python -m tools.validation.labels validate --dataset-root $dataset --labels-path "$dataset\review_trial.json"
+```
+
+这些工具不使用模型、GPU、下载、外部网络或 FFmpeg 可执行程序；抽帧用 CPU OpenCV 流式处理，
+优先级低于正常。默认种子 20261015，每会话四层（不足 45 分钟取两层），每段 60 秒、5 Hz。
+缺口时间步合计超过两秒的片段最多重抽十次；固定 pilot 放在首位并排除于评估。
+所有代理与抽出帧均绑定 SHA-256。
+
+区域文件须通过完成标记与哈希检查，才用于生成类别并复制参考图；此前使用默认类别的
+`roi_r2_trial` 试用数据集。区域就绪后新建 `roi_r2` 用于正式标注。已有目录默认拒绝覆盖；
+显式 `--overwrite` 会将整个旧目录改名为带时间的备份并保留。正式标注默认写 `labels.json`，
+审查用 `--labels-path` 指向独立文件。仅加载页面不创建标注；每次修改原子保存并保留上一版
+`.bak`，拒绝过期版本或外部修改冲突，重启后定位首个未标注步。
+
+界面支持播放、步进、数字键变化点、删除、撤销、彩色时间轴和他人入镜区间；当前画面加载完成后
+才接受判断。草稿中的未标注与主动选择 `unknown` 不同；`--allow-incomplete` 只检查草稿，
+不代表完成。详见[中文标注指南](../tools/validation/ANNOTATION_GUIDE_CN.md)。
+视频、帧和标注都保存在 Git 之外，不上传。
 
 ## 16. 验证命令
 

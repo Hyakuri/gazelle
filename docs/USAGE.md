@@ -552,6 +552,10 @@ The report includes `last_pts`, actual decoded counts and `tail_eof`.
 | `tools.validation.extract_roi_candidates` | Inventory, validated overview remuxes | 12 JPEGs/session and `roi/candidates.json` | CPU OpenCV/Pillow; no FFmpeg executable |
 | `tools.validation.roi_server` | Candidates and optional saved regions | Atomic region/draft files, backups; reference/class export on request | Local browser at 127.0.0.1 only |
 | `tools.validation.roi_regions` | Region definitions | Validation or derived classes JSON | CPU only |
+| `tools.validation.sample_segments` | Proxy sessions/sidecars, proxy hashes, optional completed regions | Seeded segment manifest, classes and optional ROI reference | CPU; no video decode or FFmpeg executable |
+| `tools.validation.extract_frames` | Manifest and exact proxy videos | Hashed 1920×720 three-view JPEGs, or dataset validation | CPU/OpenCV; no FFmpeg executable |
+| `tools.validation.annotate_server` | Extracted dataset and optional existing labels | Atomic labels and previous-version backup after edits | Browser at 127.0.0.1 only |
+| `tools.validation.labels validate` | Dataset and labels JSON | Strict coverage/schema validation | CPU; no media decode or FFmpeg executable |
 | `tools.validation.render_roi_reference` | Regions and candidate images | Reference PNG, session overlays, classes JSON | Pillow and an existing CJK font |
 
 ```powershell
@@ -632,6 +636,41 @@ across the entire range and records every coverage gap and nearest-frame gap fla
 it does not compress time. This policy needs coordinator review. Clock-aligned
 proxies alone do not establish physical motion synchronization. See the
 [Chinese tool guide](../tools/workdata/README_CN.md).
+
+Three-view annotation, from the repository root in Gazelle-next:
+
+```powershell
+$dataset = 'C:\Users\yun\Documents\Claude_Code\gazelle_validation\roi_r2_trial'
+python -m tools.validation.sample_segments --proxies-root "$data\proxies" --dataset-root $dataset --regions-path "$data\roi\roi_regions.json"
+python -m tools.validation.extract_frames --dataset-root $dataset
+python -m tools.validation.extract_frames --dataset-root $dataset --validate-only
+python -m tools.validation.annotate_server --dataset-root $dataset --labels-path "$dataset\review_trial.json" --annotator reviewer
+# After annotation and stopping the local server:
+python -m tools.validation.labels validate --dataset-root $dataset --labels-path "$dataset\review_trial.json"
+```
+
+These tools use no model, GPU, downloads, external network or FFmpeg executable.
+Extraction streams CPU OpenCV frames at below-normal priority. Defaults use seed
+20261015, four strata per session (two below 45 minutes), 60-second segments and
+5 Hz steps. Segments with more than two seconds of gap steps are redrawn up to
+ten times; the fixed pilot is listed first and excluded from evaluation.
+Every proxy and extracted frame is bound by SHA-256.
+
+Regions must pass their completion-marker/hash check to supply classes and a
+reference image. Until then, use the `roi_r2_trial` dataset with default classes;
+when regions are ready, create a fresh `roi_r2` dataset for formal annotation.
+Existing datasets are refused unless `--overwrite` is explicit; this preserves
+the entire previous directory under a timestamped backup name. Formal labels
+default to `labels.json`; use `--labels-path` for reviews. Loading alone creates
+no labels. Changes autosave atomically with a rolling `.bak`, reject stale or
+externally changed labels, and resume at the first unlabelled step.
+
+The editor provides playback, step controls, number-key change points, deletion,
+undo, a colour timeline and other-person intervals. It waits for the current
+image before accepting a judgment. Unlabelled draft steps are distinct from
+intentional `unknown`; `--allow-incomplete` only validates drafts and does not
+certify completion. See the [Chinese annotation guide](../tools/validation/ANNOTATION_GUIDE_CN.md).
+All videos, frames and labels remain outside Git and must not be uploaded.
 
 ## 16. Validation commands
 

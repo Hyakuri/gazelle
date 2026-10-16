@@ -315,6 +315,13 @@ python main.py `
 
 ### Research data tools
 
+The local annotation toolkit samples 60-second three-view segments, extracts
+JPEG steps, and serves an autosaving browser editor at `127.0.0.1`. Completed
+region definitions supply the classes; otherwise it creates a default-class
+trial dataset. It uses CPU only, with no FFmpeg executable, model, GPU, downloads
+or external network. See [usage](docs/USAGE.md#15-research-data-tools) and the
+[annotation guide](tools/validation/ANNOTATION_GUIDE_CN.md).
+
 `tools.workdata.proxies` creates three 5 Hz, 1920×1080 clock-aligned videos per
 session, with source-frame sidecars and full decode counts. It uses CPU PyAV and
 FFmpeg/libx264, writes outside the repository, and uses no model, GPU or network.
