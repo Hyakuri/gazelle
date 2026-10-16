@@ -196,6 +196,8 @@ git status --short
 - **反证式复核**：12 组 r3 时间戳表、未知/微小帧数、请求上限与尾部容差、JSONL 保留、资源关闭、不调用 H.264、无头不构造模型均由回归覆盖。2000/1000000 FPS 与非有限 fallback 不再输出不递增时间戳。四个新键与重封装命令已被文档测试锁定。
 - **未运行与状态**：未作正式实验，未作独立验收。Codex 已静态检查、已实际运行；实现可交审，Claude 与用户独立 checkout 验收仍待进行。
 
+- **本轮环境元数据复核**：Python 3.11.15；torch 2.6.0+cu126、torchvision 0.21.0+cu126、mediapipe 0.10.35、opencv-python/opencv-contrib-python 4.11.0.86、Pillow 11.1.0、numpy 2.4.6、xformers 0.0.29.post3。由现有环境的 importlib.metadata 只读取得；本轮未改变依赖。
+
 #### 自主决定（A）
 
 - 容器仅 1/2 帧时，`N-tolerance` 可为负；将最少帧数夹到 0，保留原容差意图，避免负的诊断计数，补充两条边界。

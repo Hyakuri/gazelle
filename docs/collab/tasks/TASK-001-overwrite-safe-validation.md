@@ -127,6 +127,35 @@ git status --short
 - 状态标签（v1.1 §12）：
 - 下一步建议：
 
+### 2026-10-16 实施与回归验证（Codex）
+
+- **基线/提交**：`ab56671bbcf33f823b898125ad30a3766f18f64f` 接手，工作树干净，STATE writer/next_actor 均为 codex，current_task 已按队列推进到本任务。实现提交 `8c0a81b6494957af89e08fdead4aef8caf8cd290` — `Validate static and JSON head arguments before overwrite` 已推送；报告另作提交。保持原分支与 draft PR #6，主线程 Inline Execution。
+- **变化**：RuntimeConfig.validate 始终检查 head_source/bbox_format，并在推理模式下检查 static box/ID 与 JSON 文件路径。CLI choices 复用同一常量；normalized 只调用现有 sanitizer 校验，不回写原值；pixel 仅检查有限值/顺序，尺寸相关裁剪仍在原路径。provider 防御性检查、管线执行顺序、JSON 内容检查、模型/资源/设备行为均未改。四份用户文档与文档测试同步，包括剩余 overwrite 风险。
+- **RED 与修复**：原实现上运行 3 项新增回归，退出 1（subtest failures 19、errors 2），覆盖原有参数未拒绝和 overwrite 后才报错。首次聚焦 195 项仅 1 error：已有 mocked JSON no-head 测试未提供 head_data，因新校验提前失败；补一个临时空 JSON 文件后保持该用例原来“无头不构造模型”的断言。
+- **验证命令**：使用 `C:\Users\yun\anaconda3\envs\Gazelle\python.exe`，`PYTHONPYCACHEPREFIX=%TEMP%\gazelle-task-001-pycache`。`-m unittest tests.test_runtime_cli tests.test_image_pipeline tests.test_video_pipeline tests.test_heads tests.test_usage_docs -v`：**196 项通过**。最后 `-m compileall main.py gazelle tests tools`、`-m unittest discover -s tests -v`：**562 项、4.228 s、无 skip**；`main.py --help`、`main.py --list-models`、`git diff --check` 全部退出 0。新增 6 项 CLI/编程接口测试 + 1 项文档测试。另在全新 Python 进程导入 CLI 后断言 sys.modules 无 gazelle.model / gazelle.backbone / mediapipe，通过。
+- **关键证据**：契约 7 组无效 CLI 参数全部退出 2 且包含选项名；static 与 JSON 两种 overwrite 回归均保持原 `predictions.json` 内容 `old`。prepare-only/list-models（含给 input 的组合）继续接受缺 provider 前提参数；none/mediapipe 不检查被忽略 bbox。非法 bool/NaN/inf/短 box、pixel 逆序、错误 ID 数/类型、目录/非路径 head_data 均拒绝。normalized 超范围但可裁剪的原 tuple 对象和值未改变。已存在但内容无效的 JSON 仍能通过参数校验，内容错误留给 provider。
+- **外部活动与证据分类**：静态检查、隔离单测、CLI 导入/元数据检查；没有本任务真实模型、GPU、FFmpeg 可执行程序、网络、下载、环境修改或正式实验。测试在 TemporaryDirectory 生成小图/JSON/输出并清理；字节码与日志留在 TEMP。非致命 warning 为既有 OpenCV 无效视频用例的 `moov atom not found`、Git 换行提示，部分 usage 输出为断言错误路径的预期结果。
+- **工作区检查**：暂存路径只有 9 个获准代码/测试/用户文档文件；无数据、媒体、权重或凭据。被忽略的 `.codex/`、`models/`、`gazelle/runtime/__pycache__/` 保留；后者文件时间为 2026-10-15 15:53，属于本轮前已存在的缓存，未删除。未改 Multi-Pose、Actions、全局设置、Conda；未创建新分支/重复 PR、force push 或合并。
+- **反证式复核与限制**：对比实际 diff，heads/pipeline 防御性检查保持；CLI/help 冷导入不引入模型模块；原始 bbox 与 run_config schema 测试继续通过。保护范围仅参数层，JSON 内容、MediaPipe、checkpoint、设备可用性仍可能在删除后失败，文档未扩大安全承诺。独立 checkout 验收仍待 Claude/用户；Codex 已静态检查、已实际运行，可交审。
+
+#### 自主决定（A）
+
+- 调整一条既有 mocked no-head 测试的 fixture，提供真实临时 JSON 路径，避免新前提检查掩盖其原有测试目标。
+- Path 的类型/值/访问错误统一转成带 --head-data 的 ValueError；维持 usage exit 2，不修改 JSON 内容校验时机。
+
+#### 范围外改动
+
+无；所有代码与测试在任务许可路径内。TASK-131 报告仅补充本轮实际环境版本，便于复跑 GPU smoke。
+
+#### 待 Claude 判断（B）
+
+无阻塞问题。请独立审查提前校验边界、原值保留与两条 overwrite 回归。
+
+#### 待用户决定（C）
+
+无。本轮之后交回 Claude，待协调者审查后再由用户独立验收。
+
+
 ## 3. 审查结论（Claude 追加）
 
 - 审查目标：
