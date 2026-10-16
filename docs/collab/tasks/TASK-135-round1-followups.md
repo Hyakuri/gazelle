@@ -99,6 +99,48 @@ git status --short
 - 未运行的检查、限制、阻塞：
 - 状态标签（v1.1 §12）：
 
+### 2026-10-17 实施报告
+
+- **接手/提交**：在 TASK-123 修复报告提交 `870f5dd` 后按 STATE 接手。实现 `40c10d7de56e6112471100786f5f55db9c9df3c3` — `Remove timestamp drift and verify remux decoding reaches the tail` 已推送。
+- **实现**：读取器保留上一帧未取整输出，严格按 r4 `max(prev_out + 1000 / fps, p + 1)` 回退，其他容器/修补分支不变。重封装尾部从 count−60 读到 EOF（上限 120），要求连续成功至少 30；probe_packets 新增最后实际包的 last_pts，尾部解码时间按 `r_frame_rate` 的一个标称间隔检查。报告保留 decoded 数组并新增 decode_details/tail_pts，现为真实窗口帧数。CLI 实际子进程确认截断异常使进程退出非零，未改 CLI 异常语义。
+- **文档**：四份用户文档独立研究工具小节，USAGE 编号增至 16；r4、完整缺失值定义、下标 1 的零值行为、nullable、avc1/mp4v 截断产物差异、仓库外重封装路径均同步。中文工具指南同步尾部校验，并补正之前遗留的 Gazelle 环境名称。
+- **命令/结果**：`$py=C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe`，`PYTHONPYCACHEPREFIX=%TEMP%\gazelle-task135-pycache`。`& $py -m unittest tests.test_media tests.test_video_pipeline tests.test_runtime_cli tests.test_workdata_tools -v`：141 项、exit 0；`& $py -m unittest tests.test_usage_docs -v`：19 项、exit 0。`& $py -m compileall main.py gazelle tests tools`、`& $py -m unittest discover -s tests -v`（最终代码 **572 项 / 6.672 s / no skips**）、`& $py main.py --help`、`& $py main.py --list-models`、`git diff --check` 均 exit 0。最终文档微调后重跑 19 项文档检查通过。
+- **红绿/失败**：旧实现下新测试 141 项，8 failures/3 errors，包含 10 分钟漂移（29.97/30/60 FPS 均失败）、r4 表格与尾部检查；其中两个 errors 是新测试自身问题（fake writer 未接受 kwargs；CLI 本来以未捕获 ValueError 退出而非直接抛 SystemExit），修正测试为真正子进程后通过。另一次只读探索使用了不存在的 tests/fakes.py，改读现有 FakeCapture。既有 OpenCV malformed-media warning 与 Git LF/CRLF 提示不影响 exit status，无新增 skip。
+- **真实执行**：`& $py C:\Users\yun\Documents\Claude_Code\gazelle_runs\task-135\revalidate.py`，父 PowerShell/子进程 BelowNormal；只调用 ffprobe 与 OpenCV，完全不调用重封装函数或 FFmpeg 编码，以免校验失败时重写已有输出。最终 **11/11 skipped-valid，exit 0，103.767 秒**。源/输出文件大小和 mtime 前后相同；现有 remux_report.json 保留，新增结果在数据根 `remux/task135_validation.json`。全部头/中各 30 帧、尾部到 EOF，最后解码时间与包 PTS 相差 **33.000 ms**，均小于标称间隔 **33.333 ms**。
+
+| 会话/摄像机（原 AVI，对应 MP4） | 尾部连续帧 | 结果 |
+| --- | --- | --- |
+| 20260821 / cam_a | 60 | skipped-valid |
+| 20260821 / cam_b | 60 | skipped-valid |
+| 20260821 / cam_e | 60 | skipped-valid |
+| 20260828 / cam_a | 60 | skipped-valid |
+| 20260828 / cam_b | 60 | skipped-valid |
+| 20260828 / cam_e | 59 | skipped-valid |
+| 20260903 / cam_e | 60 | skipped-valid |
+| 20260911 / cam_e | 60 | skipped-valid |
+| 20260925 / cam_e | 60 | skipped-valid |
+| 20261002 / cam_e | 60 | skipped-valid |
+| 20261009 / cam_e | 60 | skipped-valid |
+
+- **外部活动**：真实 CPU/磁盘、ffprobe/OpenCV；没有模型/GPU/MediaPipe、下载、网络数据访问、缓存或环境修改；GitHub 只发布代码、文档及汇总报告。首次真实复核以 OpenCV 平均 FPS 为容差，103.697 秒全部通过；自查收紧为 `r_frame_rate` 后再次完整复核，以上数字为最终规则结果。日志与重跑脚本在 `gazelle_runs/task-135/`，单测日志在 `%TEMP%/gazelle-task135-*.log`。
+- **反证式复核**：r4 全表、高帧率/非有限边界与连续 10 分钟无时间戳均通过；29.97、30、60 FPS 最后帧误差均 <1e-6 ms。假 writer 实际创建临时 MP4，截断后不存在；错误文本逐项核对 read/required/container reports/undecodable packets。模拟末尾 30 帧不可解码、120 帧上限未 EOF、最后 PTS 偏离标称间隔、包数/时长/PTS 非递增均拒绝。mtime 单独改变会重算 SHA，首分钟含小包的 AVI 标记 needs_remux。
+
+#### 自主决定（A）
+
+标称帧间隔采用 ffprobe `r_frame_rate`，避免 VFR 的 OpenCV 平均 FPS 放宽阈值。真实复核用只读驱动脚本，把结果写独立报告；无效时报告失败而不自动重封装。CLI 测试通过子进程测试现有未捕获异常的非零退出，无运行时接口变更。
+
+#### 范围外改动
+
+额外同步 `tools/workdata/README_CN.md` 的尾部校验与环境名称，属于本次用户可见行为的直接说明；无相邻功能。
+
+#### 待 Claude 判断（B）
+
+无阻塞问题。请独立审查时序语义、尾部规则与真实数据报告；所有文件固定 33 ms 差值与输出 start_time=0.033 s 一致，此处只作解释，检查仍使用未经补偿的实际差值。
+
+#### 待用户决定（C）
+
+无。状态：已实现、已实际运行、ready-for-review；尚未独立验收，不更新 last_accepted。
+
 ## 3. 审查结论（Claude 追加）
 
 - 审查目标（SHA 范围）：

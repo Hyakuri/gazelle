@@ -11,10 +11,10 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 | pr | [#6](https://github.com/Hyakuri/gazelle/pull/6)（draft）；正文来源 `docs/collab/STAGE2_PR_BODY.md` |
 | writer | codex |
 | next_actor | codex |
-| current_task | `docs/collab/tasks/TASK-135-round1-followups.md` |
-| after_current | `docs/collab/tasks/TASK-133-osd-clock-time-maps.md`，然后 `docs/collab/tasks/TASK-134-synchronized-proxies.md`，然后 `docs/collab/tasks/TASK-121-validation-annotation-toolkit.md`，然后结束本轮并把 `next_actor` 改为 `claude` |
+| current_task | `docs/collab/tasks/TASK-133-osd-clock-time-maps.md` |
+| after_current | `docs/collab/tasks/TASK-134-synchronized-proxies.md`，然后 `docs/collab/tasks/TASK-121-validation-annotation-toolkit.md`，然后结束本轮并把 `next_actor` 改为 `claude` |
 | environment | `Gazelle-next`：`C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe`（用户 2026-10-17 决定 D16）。现有 `Gazelle` 作为回退保留，不改动 |
-| last_pushed | `e11f32284a07fa76fc8bded194b5504772593dd7`（TASK-123 修复；其后为报告与 STATE 推进，实时 HEAD 以 Git 为准） |
+| last_pushed | `40c10d7de56e6112471100786f5f55db9c9df3c3`（TASK-135 实现；其后为报告与 STATE 推进，实时 HEAD 以 Git 为准） |
 | last_accepted | `e7244d0`（2026-10-16 第 1 轮审查：TASK-131、TASK-132 通过。TASK-001 也已通过，但其提交位于 TASK-123 之后，待 TASK-123 修复通过后一并计入） |
 | 更新 | 2026-10-17，Claude：环境评估完成；用户决定 D16（尽早切换，项目改用 `Gazelle-next`）与 D17（同意 TASK-136）。第 2 轮交 Codex，第一项为 TASK-137 |
 
@@ -49,7 +49,7 @@ Claude 实际运行的检查：完整离线门 562 项；29 个 MP4 分段 17,40
 | 用户 | 用 TASK-123 的工具画出区域，约 10 分钟 | 待前置 | Codex 在 PR #6 报告 TASK-123 修复后即可进行 |
 | Codex 第 2 轮 | TASK-137 项目环境切换到 `Gazelle-next`（仓库侧） | ready-for-review | 563 项离线门；三组 300 帧 smoke；前两组非计时字段与对照完全一致；B 级依赖事实差异见报告 |
 | Codex 第 2 轮 | TASK-123 修复必须修复 1 至 5 | ready-for-review | 569 项离线门；84 候选帧；合成浏览器试画、拖动、顶点删除/撤销、导出通过；用户可开始正式画区域 |
-| Codex 第 2 轮 | TASK-135 第 1 轮审查的后续加固 | ready | 时间戳 r4、尾部检查、文档与测试 |
+| Codex 第 2 轮 | TASK-135 第 1 轮审查的后续加固 | ready-for-review | 572 项离线门；11/11 输出在更严格尾部校验下通过且未重写；r4 漂移与文档已修复 |
 | Codex 第 2 轮 | TASK-133 画面时钟识别、时间映射与同步检验 | ready | 依赖 TASK-132 |
 | Codex 第 2 轮 | TASK-134 5 Hz 同步代理视频 | ready | 依赖 TASK-133 |
 | Codex 第 2 轮 | TASK-121 多视角同步片段的区域标注工具（D12 r2） | ready | 依赖 TASK-134 与用户的区域文件 |
