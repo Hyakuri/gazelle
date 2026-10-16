@@ -181,6 +181,15 @@ This command loads the image, creates its output directory, collects head observ
 
 When `--overwrite` is used, the per-image output directory is cleaned before writing new results, so stale heatmaps or rendered images from earlier runs are removed.
 
+For image/video inference, argument-only static/json errors are rejected with
+usage exit code 2 before any `--overwrite` deletion: missing/invalid static
+boxes or IDs, and missing/non-file JSON paths. Box validation retains the
+original coordinates in `run_config.json`; pixel clipping still needs image
+dimensions. Deletion remains before provider, model, and resource setup, so
+JSON content errors, MediaPipe resources, checkpoints, and device availability
+can still fail after old results have been removed. `--list-models` and
+`--prepare-only` do not require static boxes or JSON paths.
+
 Head input sources:
 
 - `--head-source none` creates one single-person fallback head with `bbox=None`.

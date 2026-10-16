@@ -287,6 +287,16 @@ A JSON list is also valid for video. Every JSON-list/JSONL record requires a non
 
 `assets\the_office.png` writes under `outputs\the_office_gazelle`. Without `--overwrite`, an existing per-input directory is an error. With it, cleanup has containment and `_gazelle` suffix guards but recursively deletes the existing directory before provider/model/resource setup. This is destructive, not an unconditional safety guarantee; inputs from different locations with the same-stem name share that directory and can collide.
 
+For inference, argument-only static/json errors are rejected with usage exit code 2
+before any `--overwrite` deletion. Static boxes must contain four finite real
+values (not bool), be ordered/nonempty after normalized clipping, and have matching
+integer IDs when provided. Pixel clipping still depends on image dimensions.
+Validation preserves the original bbox values in `run_config.json`. JSON paths
+must name an existing file, but their contents are checked later. JSON content,
+MediaPipe resource, checkpoint, and device-availability failures may still occur
+after deletion. `--list-models` and `--prepare-only` bypass these inference-only
+provider prerequisites; head-source/bbox-format enum checks always apply.
+
 The tables below use **Required** for an always-emitted key, **Conditional** for a key emitted only in the stated case, and **Nullable** for a Required key whose value may be JSON `null`.
 
 ### Observation frame records

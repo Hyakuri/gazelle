@@ -190,6 +190,12 @@ python main.py `
 
 使用 `--overwrite` 时，runtime 会在写入新结果前清理对应图片的输出目录，因此旧的 heatmap 或 rendered image 不会残留。
 
+图片/视频推理时，仅凭参数可判断的 static/json 错误会在任何 `--overwrite` 删除前以 usage error
+（退出码 2）拒绝，包括缺失/无效的 static bbox、ID，以及缺失或非文件的 JSON 路径。
+bbox 校验不改写 `run_config.json` 中的原始坐标；pixel 裁剪仍需图像尺寸。
+删除仍发生在 provider、模型和资源准备之前，因此 JSON 内容、MediaPipe 资源、checkpoint 和
+设备可用性问题仍可能在旧结果删除后才失败。`--list-models` 与 `--prepare-only` 不要求 static bbox 或 JSON 路径。
+
 head 输入来源：
 
 - `--head-source none` 会创建一个单人 fallback head，bbox 为 `None`。

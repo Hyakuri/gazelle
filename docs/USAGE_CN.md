@@ -287,6 +287,14 @@ JSON list 也可用于 video。每个 JSON-list/JSONL record 必须含非负 int
 
 `assets\the_office.png` 写入 `outputs\the_office_gazelle`。没有 `--overwrite` 时，已有 per-input 目录会报错。启用后，清理虽有 containment 和 `_gazelle` suffix guard，但会在 before provider/model/resource setup 时 recursively deletes 已有目录。这是破坏性操作而非无条件安全保证；不同位置的 same-stem 输入共享该目录，可能 collide。
 
+推理时，仅凭参数可判断的 static/json 错误会在任何覆盖删除前（before any `--overwrite` deletion）
+以 usage error、退出码 2 拒绝。Static bbox 必须有四个有限实数（不能为 bool），坐标有序，
+normalized clipping 后非空；提供 ID 时须为等量整数。pixel clipping 仍依赖图像尺寸。
+校验保留 `run_config.json` 中的原始 bbox 值。JSON 路径必须是已有文件，但内容稍后才检查。
+JSON 内容、MediaPipe 资源、checkpoint 和设备可用性失败仍可能发生在删除之后。
+`--list-models` 与 `--prepare-only` 跳过这些仅用于推理的 provider 前提检查；
+head-source/bbox-format 枚举检查始终执行。
+
 下表中 **Required** 表示始终输出该 key，**Conditional** 表示仅在指定条件下输出，**Nullable** 表示 Required key 的值可为 JSON `null`。
 
 ### Observation frame records

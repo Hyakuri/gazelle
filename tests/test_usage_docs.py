@@ -503,6 +503,10 @@ class UsageDocumentationTest(unittest.TestCase):
                           '../tools/validation/ROI_GUIDE_CN.md', '127.0.0.1'):
                 self.assertIn(token, text, str(path))
 
+    def test_argument_validation_precedes_overwrite_in_both_guides(self):
+        for path in (ENGLISH_GUIDE, CHINESE_GUIDE):
+            self.assertIn('before any `--overwrite` deletion', self._read(path))
+
     def test_facial_transformation_matrix_contract_is_precise(self):
         required = (
             "serializer preserves supplied row lengths",
