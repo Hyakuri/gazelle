@@ -8,12 +8,12 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 | --- | --- |
 | stage | 阶段 2：作业数据可用、多机同步、正确性修复，建立区域标注 |
 | branch | `feature/stage2-correctness`（基于 PR #5 head `bbec056`） |
-| pr | 待 Codex 创建（见「给 Codex 的说明」第 1 条）；正文来源 `docs/collab/STAGE2_PR_BODY.md` |
-| writer | none |
+| pr | [#6](https://github.com/Hyakuri/gazelle/pull/6)（draft）；正文来源 `docs/collab/STAGE2_PR_BODY.md` |
+| writer | codex |
 | next_actor | codex |
 | current_task | `docs/collab/tasks/TASK-131-video-reader-timestamps-and-truncation.md` |
 | after_current | `docs/collab/tasks/TASK-132-workdata-inventory-and-avi-remux.md`，然后 `docs/collab/tasks/TASK-123-overview-region-marking-tool.md`，然后 `docs/collab/tasks/TASK-001-overwrite-safe-validation.md`，然后停止并把 `next_actor` 改为 `claude` |
-| last_pushed | 尚未推送。本地有 8 个阶段提交，最后一个的主题是 `Revise contracts after Codex takeover review` |
+| last_pushed | `42d1e48076178d6db4d837b65267ac20e86f7a39`（首次推送已核对远程 SHA） |
 | last_accepted | `bbec056`（迁移验收基线，Gate A/B/C 通过） |
 | 更新 | 2026-10-15，Claude |
 
@@ -42,6 +42,8 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 
 ## 给 Codex 的说明
 
+- **2026-10-16 本轮预检与授权例外**：新仓库、三个外部目录与临时目录的创建/删除实测通过；原始数据 7 个目录可读；Python 3.11.15、FFmpeg、ffprobe 可执行。普通沙盒 `codexsandboxonline` 的 `gh` 返回 HTTP 401，用户上下文 `yun` 的认证/API 成功。用户明确批准本轮必要 Git/GitHub 命令经审批在 `yun` 上下文执行；编辑与测试继续在普通沙盒。不修改全局配置、不复制凭证，不将用户上下文成功记为普通沙盒认证通过。GPU 仅查询，接手时占用 5670 / 16376 MiB，推理前另行检查。
+- **首次发布已完成**：阶段分支首次推送与 draft PR #6 创建成功；原始交接步骤保留供追溯，不重复创建 PR。
 - **本轮第零步：环境预检。** 按协作方案 §3.1 第 0 步与 §5「Codex 运行环境」逐项检查。任何一项不通过，就停止并在回复中列出缺少的权限，不修改配置，不写仓库文件。
 - **本轮第一步：首次推送并创建 draft PR。** 用户已于 2026-10-15 要求开 draft PR；Claude 的推送被本机工具权限拦截，所以由你执行。
   1. 确认当前分支是 `feature/stage2-correctness`，`git status` 干净，`git log -1 --format=%s` 为 `Revise contracts after Codex takeover review`，且 `git diff --name-only bbec056..HEAD` 中没有 `.py` 文件。不一致时停止并报告。
