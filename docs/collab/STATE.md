@@ -9,13 +9,21 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 | stage | 阶段 2：作业数据可用、多机同步、正确性修复，建立区域标注 |
 | branch | `feature/stage2-correctness`（基于 PR #5 head `bbec056`） |
 | pr | [#6](https://github.com/Hyakuri/gazelle/pull/6)（draft）；正文来源 `docs/collab/STAGE2_PR_BODY.md` |
-| writer | codex |
-| next_actor | codex |
+| writer | none |
+| next_actor | claude |
 | current_task | `docs/collab/tasks/TASK-001-overwrite-safe-validation.md` |
 | after_current | 完成本轮后把 `next_actor` 改为 `claude`，释放 `writer` |
-| last_pushed | `4220c98fd88d582bfc83901947e7176a710b5bbd`（TASK-123 实现；报告与 STATE 记录随后提交） |
+| last_pushed | `0f0c0dc1cf7b464f16dad1bcb6ebdfd3053b28fe`（本轮完整报告；其后仅提交 STATE 释放写入权记录，实时 HEAD 以 Git 为准） |
 | last_accepted | `bbec056`（迁移验收基线，Gate A/B/C 通过） |
-| 更新 | 2026-10-16，Claude：TASK-131 契约 r3；分级自主；常设批准 |
+| 更新 | 2026-10-16，Codex：第 1 轮实现、检查、推送与 PR 报告完成，交回 Claude 独立审查 |
+
+## 本轮交接记录（Codex，2026-10-16）
+
+- TASK-131 → TASK-132 → TASK-123 → TASK-001 均已实现、提交并推送，状态为 `ready-for-review`，不是独立验收通过。完整执行记录在各任务的「实施报告」。最终离线门 **562 项通过，无新增 skip**。
+- 真实检查：29 个 MP4 各 600 帧，时间戳违规 0；原始 AVI 正确以截断失败退出；300 帧 GPU smoke 成功；40 文件清单、11/11 AVI 重封装校验通过；84 张候选帧通过哈希与尺寸验证，本机页面加载通过。
+- 区域工具服务与临时浏览器页已关闭，正式 `roi_regions.json` 不存在。Claude 下一步按原验收要求，用临时 `--regions-path` 试画四个默认区域并复核参考图；用户之后再画正式区域。没有开始第 2 轮。
+- 外部活动、失败与自主决定均已记录，特别是 Torch Hub 缓存回退、MediaPipe 原生遥测连接失败、OpenCV 尾部 seek 偏移与修正。没有下载、环境修改或数据上传；源目录只读，派生物留在仓库外。
+- PR #6 已分别发布 TASK-131、TASK-132、TASK-123、TASK-001 英中双语报告。无待用户授权或阻塞性契约问题；各 A 级决定与独立复跑仍请 Claude 审查。`last_accepted` 保留迁移基线，未代替验收更新。
 
 ## 任务队列（阶段 2）
 
@@ -24,7 +32,7 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 | Codex 第 1 轮 | TASK-131 读取器：容器时间戳、严格递增、截断即失败 | ready-for-review | 537 项离线测试；29 段各 600 帧无违规；AVI 失败与 300 帧 GPU smoke 均已实测 |
 | Codex 第 1 轮 | TASK-132 作业数据清单与 AVI 无损重封装 | ready-for-review | 40 文件清单；11/11 重封装校验通过；生产读取器 600 帧检查通过 |
 | Codex 第 1 轮 | TASK-123 全局摄像机画面中的区域标记工具 | ready-for-review | 84 候选帧和本机页面通过；正式区域不存在；Claude 四区域试用待验收 |
-| Codex 第 1 轮 | TASK-001 参数在 `--overwrite` 删除前校验 | ready | GZ-04 |
+| Codex 第 1 轮 | TASK-001 参数在 `--overwrite` 删除前校验 | ready-for-review | 562 项最终离线门通过；static/json 两条旧结果保护回归通过 |
 | Claude | 审查第 1 轮，试用区域标记工具 | 未开始 | |
 | 用户 | 用 TASK-123 的工具画出区域，约 10 分钟 | 待前置 | 可与第 2 轮并行 |
 | Codex 第 2 轮 | TASK-133 画面时钟识别、时间映射与同步检验 | ready | 依赖 TASK-132 |
@@ -41,6 +49,8 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 摄像机角色：前方为カメラ2（`cam_b`），右侧为カメラ1（`cam_a`），全局为設備カメラ（`cam_e`）；一律按物理编号取文件。
 
 ## 给 Codex 的说明
+
+本轮已执行完毕，当前应由 Claude 审查。以下保留本轮启动时的授权与流程记录；不要重复执行已交审任务或自行开始下一轮。
 
 - **本轮开始**：按协作方案 §3.1 第 3 步，先提交 Claude 留下的文档改动（`Record coordinator updates`）并推送；`docs/collab/STAGE2_PR_BODY.md` 没有变化时不需要同步 PR 正文。
 - **TASK-131 已澄清，可以直接实施**：契约 r3 把逐帧算法第 4 步改为 `p + max(1.0, 1000 / fps)`，不限制帧率范围，并新增 5 条边界用例；见任务文件「审查结论」。
@@ -63,7 +73,7 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 
 ## 给用户的说明
 
-Codex 已完成环境预检、首次推送与 draft PR [#6](https://github.com/Hyakuri/gazelle/pull/6)。下一步请对 Codex 说“继续”：它会先提交本次协作文件更新，再实施 TASK-131，之后按顺序做 TASK-132、TASK-123、TASK-001。
+Codex 已完成第 1 轮四项任务的实现、验证、提交推送与 draft PR [#6](https://github.com/Hyakuri/gazelle/pull/6) 报告。下一步请 Claude 读取当前 STATE，独立审查四项任务并试用区域标记工具；通过后再安排你画正式区域与独立 checkout 验收。
 
 - **已记录你 2026-10-16 的决定**：Codex 分级自主（协作方案 §3.5）；本分支与 PR #6 的发布类 Git/GitHub 命令常设批准（协作方案 §7）。
 - **已记录你 2026-10-15 的决定**：カメラ2 为前方、カメラ1 为右侧、設備カメラ为全局；区域由你在全局摄像机画面上标记；同一日期为同一作业者，机位固定；批准 D4、D12 r2 与 D13 至 D15。
@@ -71,7 +81,7 @@ Codex 已完成环境预检、首次推送与 draft PR [#6](https://github.com/H
   1. 第 1 轮审查通过后，用区域标记工具画出取货台、作业台、放置区、工作区，约 10 分钟。启动命令届时写在这里。
   2. 第 2 轮审查通过后，标注 26 个一分钟片段，约 2 小时，可分多次。
 - **可选**：若某名作业者出现在多个日期，提供每个日期的匿名作业者编号（例如 W1、W2），即可做严格的按作业者留一评估；不提供时按日期评估。
-- **过渡期提醒**：TASK-131、TASK-132 完成前，不要用当前代码直接处理 `E:\Gazelle_Workdata` 的视频。AVI 只会处理 1 帧却显示成功，部分 MP4 会在第 3 帧报错退出。
+- **当前验证边界**：时间戳与截断修复、清单和重封装已经由 Codex 实测；仍待 Claude 独立验收。原始 AVI 仍含空包，后续使用仓库外已校验的重封装 MP4，不把“截断失败”当成对原始 AVI 的解码修复。
 
 ## 待决问题
 
