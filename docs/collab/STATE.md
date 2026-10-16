@@ -11,10 +11,10 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 | pr | [#6](https://github.com/Hyakuri/gazelle/pull/6)（draft）；正文来源 `docs/collab/STAGE2_PR_BODY.md` |
 | writer | codex |
 | next_actor | codex |
-| current_task | `docs/collab/tasks/TASK-134-synchronized-proxies.md` |
-| after_current | `docs/collab/tasks/TASK-121-validation-annotation-toolkit.md`，然后结束本轮并把 `next_actor` 改为 `claude` |
+| current_task | `docs/collab/tasks/TASK-121-validation-annotation-toolkit.md` |
+| after_current | 结束本轮并把 `writer` 改为 `none`、`next_actor` 改为 `claude`；本轮不开始 TASK-136 |
 | environment | `Gazelle-next`：`C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe`（用户 2026-10-17 决定 D16）。现有 `Gazelle` 作为回退保留，不改动 |
-| last_pushed | `5b26155ec8e3ed4a612a68150e5b6d003b302f50`（TASK-133 实现；其后为报告与 STATE 推进，实时 HEAD 以 Git 为准） |
+| last_pushed | `4c9018a`（TASK-134 实现；其后为报告与 STATE 推进，实时 HEAD 以 Git 为准） |
 | last_accepted | `e7244d0`（2026-10-16 第 1 轮审查：TASK-131、TASK-132 通过。TASK-001 也已通过，但其提交位于 TASK-123 之后，待 TASK-123 修复通过后一并计入） |
 | 更新 | 2026-10-17，Claude：环境评估完成；用户决定 D16（尽早切换，项目改用 `Gazelle-next`）与 D17（同意 TASK-136）。第 2 轮交 Codex，第一项为 TASK-137 |
 
@@ -51,7 +51,7 @@ Claude 实际运行的检查：完整离线门 562 项；29 个 MP4 分段 17,40
 | Codex 第 2 轮 | TASK-123 修复必须修复 1 至 5 | ready-for-review | 569 项离线门；84 候选帧；合成浏览器试画、拖动、顶点删除/撤销、导出通过；用户可开始正式画区域 |
 | Codex 第 2 轮 | TASK-135 第 1 轮审查的后续加固 | ready-for-review | 572 项离线门；11/11 输出在更严格尾部校验下通过且未重写；r4 漂移与文档已修复 |
 | Codex 第 2 轮 | TASK-133 画面时钟识别、时间映射与同步检验 | ready-for-review | 40/40 映射、12/12 参考读数；605 项工作树离线门通过；运动同步 9/42 通过，33 项按 Q-007 交 Claude |
-| Codex 第 2 轮 | TASK-134 5 Hz 同步代理视频 | ready | 依赖 TASK-133 |
+| Codex 第 2 轮 | TASK-134 5 Hz 同步代理视频 | ready-for-review | 21/21 段、352,062 帧；40 源文件 EOF，0 个差异超过 0.5%；607 项工作树离线门；时钟抽查 60/63，Q-008/Q-009 待 Claude |
 | Codex 第 2 轮 | TASK-121 多视角同步片段的区域标注工具（D12 r2） | ready | 依赖 TASK-134 与用户的区域文件 |
 | Claude | 审查第 2 轮，完整试标 pilot 片段 | 未开始 | |
 | 用户 | 标注 26 段，约 2 小时 | 待前置 | 可与第 3 轮并行 |
@@ -130,6 +130,7 @@ Claude 实际运行的检查：完整离线门 562 项；29 个 MP4 分段 17,40
 | Q-006 | B | Codex | TASK-137 与环境评估称 pydeprecate/defusedxml 不再需要，但实际仍是 trackers/supervision 的必需依赖 | TASK-137 实施报告 | 已暂定按实际元数据编写用户文档，移除显式 pin 而不卸载；请 Claude 修正契约/评估事实，不阻塞后续任务 |
 | Q-007 | B | Codex | TASK-133 全部 7 会话/21 窗口已检查，运动同步仅 9/42 对比通过；画面时钟一致不等于物理运动同步 | TASK-133 实施报告（含 40 文件与全部窗口统计） | 保留 33 项失败，不修正时钟或放宽阈值；建议逐事件人工核对后决定校准协议。TASK-134 继续按画面时钟生成可重建代理，物理同步结论待 Claude |
 | Q-008 | B | Codex | TASK-134 固定连续网格与“完全落在重叠时段”存在冲突：20260903 共同覆盖有 0.079/0.134 秒内部缺口 | TASK-134 实施报告 | 暂定按 §3.5：默认拒绝多区间，显式 `--allow-internal-gaps` 保留总体起止间的固定网格、完整记录覆盖缺口，并沿用最近帧与半步长缺口标记；不删区间、不拼接压缩时钟。输出可重建，待 Claude 确认 |
+| Q-009 | B | Codex | TASK-134 固定抽查 60/63 通过：20260903 E/k9653 与 20260911 E/k15804 缺失；20261002 E/k1750 为 −1.4s 超限，同一原始源帧也复现 | TASK-134 实施报告与外部 clock-failure-source-check.json | 两项缺失保留；更宽二值化与 ±1px 探针未恢复，未放宽门槛或换样本。超限所在文件前 600s 有 58 个既有离群锚点，不能仅归因于 OCR。建议 Claude 分别审查 OCR/人工补核规则与早期区段拟合/分段协议；继续工具试用，不宣称同步验收通过 |
 
 ## 已完成
 
