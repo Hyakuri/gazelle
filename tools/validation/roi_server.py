@@ -31,21 +31,28 @@ class RoiApplication:
         with self.lock:
             document = roi_regions.load(self.regions_path) if self.regions_path.exists() else None
             draft = json.loads(self.draft_path.read_text(encoding='utf-8')) if self.draft_path.exists() else dict(points=[], region=None)
+            if document:
+                roi_regions.validate_draft(draft, document)
             reference_id = next((row['id'] for row in self.candidates if document and roi_regions.reference_matches(document['reference'], row)), None)
             if document and reference_id is None:
                 raise ValueError('Saved reference is absent from this candidates manifest; use the original manifest')
             return dict(candidates=self.candidates, document=document, reference_id=reference_id,
                         draft=draft, defaults=roi_regions.defaults()['regions'],
-                        reserved_keys=[row['label'] for row in roi_regions.defaults()['fixed_classes']], token=self.token)
+                        reserved_keys=[row['label'] for row in roi_regions.defaults()['fixed_classes']],
+                        custom_colors=roi_regions.defaults()['custom_colors'],
+                        complete=roi_regions.completed_document(self.regions_path) is not None, token=self.token)
 
     def image(self, candidate_id):
         if candidate_id not in self.by_id:
             raise ValueError('Unknown candidate image')
         return source_path(self.candidates_path.parent, self.by_id[candidate_id]['image']).read_bytes()
 
-    def update(self, payload, token):
-        if not secrets.compare_digest(str(token), self.token):
+    def check_token(self, token):
+        if not secrets.compare_digest(str(token).encode('utf-8'), self.token.encode('utf-8')):
             raise PermissionError('Invalid local editor token')
+
+    def update(self, payload, token):
+        self.check_token(token)
         with self.lock:
             row = self.by_id.get(payload.get('reference_id'))
             if row is None:
@@ -58,23 +65,25 @@ class RoiApplication:
                 created_at=old['created_at'] if old else now, updated_at=now)
             roi_regions.validate(document)
             draft = payload.get('draft', dict(points=[], region=None))
-            points = draft.get('points') if isinstance(draft, dict) else None
-            if not isinstance(points, list) or len(points) > 500:
-                raise ValueError('Invalid draft points')
-            for point in points:
-                if not isinstance(point, list) or len(point) != 2 or any(not roi_regions.finite(v) or not 0 <= v <= 1 for v in point):
-                    raise ValueError('Invalid draft coordinate')
-            if self.draft_path.exists():
-                atomic_json(self.draft_path.with_suffix('.json.bak'), json.loads(self.draft_path.read_text(encoding='utf-8')))
+            roi_regions.validate_draft(draft, document)
+            if old and all(document[key] == old[key] for key in document if key != 'updated_at'):
+                document = old
+            previous_draft = json.loads(self.draft_path.read_text(encoding='utf-8')) if self.draft_path.exists() else None
             roi_regions.save(self.regions_path, document)
-            atomic_json(self.draft_path, draft)
+            if previous_draft != draft:
+                if previous_draft is not None:
+                    atomic_json(self.draft_path.with_suffix('.json.bak'), previous_draft)
+                atomic_json(self.draft_path, draft)
             return copy.deepcopy(document)
 
     def export(self, token):
-        if not secrets.compare_digest(str(token), self.token):
-            raise PermissionError('Invalid local editor token')
+        self.check_token(token)
         from .render_roi_reference import render
         with self.lock:
+            if self.draft_path.exists():
+                draft = json.loads(self.draft_path.read_text(encoding='utf-8'))
+                if draft.get('region') is not None:
+                    raise ValueError('Close or cancel the draft before export')
             root = self.regions_path.parent
             if self.regions_path.name != 'roi_regions.json':
                 root = root / (self.regions_path.stem + '_export')
@@ -123,16 +132,19 @@ def make_handler(app):
                 self._send(403, b'{}')
                 return
             try:
+                RoiApplication.check_token(app, self.headers.get('X-Editor-Token', ''))
                 length = int(self.headers.get('Content-Length', '0'))
                 if not 0 < length <= 1024 * 1024 or self.headers.get('Content-Type') != 'application/json':
                     raise ValueError('Expected a JSON request up to 1 MiB')
                 payload = json.loads(self.rfile.read(length))
+                if not isinstance(payload, dict):
+                    raise ValueError('Expected a JSON object')
                 token = self.headers.get('X-Editor-Token', '')
                 result = app.update(payload, token) if self.path == '/api/save' else app.export(token)
                 self._send(200, json.dumps(result, ensure_ascii=False).encode('utf-8'))
             except PermissionError as error:
                 self._send(403, json.dumps(dict(error=str(error))).encode('utf-8'))
-            except (ValueError, TypeError, AttributeError, OSError) as error:
+            except (ValueError, TypeError, AttributeError, OSError, OverflowError, RecursionError) as error:
                 self._send(400, json.dumps(dict(error=str(error))).encode('utf-8'))
     return Handler
 

@@ -530,7 +530,7 @@ There is no webcam/real-time mode, automatic ROI/process logic, Multi-Pose integ
 
 ### Research data tools
 
-Run from the repository root in the existing Gazelle environment. Keep the source
+Run from the repository root in the existing Gazelle-next environment. Keep the source
 read-only and choose a data root outside both the repository and source root.
 These tools use CPU/disk only: no models, CUDA, network access, or downloads.
 Use low process priority for long runs. See the [Chinese guide](../tools/workdata/README_CN.md).
@@ -573,6 +573,16 @@ not create formal regions. Choose a reference, draw polygons, check every sessio
 then export references/classes. Invalid or self-intersecting polygons cannot be
 saved; keep the original candidate manifest when resuming. Stop the server with Ctrl+C.
 Exported classes retain target colors and use configured colors for fixed labels.
+Draw targets first and the work cell last. In an overlap, clicking selects the
+smallest region; its vertex handles stay above every polygon. A double-click
+closes the polygon without adding a duplicate vertex. Custom targets get distinct
+colors. Export requires 1–6 targets and exactly one cell, with no unfinished draft.
+Digit keys follow target drawing order, then `cell_other`, `away`, `absent` (at
+most 1–9); `unknown` is 0. Deleting and redrawing a target changes that order.
+Autosave alone does not complete annotation: successful export writes
+`roi_regions.complete.json` (`version`, `completed_at`, `regions_sha256`). Later
+edits invalidate completion until re-export. Downstream tools use
+`roi_regions.completed_document()` to check the marker and file hash.
 
 ## 15. Validation commands
 

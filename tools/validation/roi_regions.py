@@ -1,12 +1,12 @@
 import argparse
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 import math
 from numbers import Real
 from pathlib import Path
 import re
 
-from tools.workdata.common import atomic_json
+from tools.workdata.common import atomic_json, hash_file
 
 
 def defaults():
@@ -14,7 +14,10 @@ def defaults():
 
 
 def finite(value):
-    return isinstance(value, Real) and not isinstance(value, bool) and math.isfinite(value)
+    try:
+        return isinstance(value, Real) and not isinstance(value, bool) and math.isfinite(value)
+    except OverflowError:
+        return False
 
 
 def normalize_point(x, y, width, height):
@@ -88,7 +91,10 @@ def validate(payload):
     if not isinstance(items, list) or len(items) > 100:
         raise ValueError('Expected at most 100 regions')
     seen = set()
-    reserved = {row['label'] for row in defaults()['fixed_classes']}
+    fixed = defaults()['fixed_classes']
+    reserved = {row['label'] for row in fixed}
+    colors = {row['color'].lower() for row in fixed}
+    targets = 0
     cells = 0
     for row in items:
         if not isinstance(row, dict):
@@ -108,6 +114,13 @@ def validate(payload):
             raise ValueError('At most one cell is allowed')
         if not isinstance(row.get('color'), str) or not re.fullmatch(r'#[0-9a-fA-F]{6}', row['color']):
             raise ValueError('Region color must be #rrggbb')
+        if row['kind'] == 'target':
+            targets += 1
+            if targets + sum(row['label'] != 'unknown' for row in fixed) > 9:
+                raise ValueError('At most six target regions fit the digit keys 1 to 9')
+            if row['color'].lower() in colors:
+                raise ValueError('Target colors must be distinct from other targets and fixed classes')
+            colors.add(row['color'].lower())
         validate_polygon(row.get('polygon'))
     return payload
 
@@ -115,6 +128,26 @@ def validate(payload):
 def reference_matches(reference, candidate):
     return all(reference.get(key) == candidate.get(key) for key in (
         'session', 'source', 'container_time_ms', 'image_sha256', 'width', 'height'))
+
+
+def validate_draft(draft, document):
+    if not isinstance(draft, dict) or set(draft) != {'points', 'region'}:
+        raise ValueError('Invalid draft schema')
+    points, region = draft['points'], draft['region']
+    if not isinstance(points, list) or len(points) > 500:
+        raise ValueError('Invalid draft points')
+    for point in points:
+        if not isinstance(point, list) or len(point) != 2 or any(not finite(v) or not 0 <= v <= 1 for v in point):
+            raise ValueError('Invalid draft coordinate')
+    if region is None:
+        if points:
+            raise ValueError('Draft points need a region')
+    else:
+        if not isinstance(region, dict) or set(region) != {'key', 'name_zh', 'kind', 'color'}:
+            raise ValueError('Invalid draft region')
+        validate({**document, 'regions': document['regions'] + [
+            {**region, 'polygon': [[0, 0], [1, 0], [0, 1]]}]})
+    return draft
 
 
 def load(path):
@@ -125,16 +158,61 @@ def save(path, payload):
     validate(payload)
     path = Path(path)
     if path.exists():
-        atomic_json(path.with_suffix(path.suffix + '.bak'), load(path))
+        previous = load(path)
+        if previous == payload:
+            return
+        atomic_json(path.with_suffix(path.suffix + '.bak'), previous)
     atomic_json(path, payload)
 
 
 def make_classes(payload):
     validate(payload)
     classes = [dict(label=row['key'], name_zh=row['name_zh'], color=row['color']) for row in payload['regions'] if row['kind'] == 'target']
+    if not classes:
+        raise ValueError('At least one target region is required')
     classes += defaults()['fixed_classes']
     return dict(version=1, classes=[dict(key=0 if row['label'] == 'unknown' else i + 1, **row)
                                     for i, row in enumerate(classes)])
+
+
+def validate_complete(payload):
+    make_classes(payload)
+    if sum(row['kind'] == 'cell' for row in payload['regions']) != 1:
+        raise ValueError('Exactly one cell is required before export')
+    return payload
+
+
+def completion_path(path):
+    return Path(path).with_suffix('.complete.json')
+
+
+def mark_complete(path, expected_sha256=None):
+    validate_complete(load(path))
+    digest = hash_file(path)
+    if expected_sha256 is not None and expected_sha256 != digest:
+        raise ValueError('Regions changed during export; export again')
+    atomic_json(completion_path(path), dict(version=1,
+                completed_at=datetime.now(timezone.utc).isoformat(), regions_sha256=digest))
+
+
+def completed_document(path):
+    """Return only the unchanged document recorded by a successful export."""
+    try:
+        marker = json.loads(completion_path(path).read_text(encoding='utf-8'))
+        if type(marker.get('version')) is not int or marker['version'] != 1:
+            return None
+        datetime.fromisoformat(marker['completed_at'])
+        if marker['regions_sha256'] != hash_file(path):
+            return None
+        document = validate_complete(load(path))
+        draft_path = Path(path).with_suffix('.draft.json')
+        if draft_path.exists():
+            draft = validate_draft(json.loads(draft_path.read_text(encoding='utf-8')), document)
+            if draft['region'] is not None:
+                return None
+        return document
+    except (OSError, ValueError, TypeError, KeyError, AttributeError, RecursionError):
+        return None
 
 
 def main(argv=None):

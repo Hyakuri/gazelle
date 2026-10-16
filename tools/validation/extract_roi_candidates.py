@@ -19,6 +19,7 @@ class OpenCVSource:
             self.close()
             raise ValueError('Cannot determine candidate video duration: {}'.format(path))
         self.duration = count / fps
+        self.frame_interval_ms = 1000 / fps
 
     def read_at(self, seconds):
         if not self.capture.set(self.cv2.CAP_PROP_POS_MSEC, seconds * 1000):
@@ -80,14 +81,30 @@ def extract_candidates(inventory_path, remux_root, out_root, source_factory=Open
         source = source_path(remux_root, str(Path(row['relative_path']).with_suffix('.mp4'))) if row['needs_remux'] else source_path(inventory['root'], row['relative_path'])
         if not source.is_file():
             raise ValueError('Missing validated overview remux: {}'.format(source))
+        if row['needs_remux']:
+            report_path = Path(remux_root) / 'remux_report.json'
+            if not report_path.is_file():
+                raise ValueError('Missing validated remux report')
+            report = json.loads(report_path.read_text(encoding='utf-8'))
+            original = source_path(inventory['root'], row['relative_path'])
+            matches = [item for item in report.get('files', [])
+                       if Path(item['output']).resolve() == source.resolve()
+                       and Path(item['input']).resolve() == original.resolve()]
+            if (len(matches) != 1 or matches[0].get('validation', {}).get('valid') is not True
+                    or matches[0].get('status') not in ('completed', 'skipped')
+                    or matches[0].get('output_size_bytes') != source.stat().st_size):
+                raise ValueError('Overview remux has no matching validated report: {}'.format(source))
         reader = source_factory(source)
         try:
+            previous_time = -1
             for index in range(12):
                 seconds = reader.duration * (index + 0.5) / 12
                 image, timestamp = reader.read_at(seconds)
-                if not math.isfinite(timestamp) or timestamp < 0:
+                if (not math.isfinite(timestamp) or timestamp <= previous_time
+                        or abs(timestamp - seconds * 1000) > max(1, 2 * reader.frame_interval_ms)):
                     image.close()
                     raise ValueError('Invalid decoded candidate timestamp')
+                previous_time = timestamp
                 candidate_id = '{}-{}-{:02}'.format(session, generation, index)
                 relative = Path('candidates') / session / (candidate_id + '.jpg')
                 destination = source_path(out_root, relative)
@@ -110,6 +127,9 @@ def extract_candidates(inventory_path, remux_root, out_root, source_factory=Open
         raise ValueError('Inventory contains no overview videos')
     payload = dict(version=1, camera='cam_e', candidates=candidates)
     _validate_manifest(payload, out_root)
+    if (out_root / 'candidates.json').exists():
+        previous = validate_candidates(out_root / 'candidates.json')
+        atomic_json(out_root / 'candidates.json.bak', previous)
     atomic_json(out_root / 'candidates.json', payload)
     return payload
 

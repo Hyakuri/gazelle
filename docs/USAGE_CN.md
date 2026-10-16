@@ -527,7 +527,7 @@ Perception quality 依赖 visible-face evidence。`pose_only` 使用近似 pose-
 
 ### 研究数据工具
 
-在现有 Gazelle 环境、仓库根目录运行。源目录只读，数据根放在仓库与源目录之外。
+在现有 Gazelle-next 环境、仓库根目录运行。源目录只读，数据根放在仓库与源目录之外。
 工具只使用 CPU 与磁盘，不构造模型、不使用 CUDA、不联网、不下载。
 长时间任务以低优先级运行。参见[中文指南](../tools/workdata/README_CN.md)。
 
@@ -565,6 +565,12 @@ python -m tools.validation.render_roi_reference --regions-path "$data\roi\roi_re
 仅打开页面不会创建正式区域。选择参考帧、画多边形、核对各日期后导出参考图与类别。
 无效或自相交多边形不能保存；续标请保留原候选清单。Ctrl+C 停止服务。
 导出的类别保留目标区域颜色，固定类别颜色来自配置。
+先画目标区域，最后画工作区。重叠处点击选中最小区域，所选顶点始终显示在所有多边形上方。
+双击闭合不会增加重复顶点，自定义目标自动使用不同颜色。导出要求 1–6 个目标、恰好一个工作区，
+且没有未闭合草稿。数字键按目标绘制顺序分配，之后为 `cell_other`、`away`、`absent`（最多 1–9）；
+`unknown` 为 0。删除后重画会改变顺序。自动保存不表示完成：成功导出才写入
+`roi_regions.complete.json`（`version`、`completed_at`、`regions_sha256`）。后续修改使完成状态失效，
+需重新导出。下游工具用 `roi_regions.completed_document()` 校验完成标记与文件哈希。
 
 ## 15. 验证命令
 

@@ -502,6 +502,10 @@ class UsageDocumentationTest(unittest.TestCase):
                           'tools.validation.roi_regions', 'tools.validation.render_roi_reference',
                           '../tools/validation/ROI_GUIDE_CN.md', '127.0.0.1'):
                 self.assertIn(token, text, str(path))
+        for path in (ENGLISH_README, CHINESE_README, ENGLISH_GUIDE, CHINESE_GUIDE):
+            text = self._read(path)
+            for token in ('roi_regions.complete.json', 'cell_other', 'away', 'absent', 'unknown', '1–6', '1–9'):
+                self.assertIn(token, text, str(path))
 
     def test_argument_validation_precedes_overwrite_in_both_guides(self):
         for path in (ENGLISH_GUIDE, CHINESE_GUIDE):

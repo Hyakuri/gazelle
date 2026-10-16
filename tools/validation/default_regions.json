@@ -5,6 +5,7 @@
     {"key": "place_left", "name_zh": "放置区", "kind": "target", "color": "#27ae60"},
     {"key": "work_cell", "name_zh": "工作区", "kind": "cell", "color": "#9b59b6"}
   ],
+  "custom_colors": ["#d4ac0d", "#16a085", "#e84393", "#34495e", "#6c5ce7", "#00b8d9"],
   "fixed_classes": [
     {"label": "cell_other", "name_zh": "工作区内其他位置", "color": "#9b59b6"},
     {"label": "away", "name_zh": "工作区外", "color": "#c0392b"},

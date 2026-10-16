@@ -330,6 +330,10 @@ python main.py `
 仓库根目录启动命令见[区域指南](tools/validation/ROI_GUIDE_CN.md) 和 [USAGE](docs/USAGE_CN.md)。
 图像与区域文件留在外部数据根；仅使用 CPU/OpenCV/Pillow，不调用 FFmpeg 可执行程序、模型、GPU 或外部网络。
 导出的标注类别保留区域颜色，供后续标注工具使用。
+先画目标区域，最后画工作区；重叠处点击选中最小区域，顶点始终显示在工作区上方。
+导出要求 1–6 个目标区域与恰好一个工作区。数字键按目标绘制顺序分配，之后为
+`cell_other`、`away`、`absent`（最多 1–9）；`unknown` 为 0。自动保存仍是草稿：
+成功导出才写入含时间与区域 SHA-256 的 `roi_regions.complete.json`；修改后需重新导出才算完成。
 
 视频保留有效容器时间戳，对取整冲突做最小修补；时间戳缺失时，在上一帧整数毫秒上
 增加至少 1 ms 或一个源帧间隔。`run_config.json` 记录 `container_frame_count`、

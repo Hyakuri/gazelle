@@ -328,6 +328,12 @@ at `127.0.0.1`, with autosave and reference/class export. Read the
 repository-root commands. Images and region files stay in the external data root;
 these tools use CPU/OpenCV/Pillow, no FFmpeg executable, models, GPU, or external network.
 Exported annotation classes retain region colors for the later annotation tool.
+Draw targets first and the work cell last; clicking overlapping regions selects
+the smallest region, with its vertex handles above the cell. Export requires
+1–6 targets and exactly one cell. Digit keys follow target drawing order, then
+`cell_other`, `away`, `absent` (at most 1–9); `unknown` is 0. Autosave is a draft:
+successful export writes `roi_regions.complete.json` with a timestamp and region
+SHA-256. Editing invalidates completion until the next export.
 
 Video timestamps preserve valid container times, minimally repair rounded collisions,
 and estimate missing times from the previous rounded millisecond plus at least 1 ms

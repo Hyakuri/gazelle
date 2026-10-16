@@ -10,6 +10,7 @@ from PIL import Image, ImageFont
 from tools.validation import roi_regions as regions
 from tools.validation.extract_roi_candidates import extract_candidates, validate_candidates
 from tools.validation.roi_server import RoiApplication, make_handler
+from tools.validation.render_roi_reference import draw_regions
 
 
 def document():
@@ -21,8 +22,81 @@ def document():
 
 
 class RoiRegionsTest(unittest.TestCase):
+    def test_overlapping_cell_does_not_erase_target_outlines(self):
+        rows = [dict(key='target', name_zh='Target', kind='target', color='#e67e22',
+                     polygon=[[.2, .2], [.6, .2], [.6, .6], [.2, .6]]),
+                dict(key='cell', name_zh='Cell', kind='cell', color='#9b59b6',
+                     polygon=[[.05, .05], [.95, .05], [.95, .95], [.05, .95]])]
+        with Image.new('RGB', (400, 400), 'white') as base:
+            for order in (rows, list(reversed(rows))):
+                with draw_regions(base, order, ImageFont.load_default()) as rendered:
+                    self.assertEqual(rendered.getpixel((80, 180)), (230, 126, 34))
+                    self.assertEqual(rendered.getpixel((20, 180)), (155, 89, 182))
+
+    def test_class_keys_and_colors_are_bounded(self):
+        doc = document()
+        doc['regions'] = []
+        with self.assertRaises(ValueError):
+            regions.make_classes(doc)
+        palette = ['#010101', '#020202', '#030303', '#040404', '#050505', '#060606', '#070707']
+        doc['regions'] = [{**document()['regions'][0], 'key': 'desk' + str(i), 'color': color}
+                          for i, color in enumerate(palette)]
+        with self.assertRaises(ValueError):
+            regions.make_classes(doc)
+        doc['regions'].pop()
+        self.assertEqual([r['key'] for r in regions.make_classes(doc)['classes']], list(range(1, 10)) + [0])
+        for color in ('#c0392b', '#9B59B6', '#010101'):
+            doc['regions'][1]['color'] = color
+            with self.subTest(color=color), self.assertRaises(ValueError):
+                regions.validate(doc)
+
+    def test_completion_is_tied_to_valid_exported_file(self):
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'trial.json'
+            doc = document()
+            regions.save(path, doc)
+            self.assertIsNone(regions.completed_document(path))
+            with self.assertRaises(ValueError):
+                regions.mark_complete(path)
+            cell = {**doc['regions'][0], 'key': 'work_cell', 'kind': 'cell', 'color': '#9b59b6'}
+            doc['regions'].append(cell)
+            regions.save(path, doc)
+            regions.mark_complete(path)
+            self.assertEqual(regions.completed_document(path), doc)
+            marker = json.loads(regions.completion_path(path).read_text(encoding='utf-8'))
+            self.assertIn('completed_at', marker)
+            self.assertEqual(len(marker['regions_sha256']), 64)
+            path.with_suffix('.draft.json').write_text('{"points": [[0, 0]], "region": null}', encoding='utf-8')
+            self.assertIsNone(regions.completed_document(path))
+            path.with_suffix('.draft.json').write_text('{"points": [], "region": null}', encoding='utf-8')
+            self.assertEqual(regions.completed_document(path), doc)
+            doc['regions'][0]['name_zh'] = 'Changed'
+            regions.save(path, doc)
+            self.assertIsNone(regions.completed_document(path))
+
+    def test_identical_saves_do_not_rotate_backups(self):
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'trial.json'
+            doc = document()
+            regions.save(path, doc)
+            doc['regions'][0]['name_zh'] = 'Updated'
+            regions.save(path, doc)
+            previous = path.with_suffix('.json.bak').read_bytes()
+            regions.save(path, doc)
+            self.assertEqual(path.with_suffix('.json.bak').read_bytes(), previous)
+
+    def test_overflow_and_touching_polygon_edges_are_rejected_cleanly(self):
+        doc = document()
+        doc['regions'][0]['polygon'][0][0] = 10 ** 1000
+        with self.assertRaises(ValueError):
+            regions.validate(doc)
+        for polygon in ([[0, 0], [1, 0], [.5, 0], [.5, 1]],
+                        [[0, 0], [1, 0], [1, 1], [.5, 0], [0, 1]]):
+            with self.subTest(polygon=polygon), self.assertRaises(ValueError):
+                regions.validate_polygon(polygon)
+
     def test_http_boundary_without_opening_a_port(self):
-        app = Mock()
+        app = Mock(token='token')
         handler = object.__new__(make_handler(app))
         handler.server = Mock(server_port=8765)
         handler._send = Mock()
@@ -43,6 +117,28 @@ class RoiRegionsTest(unittest.TestCase):
         handler.do_POST()
         app.update.assert_called_once_with({}, 'token')
         self.assertEqual(handler._send.call_args.args[0], 200)
+
+    def test_http_rejects_bad_token_before_body_and_bounds_json(self):
+        app = Mock(token='token')
+        handler = object.__new__(make_handler(app))
+        handler.server = Mock(server_port=8765)
+        handler._send = Mock()
+        handler.path = '/api/save'
+        handler.headers = {'Host': '127.0.0.1:8765', 'Content-Type': 'application/json',
+                           'Content-Length': '2', 'X-Editor-Token': 'wrong'}
+        handler.rfile = Mock()
+        handler.do_POST()
+        self.assertEqual(handler._send.call_args.args[0], 403)
+        handler.rfile.read.assert_not_called()
+        for length, content, body in [('1048577', 'application/json', b'{}'),
+                                      ('2', 'text/plain', b'{}'),
+                                      ('4000', 'application/json', b'[' * 2000 + b']' * 2000)]:
+            handler.headers.update({'X-Editor-Token': 'token', 'Content-Length': length,
+                                    'Content-Type': content})
+            handler.rfile = io.BytesIO(body)
+            handler.do_POST()
+            self.assertEqual(handler._send.call_args.args[0], 400)
+        app.update.assert_not_called()
 
     def test_valid_schema_and_class_order(self):
         doc = document()
@@ -98,6 +194,7 @@ class RoiRegionsTest(unittest.TestCase):
     def test_candidate_extraction_and_application_without_ports(self):
         class FakeSource:
             duration = 120
+            frame_interval_ms = 50
             def __init__(self, path):
                 pass
             def read_at(self, seconds):
@@ -112,6 +209,11 @@ class RoiRegionsTest(unittest.TestCase):
             ])), encoding='utf-8')
             (root / 'remux/session').mkdir(parents=True)
             (root / 'remux/session/e.mp4').touch()
+            with self.assertRaisesRegex(ValueError, 'validated'):
+                extract_candidates(inventory, root / 'remux', root / 'roi', source_factory=FakeSource)
+            (root / 'remux/remux_report.json').write_text(json.dumps(dict(version=1, files=[dict(
+                input=str(root / 'raw/session/e.avi'), output=str(root / 'remux/session/e.mp4'),
+                output_size_bytes=0, status='completed', validation=dict(valid=True))])), encoding='utf-8')
             manifest = extract_candidates(inventory, root / 'remux', root / 'roi', source_factory=FakeSource)
             self.assertEqual(len(manifest['candidates']), 12)
             self.assertEqual([row['container_time_ms'] for row in manifest['candidates']], list(range(5000, 120000, 10000)))
@@ -133,8 +235,29 @@ class RoiRegionsTest(unittest.TestCase):
             self.assertEqual(regions.load(path)['annotator'], 'tester')
             resumed = RoiApplication(candidate_file, path, 'tester').state()
             self.assertEqual(resumed['document']['regions'], document()['regions'])
+            self.assertIsNone(regions.completed_document(path))
+            with self.assertRaises(ValueError):
+                app.export(app.token)
+            payload['regions'].append({**document()['regions'][0], 'key': 'work_cell',
+                                       'kind': 'cell', 'color': '#9b59b6'})
+            app.update(payload, app.token)
+            backup = path.with_suffix('.json.bak').read_bytes()
+            original = path.read_bytes()
+            app.update(payload, app.token)
+            self.assertEqual(path.read_bytes(), original)
+            self.assertEqual(path.with_suffix('.json.bak').read_bytes(), backup)
+            for draft in ({'points': [], 'region': {'key': 'bad'}},
+                          {'points': [], 'region': None, 'extra': 'unexpected'},
+                          {'points': [[.2, .2]], 'region': None}):
+                with self.subTest(draft=draft), self.assertRaises(ValueError):
+                    app.update({**payload, 'draft': draft}, app.token)
+            with patch('tools.validation.render_roi_reference.find_font', side_effect=ValueError('font missing')):
+                with self.assertRaises(ValueError):
+                    app.export(app.token)
+            self.assertIsNone(regions.completed_document(path))
             with patch('tools.validation.render_roi_reference.find_font', return_value=ImageFont.load_default()):
                 self.assertEqual(app.export(app.token)['images'], 2)
+            self.assertIsNotNone(regions.completed_document(path))
             self.assertTrue((root / 'roi/trial_export/roi_reference.png').is_file())
             with Image.open(root / 'roi/trial_export/roi_reference.png') as image:
                 self.assertNotEqual(image.getpixel((960, 324)), (255, 255, 255))
@@ -150,3 +273,15 @@ class RoiRegionsTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'timestamp'):
                 extract_candidates(inventory, root / 'remux', root / 'roi', source_factory=InvalidTimeSource)
             self.assertEqual(candidate_file.read_bytes(), previous)
+            class StaleTimeSource(FakeSource):
+                def read_at(self, seconds):
+                    return Image.new('RGB', (4, 4)), 0
+            class DistantTimeSource(FakeSource):
+                def read_at(self, seconds):
+                    return Image.new('RGB', (4, 4)), (seconds + 5) * 1000
+            for factory in (StaleTimeSource, DistantTimeSource):
+                with self.assertRaisesRegex(ValueError, 'timestamp'):
+                    extract_candidates(inventory, root / 'remux', root / 'roi', source_factory=factory)
+                self.assertEqual(candidate_file.read_bytes(), previous)
+            extract_candidates(inventory, root / 'remux', root / 'roi', source_factory=FakeSource)
+            self.assertEqual(candidate_file.with_suffix('.json.bak').read_bytes(), previous)
