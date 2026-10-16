@@ -28,40 +28,35 @@ When adding user-facing features, scripts, CLI arguments, environment requiremen
 
 ## Installation
 
-`environment.yml` is the current recommended Gazelle environment. It documents the validated NumPy 2.4.6 stack for this fork, including Python 3.11, PyTorch 2.6.0 + CUDA 12.6 wheels, xFormers 0.0.29.post3, MediaPipe 0.10.35, production ByteTrack dependencies (`trackers==2.5.0.post0`, `supervision==0.29.1`), and `ultralytics==8.4.104` for the validated dependency transaction.
+`environment.yml` describes the current `Gazelle-next` environment: Python 3.14 (validated with 3.14.8), PyTorch 2.14.1 with CUDA 13.0 wheels, MediaPipe 1.1.1, and OpenCV 5.0. The explicit package versions are `torch==2.14.1+cu130`, `torchvision==0.29.1+cu130`, `timm==1.0.30`, `numpy==2.5.4`, `scipy==1.18.1`, `pandas==2.3.3`, `matplotlib==3.11.2`, `scikit-learn==1.9.1`, `pillow==12.3.0`, `opencv-python==5.0.0.93`, `opencv-contrib-python==5.0.0.93`, `mediapipe==1.1.1`, `trackers==2.6.1`, `supervision==0.30.9`, `av==19.0.1`. pandas stays on 2.3 because the data-preparation scripts have not been validated with pandas 3.0.
 
-`environment_1.0.yml` preserves the previous NumPy 1.26.4 configuration as a rollback/reference copy of the earlier Gazelle environment definition. Both files declare the Conda environment name `Gazelle`, so only create one environment with that name at a time.
+`environment_py311.yml` preserves the previous Python 3.11 definition byte for byte and still declares `name: Gazelle`. Keep that existing environment unchanged for rollback. `environment_1.0.yml` is the older NumPy 1.26.4 reference, also named `Gazelle`; use a separate name if creating it alongside another environment.
 
-For the current workflow, keep using the validated `Gazelle` environment:
+The explicit dependency list has changed as follows:
+
+- `torchaudio` is omitted: repository code does not use it, and the evaluated stack has no matching torch 2.14 audio package.
+- `xformers` is omitted: the evaluated Windows builds were incompatible with this torch version or lacked CUDA operators. DINOv2 uses PyTorch `scaled_dot_product_attention`.
+- `ultralytics` is omitted: repository code does not import it, and YOLO inference/export were not validated.
+- `polars`, `polars-runtime-32`, and `nvidia-ml-py` are omitted with the unused Ultralytics dependency group.
+- `pydeprecate` and `defusedxml` are no longer explicitly pinned. They remain installed as required transitive dependencies of trackers/supervision: `pydeprecate==0.13.0` and `defusedxml==0.7.1`. They must not be uninstalled to match an omission in this file.
+
+For an existing installation, activate it without reinstalling packages:
 
 ```powershell
-conda activate Gazelle
-pip install -e .
+conda activate Gazelle-next
 ```
 
-On a fresh machine, create the current environment from `environment.yml`:
+On a new machine, after authorizing environment creation, run:
 
 ```powershell
 conda env create -f environment.yml
-conda activate Gazelle
+conda activate Gazelle-next
 pip install -e .
 ```
 
-If you need the legacy NumPy 1.26.4 definition alongside the current environment for comparison or rollback, override the name when you create it:
+Creation downloads packages and writes a new `Gazelle-next` environment; editable installation also modifies it. Neither command runs inference. From the repository root, `python main.py` can use the checkout directly. Do not recreate or prune an existing environment.
 
-```powershell
-conda env create -f environment_1.0.yml --name Gazelle-1.0
-```
-
-After activating `Gazelle`, these commands validate the CLI and prepare the default local model cache:
-
-```powershell
-python main.py --help
-python main.py --list-models
-python main.py --prepare-only --model gazelle_dinov2_vitb14_inout --cache-dir models
-```
-
-`--help` and `--list-models` do not download or run inference. `--prepare-only` may download the Gazelle checkpoint and DINOv2 resources on the first run; later runs reuse `models/checkpoints` and `models/torch_hub` when those files are already cached.
+For rollback, use `conda activate Gazelle` if it is retained locally. Only if it is absent and recreation is authorized, run `conda env create -f environment_py311.yml`. Keep `wandb` as a separately installed requirement for the upstream training scripts; this change does not validate training.
 
 ## Pretrained Models
 
@@ -237,9 +232,9 @@ Default unit tests use fake downloaders and do not access the network. The pinne
 
 The integration keeps the model boundary deliberately small: fusion/tracking produces an ordered `HeadObservation(person_id, bbox, confidence)` tuple and an aligned `HeadPerception` tuple for observation sidecars and rendering. The default `--gazelle-head-mode eligible` passes only conservative eligible heads. Diagnostic selectors may instead opt in one or more states (`face_pose`, `face_only`, `pose_only`, `tracked_only`) or views (`frontal`, `profile`, `back_or_occluded`, `unknown`); `observed` selects current observations, and `all` selects every active perception. Multiple selectors use OR semantics. Even in diagnostic mode, expired tracks cannot be revived and normalized non-`None` bbox validation remains mandatory. Face bbox, face mesh, face/pose keypoints, both head-pose reference rays, head pose, and tracking state are never added to the Gazelle tensor input. Gazelle returns results in the selected-person order.
 
-The current `environment.yml` dependency set has been validated with real MediaPipe 0.10.35, production ByteTrack via `trackers==2.5.0.post0`, Gazelle/DINOv2 CUDA image inference, and a short rendered video pipeline. This repository now treats that NumPy 2.4.6 environment as the recommended end-to-end setup for the staged runtime work. Optional Ultralytics YOLO model inference and export have not been validated and are not claimed here.
+The 2026-10-17 environment evaluation verified the `Gazelle-next` stack with the complete offline gate, 300-frame static and MediaPipe/production ByteTrack CUDA runs, decoded-frame comparisons, and mp4v/H.264 rendering. Environment changes do not establish accuracy improvements or validate training/YOLO. Current-environment smoke checks use local cached resources; MediaPipe may send telemetry, and Torch Hub may probe GitHub.
 
-The runtime narrowly filters the exact upstream `trackers` `target=None` deprecation warning during the lazy ByteTrack import while leaving unrelated `FutureWarning` messages visible. Normal CUDA image/video inference resolves the checkpoint without constructing DINOv2, then constructs the predictor once with xFormers available. If optional Triton is absent and the user has not set an xFormers Triton override, model construction temporarily sets the official `XFORMERS_FORCE_DISABLE_TRITON=1` switch; this skips the unavailable Triton probe without disabling other xFormers operators or modifying the Conda environment. `--prepare-only` still intentionally disables xFormers during strict-load validation, so DINOv2 may print non-fatal xFormers-disabled/not-available status warnings on that path. Because DINOv2 caches its backend choice at first import, a long-lived Python process that later requests an incompatible CPU/prepare-only versus xFormers-enabled CUDA construction now fails clearly instead of silently reusing the wrong backend; use a fresh process to switch backend modes.
+The runtime narrowly filters the upstream `trackers` `target=None` deprecation warning during lazy import while retaining other warnings. Checkpoint resolution does not construct DINOv2; inference constructs the predictor once. The current `Gazelle-next` environment does not install xFormers; DINOv2 uses PyTorch `scaled_dot_product_attention`. The runtime retains its compatibility policy for environments that do install xFormers: CPU construction and `--prepare-only` disable it; CUDA may request it unless `XFORMERS_DISABLED` is set. When optional Triton is absent and no override is set, `XFORMERS_FORCE_DISABLE_TRITON=1` skips that probe without disabling other xFormers operators or modifying the environment. Nonfatal xFormers-disabled/not-available messages may still appear during strict loading. DINOv2 caches its backend selection, so switching incompatible CPU/prepare-only and xFormers-enabled CUDA modes in a long-lived process requires a fresh process.
 
 ### Independent Head Observation Schema
 
@@ -464,7 +459,7 @@ Perception and tracking run exactly once on every decoded and written frame. `--
 The image and video smoke tests should be run inside the existing local Conda environment:
 
 ```powershell
-conda activate Gazelle
+conda activate Gazelle-next
 ```
 
 Single-image smoke test:
@@ -495,7 +490,7 @@ python main.py `
   --overwrite
 ```
 
-These commands construct the real Gazelle predictor and DINOv2 backbone once per image run or once on the first usable video frame, load the Gazelle checkpoint, run inference, and write output directories. Checkpoint resolution itself does not construct DINOv2. If `models/checkpoints` or `models/torch_hub` are empty, the first run may download the Gazelle checkpoint, DINOv2 PyTorch Hub repository, and DINOv2 weights. Re-running the same commands should reuse the cache. CPU smoke tests are supported with `--device cpu`; when constructing DINOv2 on CPU, the runtime temporarily disables xFormers so a CUDA-only xFormers wheel does not force an unsupported CPU attention kernel. CUDA construction keeps xFormers enabled and skips only the optional Triton probe when Triton is unavailable. Repeated programmatic construction may reuse the backend already selected in that process, but switching between incompatible CPU/prepare-only and xFormers-enabled CUDA modes requires a fresh process.
+These commands construct the real Gazelle predictor and DINOv2 backbone once per image run or once on the first usable video frame, load the Gazelle checkpoint, run inference, and write output directories. Checkpoint resolution itself does not construct DINOv2. If `models/checkpoints` or `models/torch_hub` are empty, the first run may download the Gazelle checkpoint, DINOv2 PyTorch Hub repository, and DINOv2 weights. Re-running the same commands should reuse the cache. CPU smoke tests use `--device cpu`. The current `Gazelle-next` environment does not install xFormers; DINOv2 uses PyTorch `scaled_dot_product_attention`. The runtime retains its compatibility policy for environments that do install xFormers: CPU construction and `--prepare-only` disable it; CUDA may request it unless `XFORMERS_DISABLED` is set. When optional Triton is absent and no override is set, `XFORMERS_FORCE_DISABLE_TRITON=1` skips that probe without disabling other xFormers operators or modifying the environment. Nonfatal xFormers-disabled/not-available messages may still appear during strict loading. DINOv2 caches its backend selection, so switching incompatible CPU/prepare-only and xFormers-enabled CUDA modes in a long-lived process requires a fresh process.
 
 ### Programmatic Single-Frame Predictor
 

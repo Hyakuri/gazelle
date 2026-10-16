@@ -10,15 +10,35 @@ PowerShell 示例从仓库根目录运行。凡命令含字面量 `USER_INPUT_PA
 
 ## 2. 环境安装和激活
 
-`environment.yml` 是已验证的环境定义：
+`environment.yml` 描述当前 `Gazelle-next` 环境：Python 3.14（实际验证为 3.14.8）、PyTorch 2.14.1 与 CUDA 13.0 wheels、MediaPipe 1.1.1、OpenCV 5.0。显式固定版本为 `torch==2.14.1+cu130`, `torchvision==0.29.1+cu130`, `timm==1.0.30`, `numpy==2.5.4`, `scipy==1.18.1`, `pandas==2.3.3`, `matplotlib==3.11.2`, `scikit-learn==1.9.1`, `pillow==12.3.0`, `opencv-python==5.0.0.93`, `opencv-contrib-python==5.0.0.93`, `mediapipe==1.1.1`, `trackers==2.6.1`, `supervision==0.30.9`, `av==19.0.1`。pandas 保留在 2.3 系列，因为数据预处理脚本尚未用 pandas 3.0 验证。
+
+`environment_py311.yml` 逐字节保留上一版 Python 3.11 定义，仍声明 `name: Gazelle`；本机现有环境原样保留作回退。`environment_1.0.yml` 是更早的 NumPy 1.26.4 参考定义，也声明为 `Gazelle`；需要并行创建时应另起环境名。
+
+显式依赖清单的变化如下：
+
+- 不再列出 `torchaudio`：仓库代码不使用，评估的依赖栈中没有配套 torch 2.14 的音频包。
+- 不再列出 `xformers`：评估过的 Windows 包与当前 torch 版本不配套，或缺少 CUDA operator。DINOv2 使用 PyTorch 的 `scaled_dot_product_attention`。
+- 不再列出 `ultralytics`：仓库代码不导入，YOLO 推理和导出未经验证。
+- `polars`、`polars-runtime-32`、`nvidia-ml-py` 随未使用的 Ultralytics 依赖组移除。
+- `pydeprecate` 与 `defusedxml` 不再显式固定版本，但仍作为 trackers/supervision 必需的间接依赖安装：`pydeprecate==0.13.0`、`defusedxml==0.7.1`。不能为了匹配清单中的省略而卸载它们。
+
+已有安装只需激活，不重新安装包：
+
+```powershell
+conda activate Gazelle-next
+```
+
+新机器获得创建环境授权后执行：
 
 ```powershell
 conda env create -f environment.yml
-conda activate Gazelle
+conda activate Gazelle-next
 pip install -e .
 ```
 
-已有环境只运行 `conda activate Gazelle` 和 `pip install -e .`。
+创建会下载依赖并写入新的 `Gazelle-next` 环境，editable 安装也会修改环境；二者都不运行推理。从仓库根目录使用 `python main.py` 可直接运行源码。不要重新创建或 prune 已有环境。
+
+回退时，本机保留了旧环境就直接 `conda activate Gazelle`；仅在旧环境不存在且获准重建时运行 `conda env create -f environment_py311.yml`。上游训练脚本仍需另行安装 `wandb`，本次切换不代表训练已验证。
 
 ## 3. 快速开始和资源准备
 
@@ -483,7 +503,7 @@ models/
 
 Supply-chain boundary：首次 uncached DINOv2 construction 会对 unpinned `facebookresearch/dinov2` repository code 调用 `torch.hub.load`。它可能获取并执行 remote Python，而不只是 weight。请只使用 trusted network/environment；受控部署应使用 pre-reviewed cache。runtime 不声称 immutable repository pin，也不声称 Gazelle checkpoint weight-integrity verification。
 
-CPU construction 临时禁用 xFormers。只有 resolved device 是 CUDA 且没有 `XFORMERS_DISABLED` 时，CUDA construction 才请求 xFormers；是否可用仍取决于安装的 DINOv2/xFormers 环境。可选 Triton 缺失且用户未设 override 时，运行时临时设置 `XFORMERS_FORCE_DISABLE_TRITON=1`，但不禁用其他 xFormers operator。`--prepare-only` 为 strict load 强制关闭 xFormers，因此可能出现非致命 disabled/not-available 信息。long-lived process 不能在不兼容的已初始化 DINOv2 xFormers state 间切换；请启动新 process。
+当前 `Gazelle-next` 环境不安装 xFormers，DINOv2 使用 PyTorch 的 `scaled_dot_product_attention`。运行时保留对装有 xFormers 环境的兼容规则：CPU construction 和 `--prepare-only` 禁用它；CUDA 可在未设置 `XFORMERS_DISABLED` 时请求使用。可选 Triton 缺失且用户未设 override 时，`XFORMERS_FORCE_DISABLE_TRITON=1` 只跳过该探测，不禁用其他 xFormers operator，也不修改环境。strict load 时仍可能出现非致命的 xFormers-disabled/not-available 提示。DINOv2 缓存 backend 选择，因此 long-lived process 若要切换不兼容的 CPU/prepare-only 与启用 xFormers 的 CUDA mode，须启动新 process。
 
 ## 14. 常见错误和运行限制
 
@@ -551,7 +571,7 @@ python -m tools.validation.render_roi_reference --regions-path "$data\roi\roi_re
 以下检查 offline 且不构造模型。默认测试会 mock FFmpeg capability probe/transcode，不会运行真实 FFmpeg process：
 
 ```powershell
-conda activate Gazelle
+conda activate Gazelle-next
 python main.py --help
 python main.py --list-models
 $env:PYTHONPYCACHEPREFIX = Join-Path $env:TEMP "gazelle-usage-docs-pycache"

@@ -584,9 +584,26 @@ class UsageDocumentationTest(unittest.TestCase):
     def test_public_validation_commands_use_activated_python(self):
         for guide_path in (ENGLISH_GUIDE, CHINESE_GUIDE):
             section = self._section(guide_path, 15)
-            self.assertIn("conda activate Gazelle", section)
+            self.assertIn("conda activate Gazelle-next", section)
             self.assertIn("python -m unittest tests.test_usage_docs -v", section)
             self.assertNotRegex(section, re.compile(r"[A-Za-z]:\\Users\\"))
+
+    def test_current_environment_and_rollback_are_documented_consistently(self):
+        definition = self._read(REPOSITORY_ROOT / "environment.yml")
+        self.assertIn("name: Gazelle-next", definition)
+        self.assertIn("python=3.14", definition)
+        pins = re.findall(r"^\s+- ([\w-]+)==(\S+)$", definition, re.MULTILINE)
+        self.assertEqual(15, len(pins))
+        for path in (ENGLISH_README, CHINESE_README, ENGLISH_GUIDE, CHINESE_GUIDE):
+            document = self._read(path)
+            for token in ("conda activate Gazelle-next", "environment_py311.yml",
+                          "environment_1.0.yml", "conda activate Gazelle`",
+                          "scaled_dot_product_attention", "torchaudio", "xformers",
+                          "ultralytics", "pydeprecate", "defusedxml", "polars",
+                          "polars-runtime-32", "nvidia-ml-py"):
+                self.assertIn(token, document, str(path))
+            for package, version in pins:
+                self.assertIn(f"{package}=={version}", document, str(path))
 
 
 if __name__ == "__main__":

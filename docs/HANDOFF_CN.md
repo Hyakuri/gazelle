@@ -53,7 +53,7 @@ PowerShell，目标目录必须不存在；脚本从本地 bundle clone、恢复
 
 ## 3. 目标环境
 
-记录的基线是 Windows、Python 3.11、PyTorch CUDA 12.6 wheels。先读
+记录的基线是 Windows、Python 3.14、PyTorch CUDA 13.0 wheels。先读
 `environment.yml` 和快照中的源环境版本。不同 OS、架构或 GPU 需要另行批准环境
 方案；该文件不是跨平台 lock。不要复制旧 Conda 安装目录或照搬 `C:\Users\yun\...`。
 
@@ -64,22 +64,24 @@ conda env list
 Get-Command git, conda, ffmpeg -ErrorAction SilentlyContinue
 ```
 
-已有 `Gazelle` 就激活并检查，不重新创建或 prune。确实不存在时，先获得目标机器
+已有 `Gazelle-next` 就激活并检查，不重新创建或 prune。确实不存在时，先获得目标机器
 新建环境授权，再执行：
 
 ```powershell
 conda env create -f environment.yml
-conda activate Gazelle
+conda activate Gazelle-next
 ```
 
 创建会下载依赖并写入新环境，本轮交接未执行。已有环境升级仍走 AGENTS 规定的
-sandbox-first 流程；`environment_1.0.yml` 是回滚参考，不是降级当前环境的命令。
+sandbox-first 流程；`environment_py311.yml` 保留上一版 Python 3.11 的 `Gazelle`
+环境定义；回退时激活本机保留的旧环境，不存在时须获准后再用该文件重建。
+`environment_1.0.yml` 是更早的 NumPy 1.26 参考；二者都不是降级当前环境的命令。
 
 从仓库根目录运行 `python main.py` 可直接使用源码。确有 editable 安装需要时，
 单独授权 `python -m pip install --no-deps -e .`，该命令会修改环境。
 
 ```powershell
-conda activate Gazelle
+conda activate Gazelle-next
 python -B -c "import os,sys; print(os.environ.get('CONDA_DEFAULT_ENV')); print(sys.executable); print(sys.version)"
 python -m pip check
 ```
@@ -123,7 +125,7 @@ git status --short
 但默认不得下载模型、构建 DINOv2、执行真实 FFmpeg 或 CUDA。记录退出码、测试数、
 warnings 和 skips。
 
-Gate C：另行授权的真实 smoke test。先确认已激活 `Gazelle`、实际 CUDA/FFmpeg
+Gate C：另行授权的真实 smoke test。先确认已激活 `Gazelle-next`、实际 CUDA/FFmpeg
 能力。准备示例可能下载资源和构建 DINOv2，不进行媒体推理：
 
 ```powershell

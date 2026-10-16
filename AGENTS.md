@@ -205,26 +205,29 @@ Preserve these invariants unless the current task explicitly redesigns them:
 
 ## Environment And Dependencies
 
-- The preferred environment is the existing Conda environment `Gazelle`.
+- The preferred environment is the existing Conda environment `Gazelle-next`.
 - On the current Windows host, when activation is unavailable, use:
 
-  `C:\Users\yun\anaconda3\envs\Gazelle\python.exe`
+  `C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe`
 
 - That absolute path is source-host-specific. On another machine, discover and
-  verify the existing `Gazelle` interpreter; do not create directories to mimic
+  verify the existing `Gazelle-next` interpreter; do not create directories to mimic
   the old path. Creating a destination environment needs authorization and must
   not overwrite an existing environment. See `docs/HANDOFF.md` for acceptance.
 
 - Do not create, update, prune, install into, or otherwise modify the real
-  `Gazelle` environment without explicit user approval. This includes direct
+  `Gazelle-next` environment without explicit user approval. This includes direct
   `pip install`, `conda install`, `conda env create -f environment.yml`, and
   `conda env update -f environment.yml --prune` operations.
-- For a proposed dependency upgrade, first clone the existing `Gazelle`
+- For a proposed dependency upgrade, first clone the existing `Gazelle-next`
   environment into a disposable sandbox, test imports and repository behavior
   there, report exact versions and conflicts, and wait for approval before
   applying the validated transaction to the real environment.
+- The existing `Gazelle` environment is retained as a rollback, described by
+  `environment_py311.yml`, and also must not be modified without explicit approval.
 - `environment.yml` describes the current validated environment.
-  `environment_1.0.yml` is the retained rollback/reference definition. Do not
+  `environment_py311.yml` is the previous Python 3.11 rollback definition;
+  `environment_1.0.yml` is the older NumPy 1.26 reference definition. Do not
   downgrade the working environment to match historical upstream pins.
 - If an approved environment change is applied, update environment files and
   all four English/Chinese user documents from actually verified versions.
@@ -271,7 +274,7 @@ before running it; its name does not guarantee no network, writes, or cost.
   do not present self-review or a subagent's DONE as equivalent. Unresolved
   blocking defects prevent delivery of results that depend on them.
 
-Use the existing `Gazelle` interpreter for the full offline gate:
+Use the existing `Gazelle-next` interpreter for the full offline gate:
 
 ```powershell
 $env:PYTHONPYCACHEPREFIX = Join-Path $env:TEMP "gazelle-validation-pycache"
@@ -314,7 +317,7 @@ report and PR comment.
 
 ## Models, Network, And Real Smoke Tests
 
-- Run real image/video smoke tests only in the existing `Gazelle` environment.
+- Run real image/video smoke tests only in the existing `Gazelle-next` environment.
   Model downloads, installs, training, batch processing, paid/shared services,
   and other external activity need authorization covering those actions.
   Reuse valid prior authorization; stop only the unauthorized dependent action.

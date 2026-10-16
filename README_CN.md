@@ -34,40 +34,35 @@
 
 ## 安装方式
 
-`environment.yml` 是当前推荐使用的 Gazelle 环境定义，记录了这次已经验证的 NumPy 2.4.6 依赖栈，包括 Python 3.11、PyTorch 2.6.0 + CUDA 12.6 wheels、xFormers 0.0.29.post3、MediaPipe 0.10.35，以及生产 ByteTrack 依赖 `trackers==2.5.0.post0`、`supervision==0.29.1`，并保留了本次验证事务中的 `ultralytics==8.4.104`。
+`environment.yml` 描述当前 `Gazelle-next` 环境：Python 3.14（实际验证为 3.14.8）、PyTorch 2.14.1 与 CUDA 13.0 wheels、MediaPipe 1.1.1、OpenCV 5.0。显式固定版本为 `torch==2.14.1+cu130`, `torchvision==0.29.1+cu130`, `timm==1.0.30`, `numpy==2.5.4`, `scipy==1.18.1`, `pandas==2.3.3`, `matplotlib==3.11.2`, `scikit-learn==1.9.1`, `pillow==12.3.0`, `opencv-python==5.0.0.93`, `opencv-contrib-python==5.0.0.93`, `mediapipe==1.1.1`, `trackers==2.6.1`, `supervision==0.30.9`, `av==19.0.1`。pandas 保留在 2.3 系列，因为数据预处理脚本尚未用 pandas 3.0 验证。
 
-`environment_1.0.yml` 保留了之前的 NumPy 1.26.4 配置，可用于回滚或对照。两个 YAML 文件里的环境名都声明为 `Gazelle`，因此同一时间只应创建一个名为 `Gazelle` 的环境。
+`environment_py311.yml` 逐字节保留上一版 Python 3.11 定义，仍声明 `name: Gazelle`；本机现有环境原样保留作回退。`environment_1.0.yml` 是更早的 NumPy 1.26.4 参考定义，也声明为 `Gazelle`；需要并行创建时应另起环境名。
 
-当前正常工作流仍然是激活已经验证过的 `Gazelle` 环境：
+显式依赖清单的变化如下：
+
+- 不再列出 `torchaudio`：仓库代码不使用，评估的依赖栈中没有配套 torch 2.14 的音频包。
+- 不再列出 `xformers`：评估过的 Windows 包与当前 torch 版本不配套，或缺少 CUDA operator。DINOv2 使用 PyTorch 的 `scaled_dot_product_attention`。
+- 不再列出 `ultralytics`：仓库代码不导入，YOLO 推理和导出未经验证。
+- `polars`、`polars-runtime-32`、`nvidia-ml-py` 随未使用的 Ultralytics 依赖组移除。
+- `pydeprecate` 与 `defusedxml` 不再显式固定版本，但仍作为 trackers/supervision 必需的间接依赖安装：`pydeprecate==0.13.0`、`defusedxml==0.7.1`。不能为了匹配清单中的省略而卸载它们。
+
+已有安装只需激活，不重新安装包：
 
 ```powershell
-conda activate Gazelle
-pip install -e .
+conda activate Gazelle-next
 ```
 
-如果是在全新机器上配置当前推荐环境，请使用 `environment.yml`：
+新机器获得创建环境授权后执行：
 
 ```powershell
 conda env create -f environment.yml
-conda activate Gazelle
+conda activate Gazelle-next
 pip install -e .
 ```
 
-如果你需要把旧版 NumPy 1.26.4 环境作为并行对照保留下来，请在创建 `environment_1.0.yml` 时显式覆盖环境名：
+创建会下载依赖并写入新的 `Gazelle-next` 环境，editable 安装也会修改环境；二者都不运行推理。从仓库根目录使用 `python main.py` 可直接运行源码。不要重新创建或 prune 已有环境。
 
-```powershell
-conda env create -f environment_1.0.yml --name Gazelle-1.0
-```
-
-激活 `Gazelle` 后，建议先运行以下命令验证 CLI，并准备默认本地模型缓存：
-
-```powershell
-python main.py --help
-python main.py --list-models
-python main.py --prepare-only --model gazelle_dinov2_vitb14_inout --cache-dir models
-```
-
-`--help` 和 `--list-models` 不会下载模型，也不会运行推理。`--prepare-only` 首次运行时可能下载 Gazelle checkpoint、DINOv2 PyTorch Hub 仓库和 DINOv2 权重；再次运行相同命令时应复用 `models/checkpoints` 和 `models/torch_hub` 中已有的缓存。
+回退时，本机保留了旧环境就直接 `conda activate Gazelle`；仅在旧环境不存在且获准重建时运行 `conda env create -f environment_py311.yml`。上游训练脚本仍需另行安装 `wandb`，本次切换不代表训练已验证。
 
 ## 预训练模型
 
@@ -243,9 +238,9 @@ pose 选项会分别准备 `pose_landmarker_lite.task`、`pose_landmarker_full.t
 
 该集成刻意保持较小的模型边界：fusion/tracking 会生成有序 `HeadObservation` 和对齐的 `HeadPerception`。默认 `--gazelle-head-mode eligible` 只传入保守 eligible head。诊断 selector 可以改为一个或多个 state（`face_pose`、`face_only`、`pose_only`、`tracked_only`）或 view（`frontal`、`profile`、`back_or_occluded`、`unknown`）；`observed` 选择当前 observation，`all` 选择全部 active perception，多个 selector 采用 OR 语义。即使处于诊断模式，也不能恢复已经过期的 track，并且仍然要求通过 normalized non-`None` bbox 校验。face bbox、face mesh、face/pose keypoint、两条 head-pose reference ray、head pose 和 tracking state 永远不会加入 Gazelle tensor input。Gazelle 按选中的 person 顺序返回结果。
 
-当前 `environment.yml` 中声明的依赖集合已经用真实 MediaPipe 0.10.35、通过 `trackers==2.5.0.post0` 接入的生产 ByteTrack、Gazelle/DINOv2 CUDA 单图推理，以及一段短视频渲染流程完成验证。因此，本文档现在将这个 NumPy 2.4.6 环境视为当前分阶段 runtime 的推荐端到端配置。这里不宣称已经验证可选的 Ultralytics YOLO 模型推理或导出能力。
+2026-10-17 的环境评估已验证 `Gazelle-next` 的完整离线门、300 帧 static 与 MediaPipe/生产 ByteTrack CUDA 运行、解码帧比对，以及 mp4v/H.264 渲染。环境切换不代表精度提升，也不代表训练或 YOLO 已验证。当前环境的 smoke 使用本地缓存资源；MediaPipe 可能发送遥测，Torch Hub 可能探测 GitHub。
 
-runtime 会在延迟导入 ByteTrack 时精确过滤 upstream `trackers` 的 `target=None` 弃用 warning，其他 `FutureWarning` 仍会正常显示。常规 CUDA 图片/视频推理会先解析 checkpoint 而不构建 DINOv2，然后只构建一次启用 xFormers 的 predictor。如果可选 Triton 不存在，并且用户没有设置 xFormers Triton override，模型构建期间会临时使用官方 `XFORMERS_FORCE_DISABLE_TRITON=1` 开关；这只跳过无效的 Triton 探测，不会关闭其他 xFormers operator，也不会修改 Conda 环境。`--prepare-only` 为了 strict-load 校验仍会有意关闭 xFormers，因此该路径上仍可能看到 DINOv2 非致命的 xFormers-disabled/not-available 状态 warning。由于 DINOv2 会在首次 import 时缓存 backend 选择，长生命周期 Python 进程若随后请求不兼容的 CPU/prepare-only 与启用 xFormers 的 CUDA 构建，现在会明确失败，而不是静默复用错误 backend；切换 backend mode 时应启动新进程。
+runtime 在延迟导入 ByteTrack 时仅过滤 upstream `trackers` 的 `target=None` 弃用 warning，保留其他 warnings。checkpoint 解析不构建 DINOv2，推理只构建一次 predictor。当前 `Gazelle-next` 环境不安装 xFormers，DINOv2 使用 PyTorch 的 `scaled_dot_product_attention`。运行时保留对装有 xFormers 环境的兼容规则：CPU construction 和 `--prepare-only` 禁用它；CUDA 可在未设置 `XFORMERS_DISABLED` 时请求使用。可选 Triton 缺失且用户未设 override 时，`XFORMERS_FORCE_DISABLE_TRITON=1` 只跳过该探测，不禁用其他 xFormers operator，也不修改环境。strict load 时仍可能出现非致命的 xFormers-disabled/not-available 提示。DINOv2 缓存 backend 选择，因此 long-lived process 若要切换不兼容的 CPU/prepare-only 与启用 xFormers 的 CUDA mode，须启动新 process。
 
 ### 独立 Head Observation Schema
 
@@ -460,10 +455,10 @@ perception 和 tracking 会在每个解码并写出的帧上恰好运行一次�
 
 ### 真实 smoke test
 
-真实图片 / 视频 smoke test 应在现有本地 Conda 环境 `Gazelle` 中运行：
+真实图片 / 视频 smoke test 应在现有本地 Conda 环境 `Gazelle-next` 中运行：
 
 ```powershell
-conda activate Gazelle
+conda activate Gazelle-next
 ```
 
 单图 smoke test：
@@ -494,7 +489,7 @@ python main.py `
   --overwrite
 ```
 
-这些命令会在每次图片运行中构建一次真实 Gazelle predictor 和 DINOv2 backbone，或在视频首个可用帧上构建一次，随后加载 Gazelle checkpoint、执行推理并写出输出目录。checkpoint 解析本身不会构建 DINOv2。如果 `models/checkpoints` 或 `models/torch_hub` 为空，首次运行可能下载 Gazelle checkpoint、DINOv2 PyTorch Hub 仓库和 DINOv2 权重；再次运行相同命令时应复用缓存。CPU smoke test 可以使用 `--device cpu`；在 CPU 上构建 DINOv2 时，runtime 会临时关闭 xFormers，避免本地 CUDA-only xFormers wheel 强制使用不支持的 CPU attention kernel。CUDA 构建会保持 xFormers 启用，并只在 Triton 不可用时跳过可选 Triton 探测。重复的 programmatic 构建可以复用该进程已经选择的 backend，但在不兼容的 CPU/prepare-only 与启用 xFormers 的 CUDA mode 之间切换时必须启动新进程。
+这些命令会在每次图片运行中构建一次真实 Gazelle predictor 和 DINOv2 backbone，或在视频首个可用帧上构建一次，随后加载 Gazelle checkpoint、执行推理并写出输出目录。checkpoint 解析本身不会构建 DINOv2。如果 `models/checkpoints` 或 `models/torch_hub` 为空，首次运行可能下载 Gazelle checkpoint、DINOv2 PyTorch Hub 仓库和 DINOv2 权重；再次运行相同命令时应复用缓存。CPU smoke 使用 `--device cpu`。当前 `Gazelle-next` 环境不安装 xFormers，DINOv2 使用 PyTorch 的 `scaled_dot_product_attention`。运行时保留对装有 xFormers 环境的兼容规则：CPU construction 和 `--prepare-only` 禁用它；CUDA 可在未设置 `XFORMERS_DISABLED` 时请求使用。可选 Triton 缺失且用户未设 override 时，`XFORMERS_FORCE_DISABLE_TRITON=1` 只跳过该探测，不禁用其他 xFormers operator，也不修改环境。strict load 时仍可能出现非致命的 xFormers-disabled/not-available 提示。DINOv2 缓存 backend 选择，因此 long-lived process 若要切换不兼容的 CPU/prepare-only 与启用 xFormers 的 CUDA mode，须启动新 process。
 
 ### 编程式单帧 Predictor
 

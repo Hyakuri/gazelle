@@ -10,15 +10,35 @@ PowerShell examples run from the repository root. A command containing the liter
 
 ## 2. Environment installation and activation
 
-`environment.yml` is the validated environment definition:
+`environment.yml` describes the current `Gazelle-next` environment: Python 3.14 (validated with 3.14.8), PyTorch 2.14.1 with CUDA 13.0 wheels, MediaPipe 1.1.1, and OpenCV 5.0. The explicit package versions are `torch==2.14.1+cu130`, `torchvision==0.29.1+cu130`, `timm==1.0.30`, `numpy==2.5.4`, `scipy==1.18.1`, `pandas==2.3.3`, `matplotlib==3.11.2`, `scikit-learn==1.9.1`, `pillow==12.3.0`, `opencv-python==5.0.0.93`, `opencv-contrib-python==5.0.0.93`, `mediapipe==1.1.1`, `trackers==2.6.1`, `supervision==0.30.9`, `av==19.0.1`. pandas stays on 2.3 because the data-preparation scripts have not been validated with pandas 3.0.
+
+`environment_py311.yml` preserves the previous Python 3.11 definition byte for byte and still declares `name: Gazelle`. Keep that existing environment unchanged for rollback. `environment_1.0.yml` is the older NumPy 1.26.4 reference, also named `Gazelle`; use a separate name if creating it alongside another environment.
+
+The explicit dependency list has changed as follows:
+
+- `torchaudio` is omitted: repository code does not use it, and the evaluated stack has no matching torch 2.14 audio package.
+- `xformers` is omitted: the evaluated Windows builds were incompatible with this torch version or lacked CUDA operators. DINOv2 uses PyTorch `scaled_dot_product_attention`.
+- `ultralytics` is omitted: repository code does not import it, and YOLO inference/export were not validated.
+- `polars`, `polars-runtime-32`, and `nvidia-ml-py` are omitted with the unused Ultralytics dependency group.
+- `pydeprecate` and `defusedxml` are no longer explicitly pinned. They remain installed as required transitive dependencies of trackers/supervision: `pydeprecate==0.13.0` and `defusedxml==0.7.1`. They must not be uninstalled to match an omission in this file.
+
+For an existing installation, activate it without reinstalling packages:
+
+```powershell
+conda activate Gazelle-next
+```
+
+On a new machine, after authorizing environment creation, run:
 
 ```powershell
 conda env create -f environment.yml
-conda activate Gazelle
+conda activate Gazelle-next
 pip install -e .
 ```
 
-For an existing environment, run only `conda activate Gazelle` and `pip install -e .`.
+Creation downloads packages and writes a new `Gazelle-next` environment; editable installation also modifies it. Neither command runs inference. From the repository root, `python main.py` can use the checkout directly. Do not recreate or prune an existing environment.
+
+For rollback, use `conda activate Gazelle` if it is retained locally. Only if it is absent and recreation is authorized, run `conda env create -f environment_py311.yml`. Keep `wandb` as a separately installed requirement for the upstream training scripts; this change does not validate training.
 
 ## 3. Quick start and resource preparation
 
@@ -486,7 +506,7 @@ Missing entries may trigger network access for a registered Gazelle checkpoint, 
 
 Supply-chain boundary: the first uncached DINOv2 construction calls `torch.hub.load` on unpinned `facebookresearch/dinov2` repository code. It may fetch and execute remote Python, not just weights. Use a trusted network/environment and, for controlled deployments, a pre-reviewed cache. The runtime does not claim an immutable repository pin or Gazelle checkpoint weight-integrity verification.
 
-CPU construction temporarily disables xFormers. CUDA construction requests xFormers only when the resolved device is CUDA and `XFORMERS_DISABLED` is absent; availability still depends on the installed DINOv2/xFormers environment. When optional Triton is absent and the user has not set an override, the runtime temporarily sets `XFORMERS_FORCE_DISABLE_TRITON=1` without disabling other xFormers operators. `--prepare-only` forces xFormers off for strict loading, so nonfatal disabled/not-available messages may appear. A long-lived process cannot switch between incompatible already-initialized DINOv2 xFormers states; start a fresh process.
+The current `Gazelle-next` environment does not install xFormers; DINOv2 uses PyTorch `scaled_dot_product_attention`. The runtime retains its compatibility policy for environments that do install xFormers: CPU construction and `--prepare-only` disable it; CUDA may request it unless `XFORMERS_DISABLED` is set. When optional Triton is absent and no override is set, `XFORMERS_FORCE_DISABLE_TRITON=1` skips that probe without disabling other xFormers operators or modifying the environment. Nonfatal xFormers-disabled/not-available messages may still appear during strict loading. DINOv2 caches its backend selection, so switching incompatible CPU/prepare-only and xFormers-enabled CUDA modes in a long-lived process requires a fresh process.
 
 ## 14. Common errors and operational limitations
 
@@ -559,7 +579,7 @@ Exported classes retain target colors and use configured colors for fixed labels
 These checks are offline and do not construct a model. Default tests mock FFmpeg capability probes/transcodes and do not run a real FFmpeg process:
 
 ```powershell
-conda activate Gazelle
+conda activate Gazelle-next
 python main.py --help
 python main.py --list-models
 $env:PYTHONPYCACHEPREFIX = Join-Path $env:TEMP "gazelle-usage-docs-pycache"

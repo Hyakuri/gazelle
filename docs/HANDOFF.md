@@ -61,7 +61,7 @@ No push, new PR, or branch creation is implied by possessing this archive.
 
 ## 3. Destination Environment
 
-The recorded baseline is Windows with Python 3.11 and PyTorch CUDA 12.6 wheels.
+The recorded baseline is Windows with Python 3.14 and PyTorch CUDA 13.0 wheels.
 Read the current `environment.yml` and source metadata in the snapshot. Different
 OS/architecture/GPU combinations need a separately approved environment plan;
 the file is not a cross-platform lock. Do not copy the old Conda directory or
@@ -74,25 +74,27 @@ conda env list
 Get-Command git, conda, ffmpeg -ErrorAction SilentlyContinue
 ```
 
-If `Gazelle` exists, activate it and inspect it; do not recreate/prune it. If it
+If `Gazelle-next` exists, activate it and inspect it; do not recreate/prune it. If it
 does not exist, obtain authorization for a new destination environment before:
 
 ```powershell
 conda env create -f environment.yml
-conda activate Gazelle
+conda activate Gazelle-next
 ```
 
 Creation downloads dependencies and writes a new Conda environment. It was not
 performed by this handoff. Existing-environment upgrades still require the
-sandbox-first procedure in AGENTS. `environment_1.0.yml` is a rollback reference,
-not a command to downgrade the current environment.
+sandbox-first procedure in AGENTS. `environment_py311.yml` preserves the previous Python 3.11 environment named
+`Gazelle`; activate that retained environment for rollback, or obtain approval
+before recreating it from this file. `environment_1.0.yml` is the older NumPy 1.26
+reference. Neither is a command to downgrade the current environment.
 
 Run from the repository root. The source entry `python main.py` can use the
 checkout directly. If editable package installation is needed, explicitly
 authorize `python -m pip install --no-deps -e .`; it modifies the environment.
 
 ```powershell
-conda activate Gazelle
+conda activate Gazelle-next
 python -B -c "import os,sys; print(os.environ.get('CONDA_DEFAULT_ENV')); print(sys.executable); print(sys.version)"
 python -m pip check
 ```
@@ -148,7 +150,7 @@ test files but default tests must not download models, build DINOv2, invoke real
 FFmpeg, or execute CUDA. Record exit codes, exact test count, warnings and skips.
 
 Gate C is an authorized real smoke test, independent from Gate B. First verify
-the activated `Gazelle` environment and actual CUDA/FFmpeg capabilities. Example
+the activated `Gazelle-next` environment and actual CUDA/FFmpeg capabilities. Example
 preparation (may download and construct DINOv2, no media inference):
 
 ```powershell
