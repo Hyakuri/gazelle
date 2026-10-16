@@ -70,7 +70,7 @@ TASK-132 的清单与重封装结果；作业数据分析 §4 的方法与数值
 ### 验证命令
 
 ```powershell
-$py = "C:\Users\yun\anaconda3\envs\Gazelle\python.exe"
+$py = "C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe"
 $env:PYTHONPYCACHEPREFIX = Join-Path $env:TEMP "gazelle-task-133-pycache"
 & $py -m unittest discover -s tests -p "test_workdata_*.py" -v
 & $py -m compileall main.py gazelle tests tools

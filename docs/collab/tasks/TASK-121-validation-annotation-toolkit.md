@@ -15,7 +15,7 @@
 
 ### 必须实现
 
-代码放在新目录 `tools/validation/`（含 `__init__.py`），只使用标准库与 `Gazelle` 环境已有的包。
+代码放在新目录 `tools/validation/`（含 `__init__.py`），只使用标准库与 `Gazelle-next` 环境已有的包。
 
 1. **片段抽样** `sample_segments.py`：
    - 输入：TASK-134 的 `session.json` 与旁注文件；参数 `--seed`（默认 20261015）、`--per-session`（默认 4，重叠不足 45 分钟的录制取 2）、`--segment-seconds`（默认 60）、`--dataset-root`。
@@ -23,7 +23,7 @@
    - 写 `manifest.json`：数据集版本、种子、方法、重抽记录；每段的会话、起始时钟时刻、在代理网格中的帧号范围、所用三段代理视频的 SHA-256、时间映射版本。
    - 目标目录已存在时拒绝覆盖，除非显式 `--overwrite`。
 2. **抽帧** `extract_frames.py`：每段每个时间步生成一张拼接 JPEG，写入 `<dataset>/frames/<segment_id>/<step>.jpg`，在 manifest 中记录哈希。布局：左列上为前方（`cam_b`）、下为右侧（`cam_a`），各 640×360；右侧为全局（`cam_e`），1280×720；共 1920×720，质量 85；每个视角左上角标注其角色名。
-3. **类别配置**：数据根中存在 TASK-123 的正式区域文件 `roi_regions.json` 时，用 TASK-123 的类别生成函数得到 `<dataset>/classes.json`，并把 `roi_reference.png` 复制到数据集根目录；否则复制 `tools/validation/default_classes.json`（提交，内容为规范 §4.1 的默认类别、按键与颜色）。工具只从 `<dataset>/classes.json` 读取类别。manifest 记录所用区域文件的 SHA-256。
+3. **类别配置**：TASK-123 的正式区域文件带有有效的完成标记时（导出时写入，记录完成时间与区域文件的 SHA-256，且至少一个 `target`、恰好一个 `cell`；以 TASK-123 修复后的实现为准），用 TASK-123 的类别生成函数得到 `<dataset>/classes.json`，并把 `roi_reference.png` 复制到数据集根目录；否则复制 `tools/validation/default_classes.json`（提交，内容为规范 §4.1 的默认类别、按键与颜色）。工具只从 `<dataset>/classes.json` 读取类别。manifest 记录所用区域文件的 SHA-256。
 4. **标注服务** `annotate_server.py`：
    - 标准库 HTTP 服务，只绑定 `127.0.0.1`；HTML 与 JavaScript 内联，不引用任何外部资源。
    - 界面与操作按规范 §5：同步显示三视角；`<dataset>/roi_reference.png` 存在时显示参考图，否则显示文字定义；播放与暂停（1× 与 0.5×）、单步 0.2 秒与 1 秒、数字键从当前步起设定类别直到下一个变化点、删除变化点、撤销、彩色时间轴、跳到下一个未标注步、标记他人入镜的起止。
@@ -33,7 +33,7 @@
 5. **标注读写与校验** `labels.py`：实现规范 §4.3 的 schema；`validate` 子命令检查标注与 manifest 一致、区间覆盖每一步且不重叠；提供把区间展开为逐步数组的函数。
 6. **标注指南** `tools/validation/ANNOTATION_GUIDE_CN.md`：中文说明类别定义与判定规则（规范 §4）、操作步骤、快捷键、预计用时、隐私注意事项。
 7. **测试**（默认隔离：不联网、不下载、不用 CUDA、不读真实视频、不调用真实 FFmpeg）：抽样可复现；每层一段；缺口重抽；manifest schema；标注 schema 的合法与非法样例；区间展开；原子写入、备份与续标；不开端口调用请求处理函数，覆盖读取片段、保存修改、拒绝非法输入。
-8. **在真实数据上生成数据集**（仅 CPU）：用 TASK-134 的代理视频生成 26 段加 1 段试标片段。正式区域文件已就绪时写入 `C:\Users\yun\Documents\Claude_Code\gazelle_validation\roi_r2\`；尚未就绪时用默认类别写入 `...\gazelle_validation\roi_r2_trial\`，并在实施报告中说明正式数据集待区域文件就绪后重新生成。运行校验；启动服务并确认能加载第一段（用 `--labels-path` 指向临时文件），确认后关闭服务进程。
+8. **在真实数据上生成数据集**（仅 CPU）：用 TASK-134 的代理视频生成 26 段加 1 段试标片段。正式区域文件带有有效的完成标记、且其 SHA-256 与当前文件一致时，写入 `C:\Users\yun\Documents\Claude_Code\gazelle_validation\roi_r2\`；否则用默认类别写入 `...\gazelle_validation\roi_r2_trial\`，并在实施报告中说明正式数据集待区域文件就绪后重新生成。运行校验；启动服务并确认能加载第一段（用 `--labels-path` 指向临时文件），确认后关闭服务进程。
 
 ### 非目标
 
@@ -71,7 +71,7 @@
 ### 验证命令
 
 ```powershell
-$py = "C:\Users\yun\anaconda3\envs\Gazelle\python.exe"
+$py = "C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe"
 $env:PYTHONPYCACHEPREFIX = Join-Path $env:TEMP "gazelle-task-121-pycache"
 & $py -m unittest discover -s tests -p "test_validation_*.py" -v
 & $py -m compileall main.py gazelle tests tools
@@ -88,7 +88,7 @@ git status --short
 - 需真实运行：生成数据集，仅 CPU。
 - 文档同步：需要。在四份用户文档的「研究数据工具」小节（TASK-132 建立）中加入本任务的工具：写明用途、在仓库根目录运行的入口命令、读取什么、写到哪里、是否调用 FFmpeg、是否使用 GPU 或网络，并链接 `tools/validation/ANNOTATION_GUIDE_CN.md`。`README.md` 与 `README_CN.md` 只放简介与指向 USAGE 的链接；`docs/USAGE.md` 与 `docs/USAGE_CN.md` 放工具表。中英文语义一致；`tests/test_usage_docs.py` 在两份 USAGE 中锁定本任务的入口模块名。原因：这些工具由用户或 Codex 直接运行，属于用户可见的用法，适用 AGENTS.md 的文档同步规则（2026-10-15 按 Codex 接手核对修正）。
 - 风险与回退：工具问题只影响标注效率与数据集，不影响运行时；回退方式是 `git revert`，数据集目录可删除重建。
-- 依赖：TASK-134；TASK-123 的工具与用户画好的正式区域文件。区域文件尚未画好时，先用默认类别完成开发与测试，正式数据集等区域文件就绪后再生成。
+- 依赖：TASK-134；TASK-123 修复后的工具，以及用户画好并导出、带完成标记的正式区域文件（只有文件存在不算就绪，2026-10-16 按审查修订）。区域文件尚未画好时，先用默认类别完成开发与测试，正式数据集等区域文件就绪后再生成。
 
 ## 2. 实施报告（Codex 追加，不要修改上文）
 

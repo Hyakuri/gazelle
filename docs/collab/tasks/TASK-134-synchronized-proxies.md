@@ -24,7 +24,8 @@
 5. **可恢复**：按会话与摄像机断点续跑；已有且校验通过的输出跳过；`--force` 才重做。长时间运行时进程优先级低于正常。
 6. **测试**（默认隔离）：网格计算；跨分段的最近帧选择与缺口标记；旁注 schema；FFmpeg 命令参数；原子发布；不读真实视频，不调用真实 FFmpeg。
 7. **真实运行**（仅 CPU，预计数小时）：全部 7 次录制。输出到 `C:\Users\yun\Documents\Claude_Code\gazelle_data\workdata\proxies\<会话>\`。实施报告记录每次录制的 `N`、各摄像机缺口数、用时、输出大小。
-8. **抽查**：每次录制随机抽 3 个 `k`（种子固定），用 TASK-133 的识别工具读三段代理视频该帧的画面时钟，三者与 `t_k` 的差都不超过 1 秒。
+8. **全长解码核对**：每个源文件在生成代理时都被完整解码，记录实际解码帧数，与容器帧数（`CAP_PROP_FRAME_COUNT`）比较，差异超过 0.5% 的文件列出并按协作方案 §3.5 的 B 级交 Claude 判断。这为以后整段批处理提前验证 TASK-131 截断判定的容差（2026-10-16 按审查加入）。
+9. **抽查**：每次录制随机抽 3 个 `k`（种子固定），用 TASK-133 的识别工具读三段代理视频该帧的画面时钟，三者与 `t_k` 的差都不超过 1 秒。
 
 ### 非目标
 
@@ -56,7 +57,7 @@ TASK-132 的清单与重封装结果；TASK-133 的时间映射与重叠时段�
 ### 验证命令
 
 ```powershell
-$py = "C:\Users\yun\anaconda3\envs\Gazelle\python.exe"
+$py = "C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe"
 $env:PYTHONPYCACHEPREFIX = Join-Path $env:TEMP "gazelle-task-134-pycache"
 & $py -m unittest discover -s tests -p "test_workdata_*.py" -v
 & $py -m compileall main.py gazelle tests tools

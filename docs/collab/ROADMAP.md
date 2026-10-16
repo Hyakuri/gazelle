@@ -29,15 +29,18 @@
 
 | 轮次 | 任务 | 状态 | 问题 | 规模 | 真实运行 |
 | --- | --- | --- | --- | --- | --- |
-| 1 | [TASK-131](tasks/TASK-131-video-reader-timestamps-and-truncation.md) 读取器：容器时间戳、严格递增、截断即失败 | ready | GZ-07、GZ-21 | M | CPU 读取检查；一次 GPU smoke |
-| 1 | [TASK-132](tasks/TASK-132-workdata-inventory-and-avi-remux.md) 作业数据清单与 AVI 无损重封装 | ready | 数据 P0、GZ-22 | M | FFmpeg 流复制 |
-| 1 | [TASK-123](tasks/TASK-123-overview-region-marking-tool.md) 全局摄像机画面中的区域标记工具 | ready（依赖 132） | Q8 | M | CPU，抽取候选帧 |
-| 1 | [TASK-001](tasks/TASK-001-overwrite-safe-validation.md) 参数在 `--overwrite` 删除前校验 | ready | GZ-04 | S–M | 否 |
-| 你 | 第 1 轮审查后，用 TASK-123 的工具画出区域，约 10 分钟 | 待前置 | — | — | — |
+| 1 | [TASK-131](tasks/TASK-131-video-reader-timestamps-and-truncation.md) 读取器：容器时间戳、严格递增、截断即失败 | accepted | GZ-07、GZ-21 | M | CPU 读取检查；一次 GPU smoke |
+| 1 | [TASK-132](tasks/TASK-132-workdata-inventory-and-avi-remux.md) 作业数据清单与 AVI 无损重封装 | accepted | 数据 P0、GZ-22 | M | FFmpeg 流复制 |
+| 1 | [TASK-123](tasks/TASK-123-overview-region-marking-tool.md) 全局摄像机画面中的区域标记工具 | changes-requested（第 2 轮在 TASK-137 之后修复） | Q8 | M | CPU，抽取候选帧 |
+| 1 | [TASK-001](tasks/TASK-001-overwrite-safe-validation.md) 参数在 `--overwrite` 删除前校验 | accepted | GZ-04 | S–M | 否 |
+| 2 | [TASK-137](tasks/TASK-137-switch-to-gazelle-next.md) 项目环境切换到 `Gazelle-next`（仓库侧：环境文件、AGENTS.md、四份文档） | ready（本轮第一项） | D16 | S–M | 是，GPU smoke 三次 |
+| 你 | TASK-123 修复后，用区域标记工具画出区域，约 10 分钟 | 待前置 | — | — | — |
+| 2 | [TASK-135](tasks/TASK-135-round1-followups.md) 第 1 轮审查的后续加固 | ready | GZ-07、GZ-21 | S–M | CPU，重新校验重封装 |
 | 2 | [TASK-133](tasks/TASK-133-osd-clock-time-maps.md) 画面时钟识别、时间映射与同步检验 | ready（依赖 132） | 同步、GZ-22 | L | CPU |
 | 2 | [TASK-134](tasks/TASK-134-synchronized-proxies.md) 5 Hz 同步代理视频 | ready（依赖 133） | 同步 | M | CPU，数小时 |
 | 2 | [TASK-121](tasks/TASK-121-validation-annotation-toolkit.md) 多视角同步片段的区域标注工具（D12 r2） | ready（依赖 134 与区域文件） | F2 | L | CPU |
 | 你 | 第 2 轮审查后标注 26 段，约 2 小时 | 待前置 | — | — | — |
+| 3 | [TASK-136](tasks/TASK-136-gazelle-device-preprocessing.md) Gazelle 输入预处理移到推理设备 | ready（D17 已同意，本轮第一项） | GZ-25 | S–M | 是，CUDA smoke |
 | 3 | [TASK-102](tasks/TASK-102-spawn-frame-confirmation.md) 新轨迹首帧立即确认（D2） | ready | GZ-03 | M | 是 |
 | 3 | [TASK-002](tasks/TASK-002-face-ray-sign-alignment.md) 面部射线与 roll 符号对齐 | ready | GZ-02 | M | 是 |
 | 3 | [TASK-101](tasks/TASK-101-face-pose-association.md) 人脸与姿态关联修正（D1） | blocked（等 TASK-102） | GZ-01 | L | 是 |
@@ -94,5 +97,7 @@
 | D13 | 分析时间轴 | **已批准**：画面时钟上的 5 Hz，1080p 同步代理 |
 | D14 | 区域类别与标注方式 | **已批准**：连续 60 秒片段，按变化点标注；类别由你在全局摄像机画面上画出的区域生成 |
 | D15 | 融合方法 | **已批准**：逐时间步特征、可解释分类器、HMM 时序平滑，按录制日期留一评估；几何标定留作后续 |
+| D16 | 切换到新环境 `Gazelle-next`（Python 3.14、PyTorch 2.14、MediaPipe 1.1.1 等） | **你已决定（2026-10-17）**：尽早切换；现有 `Gazelle` 原样保留作回退，项目改用 `Gazelle-next`。仓库侧由 TASK-137 完成。依据：[环境评估](evidence/2026-10-17-env-next-evaluation.md) |
+| D17 | Gazelle 输入预处理移到推理设备（TASK-136） | **你已同意（2026-10-17）**：第 3 轮开头实施。管线实测 4K 每次调用由约 99 ms 降到 36 至 41 ms，输出等价 |
 | P-merge | PR #2 至 #5 堆叠链 | 你已决定：项目达到目标功能后集中梳理合并 |
 | P-pr | 阶段分支 draft PR | 你已批准 |

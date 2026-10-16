@@ -156,3 +156,20 @@
 | GZ-22（新） | P1 | 数据 | 摄像机身份不能由文件名确定：2026-09-03 文件夹中两台人脸摄像机的编号互换 | TASK-132、TASK-133 |
 
 驳回结论的更正：第 3 节中“`mediapipe_backend.py:328` 遇非递增时间戳硬中止整段视频”一条，当时以“支持的输入下不触发”为由驳回。作业数据证明该前提不成立，此条改为确认，并入 GZ-07。
+
+## 5. 2026-10-16 追加：第 1 轮真实运行中的发现
+
+依据：Codex 第 1 轮实施报告（TASK-131）与 Claude 的独立复跑。两项都不是第 1 轮任务引入的缺陷。
+
+| 编号 | 级别 | 位置 | 问题 | 处理 |
+| --- | --- | --- | --- | --- |
+| GZ-23（新） | P1，隐私与网络 | 依赖 `mediapipe 0.10.35` | MediaPipe 原生库会向 Google 的 clearcut 服务（play.googleapis.com）发送使用遥测。Codex 沙盒中连接失败并打印 `Failed to send to clearcut`；在不隔离网络的环境中可能真实发出。上游 issue google-ai-edge/mediapipe#6291：维护者表示不发送输入数据，也不提供官方关闭方法；可行办法是阻断该主机、固定到旧版本（例如 0.10.21）或从源码构建 | 用户 2026-10-16 决定：开发阶段接受遥测，研究完成后再做安全处理 |
+| GZ-24（新） | P2，离线稳健性 | `torch.hub.load` 加载 DINOv2 | 即使本地已有缓存，加载时仍会联网探测仓库默认分支。断网时回退到缓存并成功；在网络受限或代理异常时可能报错或拖慢启动 | 与 D8（固定 DINOv2 版本）一并处理，候选第 4 阶段 TASK-007 |
+
+## 6. 2026-10-17 追加：环境评估中的发现
+
+依据：[候选环境评估](../evidence/2026-10-17-env-next-evaluation.md) §5。属于性能问题，不影响正确性。
+
+| 编号 | 级别 | 位置 | 问题 | 处理 |
+| --- | --- | --- | --- | --- |
+| GZ-25（新） | P2，性能 | `gazelle/runtime/predictor.py:214`（`predict_frame`）、`gazelle/backbone.py:47`（`get_transform`） | Gazelle 的输入预处理在 CPU 上对整帧做 ToTensor 与 Normalize，再缩放到 448×448。4K 管线实测每次调用约 81 ms（原环境）至 99 ms（`Gazelle-next`），其中预处理约 47 至 67 ms（探针测量）；耗时还受混合架构 CPU 调度影响。在完整管线中把预处理移到 GPU 后，实测降到 36 至 41 ms，输出等价。另外，读取器（`gazelle/runtime/media.py:179`）、MediaPipe 后端（`gazelle/runtime/perception/mediapipe_backend.py:359`）与预测器（`gazelle/runtime/predictor.py:80`）之间还有多次整帧复制 | 预处理移到推理设备：TASK-136（用户 2026-10-17 同意 D17，第 3 轮开头）。整帧复制问题需要改动读取器的帧类型，以后另议 |

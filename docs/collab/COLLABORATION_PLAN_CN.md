@@ -150,7 +150,7 @@ Codex 会话的工作区必须是 `C:\Users\yun\Documents\Claude_Code\hyakuri-ga
 | 工作区 | `git rev-parse --show-toplevel` 指向上面的目录 | 本目录可写 |
 | 数据目录 | 在 `gazelle_data`、`gazelle_runs`、`gazelle_validation` 与 `%TEMP%` 中各新建并删除一个空文件 | 这四处可写 |
 | 作业数据 | 列出 `E:\Gazelle_Workdata\秋田大学様解析用動画\` 下的 7 个文件夹 | 只读 |
-| 解释器 | `C:\Users\yun\anaconda3\envs\Gazelle\python.exe --version` | 可执行 |
+| 解释器 | `C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe --version` | 可执行 |
 | FFmpeg | `ffmpeg -version` 与 `ffprobe -version` | 可执行 |
 | GitHub | `git ls-remote origin` 与 `gh auth status` | 网络 |
 | GPU | `nvidia-smi --query-gpu=memory.used,memory.total --format=csv` | 只读，仅记录 |

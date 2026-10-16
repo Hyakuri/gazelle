@@ -68,7 +68,7 @@ AGENTS.md 全部不变量；射线仍是未标定的 2D 参考，不是视线测
 ### 验证命令
 
 ```powershell
-$py = "C:\Users\yun\anaconda3\envs\Gazelle\python.exe"
+$py = "C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe"
 $env:PYTHONPYCACHEPREFIX = Join-Path $env:TEMP "gazelle-task-002-pycache"
 & $py -m unittest tests.test_reference_rays tests.test_mediapipe_backend tests.test_head_fusion tests.test_usage_docs -v
 & $py -m compileall main.py gazelle tests

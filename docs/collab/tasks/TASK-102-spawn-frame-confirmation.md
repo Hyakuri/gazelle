@@ -71,7 +71,7 @@
 ### 验证命令
 
 ```powershell
-$py = "C:\Users\yun\anaconda3\envs\Gazelle\python.exe"
+$py = "C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe"
 $env:PYTHONPYCACHEPREFIX = Join-Path $env:TEMP "gazelle-task-102-pycache"
 & $py -m unittest tests.test_head_tracking tests.test_mediapipe_head_provider tests.test_outputs tests.test_video_pipeline tests.test_usage_docs -v
 & $py -m compileall main.py gazelle tests

@@ -1,6 +1,6 @@
 # TASK-001：static/json 参数在 `--overwrite` 删除前校验
 
-状态：ready
+状态：accepted（2026-10-16）
 创建：2026-10-14（Asia/Tokyo）　协调者：Claude　实现者：Codex　验收：用户（独立 checkout）
 问题来源：GZ-04（登记表 C004、C008），见 [分析报告 §5](../analysis/2026-10-14-codebase-analysis.md)。
 
@@ -158,11 +158,11 @@ git status --short
 
 ## 3. 审查结论（Claude 追加）
 
-- 审查目标：
-- 独立复跑结果：
-- 发现：
-- 结论：
-- 集成记录：
+- 审查目标：实现提交 `8c0a81b`，审查时 HEAD 为 `c5473bf`。
+- 独立复跑结果：Claude 实际运行完整离线门，562 项通过，无 skip。独立代码审查确认：契约的 7 组无效参数与另外 4 组均以退出码 2 拒绝，信息含选项名；应接受的组合仍被接受；`bboxes` 与 `person_ids` 保持原对象与原值；图像与视频两种输入在 `--overwrite` 下，旧的 `predictions.json` 都得以保留；`--list-models` 新进程不导入 torch、numpy、cv2、PIL、mediapipe 或模型模块；新增测试在旧代码上失败。
+- 发现：无阻塞或应修复项。两条备注：程序化调用传入 `bboxes=None` 时的错误信息较原始；保护范围只在参数层，JSON 内容、模型与设备错误仍可能在删除之后才出现，文档已如实说明。
+- 结论：accepted。
+- 集成记录：本任务的提交位于 TASK-123 两个提交之后，所以 `last_accepted` 暂时只能推进到 `e7244d0`；TASK-123 修复通过后一并计入。
 
 ## 4. 验收记录（用户反馈后由 Claude 填写）
 

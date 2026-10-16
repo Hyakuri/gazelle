@@ -9,15 +9,27 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 | stage | 阶段 2：作业数据可用、多机同步、正确性修复，建立区域标注 |
 | branch | `feature/stage2-correctness`（基于 PR #5 head `bbec056`） |
 | pr | [#6](https://github.com/Hyakuri/gazelle/pull/6)（draft）；正文来源 `docs/collab/STAGE2_PR_BODY.md` |
-| writer | none |
-| next_actor | claude |
-| current_task | `docs/collab/tasks/TASK-001-overwrite-safe-validation.md` |
-| after_current | 完成本轮后把 `next_actor` 改为 `claude`，释放 `writer` |
+| writer | codex |
+| next_actor | codex |
+| current_task | `docs/collab/tasks/TASK-137-switch-to-gazelle-next.md`（项目环境切换到 `Gazelle-next`，仓库侧） |
+| after_current | `docs/collab/tasks/TASK-123-overview-region-marking-tool.md`（修复第 1 轮审查的必须修复 1 至 5），然后 `docs/collab/tasks/TASK-135-round1-followups.md`，然后 `docs/collab/tasks/TASK-133-osd-clock-time-maps.md`，然后 `docs/collab/tasks/TASK-134-synchronized-proxies.md`，然后 `docs/collab/tasks/TASK-121-validation-annotation-toolkit.md`，然后结束本轮并把 `next_actor` 改为 `claude` |
+| environment | `Gazelle-next`：`C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe`（用户 2026-10-17 决定 D16）。现有 `Gazelle` 作为回退保留，不改动 |
 | last_pushed | `0f0c0dc1cf7b464f16dad1bcb6ebdfd3053b28fe`（本轮完整报告；其后仅提交 STATE 释放写入权记录，实时 HEAD 以 Git 为准） |
-| last_accepted | `bbec056`（迁移验收基线，Gate A/B/C 通过） |
-| 更新 | 2026-10-16，Codex：第 1 轮实现、检查、推送与 PR 报告完成，交回 Claude 独立审查 |
+| last_accepted | `e7244d0`（2026-10-16 第 1 轮审查：TASK-131、TASK-132 通过。TASK-001 也已通过，但其提交位于 TASK-123 之后，待 TASK-123 修复通过后一并计入） |
+| 更新 | 2026-10-17，Claude：环境评估完成；用户决定 D16（尽早切换，项目改用 `Gazelle-next`）与 D17（同意 TASK-136）。第 2 轮交 Codex，第一项为 TASK-137 |
 
-## 本轮交接记录（Codex，2026-10-16）
+## 第 1 轮审查结论（Claude，2026-10-16）
+
+| 任务 | 结论 | 要点 |
+| --- | --- | --- |
+| TASK-131 | accepted | 独立复跑全部通过；契约 r3 的回退公式有累积漂移，已修订为 r4，由 TASK-135 实施 |
+| TASK-132 | accepted | 清单与 11 个重封装文件经核对有效；尾部解码检查偏弱，由 TASK-135 加强 |
+| TASK-123 | changes-requested | 浏览器实测发现 5 项必须修复：叠放顺序使内部区域无法编辑、参考图丢失目标区域、双击闭合产生重复顶点、区域文件在完成前就已存在、类别键与颜色缺少约束 |
+| TASK-001 | accepted | 无阻塞问题 |
+
+Claude 实际运行的检查：完整离线门 562 项；29 个 MP4 分段 17,400 帧的时间戳检查；原始 AVI 截断检查；不加载 MediaPipe 的 300 帧 GPU smoke；清单与重封装报告逐项核对；区域工具在内置浏览器中的完整试用。另有两份独立代码审查。详见各任务文件 §3。
+
+## 第 1 轮交接记录（Codex，2026-10-16）
 
 - TASK-131 → TASK-132 → TASK-123 → TASK-001 均已实现、提交并推送，状态为 `ready-for-review`，不是独立验收通过。完整执行记录在各任务的「实施报告」。最终离线门 **562 项通过，无新增 skip**。
 - 真实检查：29 个 MP4 各 600 帧，时间戳违规 0；原始 AVI 正确以截断失败退出；300 帧 GPU smoke 成功；40 文件清单、11/11 AVI 重封装校验通过；84 张候选帧通过哈希与尺寸验证，本机页面加载通过。
@@ -29,17 +41,21 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 
 | 轮次 | 任务 | 状态 | 说明 |
 | --- | --- | --- | --- |
-| Codex 第 1 轮 | TASK-131 读取器：容器时间戳、严格递增、截断即失败 | ready-for-review | 537 项离线测试；29 段各 600 帧无违规；AVI 失败与 300 帧 GPU smoke 均已实测 |
-| Codex 第 1 轮 | TASK-132 作业数据清单与 AVI 无损重封装 | ready-for-review | 40 文件清单；11/11 重封装校验通过；生产读取器 600 帧检查通过 |
-| Codex 第 1 轮 | TASK-123 全局摄像机画面中的区域标记工具 | ready-for-review | 84 候选帧和本机页面通过；正式区域不存在；Claude 四区域试用待验收 |
-| Codex 第 1 轮 | TASK-001 参数在 `--overwrite` 删除前校验 | ready-for-review | 562 项最终离线门通过；static/json 两条旧结果保护回归通过 |
-| Claude | 审查第 1 轮，试用区域标记工具 | 未开始 | |
-| 用户 | 用 TASK-123 的工具画出区域，约 10 分钟 | 待前置 | 可与第 2 轮并行 |
+| Codex 第 1 轮 | TASK-131 读取器：容器时间戳、严格递增、截断即失败 | accepted | 537 项离线测试；29 段各 600 帧无违规；AVI 失败与 300 帧 GPU smoke 均已实测 |
+| Codex 第 1 轮 | TASK-132 作业数据清单与 AVI 无损重封装 | accepted | 40 文件清单；11/11 重封装校验通过；生产读取器 600 帧检查通过 |
+| Codex 第 1 轮 | TASK-123 全局摄像机画面中的区域标记工具 | changes-requested | 84 候选帧和本机页面通过；正式区域不存在；Claude 四区域试用待验收 |
+| Codex 第 1 轮 | TASK-001 参数在 `--overwrite` 删除前校验 | accepted | 562 项最终离线门通过；static/json 两条旧结果保护回归通过 |
+| Claude | 审查第 1 轮，试用区域标记工具 | 完成 | 见「第 1 轮审查结论」 |
+| 用户 | 用 TASK-123 的工具画出区域，约 10 分钟 | 待前置 | Codex 在 PR #6 报告 TASK-123 修复后即可进行 |
+| Codex 第 2 轮 | TASK-137 项目环境切换到 `Gazelle-next`（仓库侧） | ready | 本轮第一项：环境文件、AGENTS.md、四份文档；不改任何 Conda 环境 |
+| Codex 第 2 轮 | TASK-123 修复必须修复 1 至 5 | ready | TASK-137 之后 |
+| Codex 第 2 轮 | TASK-135 第 1 轮审查的后续加固 | ready | 时间戳 r4、尾部检查、文档与测试 |
 | Codex 第 2 轮 | TASK-133 画面时钟识别、时间映射与同步检验 | ready | 依赖 TASK-132 |
 | Codex 第 2 轮 | TASK-134 5 Hz 同步代理视频 | ready | 依赖 TASK-133 |
 | Codex 第 2 轮 | TASK-121 多视角同步片段的区域标注工具（D12 r2） | ready | 依赖 TASK-134 与用户的区域文件 |
 | Claude | 审查第 2 轮，完整试标 pilot 片段 | 未开始 | |
 | 用户 | 标注 26 段，约 2 小时 | 待前置 | 可与第 3 轮并行 |
+| Codex 第 3 轮 | TASK-136 Gazelle 输入预处理移到推理设备 | ready | GZ-25；用户 2026-10-17 同意 D17；本轮第一项 |
 | Codex 第 3 轮 | TASK-102 新轨迹首帧立即确认（D2） | ready | GZ-03 |
 | Codex 第 3 轮 | TASK-002 面部射线与 roll 符号对齐 | ready | GZ-02 |
 | Codex 第 3 轮 | TASK-101 人脸与姿态关联修正（D1） | blocked | 等 TASK-102 审查通过；GZ-01 |
@@ -50,38 +66,55 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 
 ## 给 Codex 的说明
 
-本轮已执行完毕，当前应由 Claude 审查。以下保留本轮启动时的授权与流程记录；不要重复执行已交审任务或自行开始下一轮。
-
-- **本轮开始**：按协作方案 §3.1 第 3 步，先提交 Claude 留下的文档改动（`Record coordinator updates`）并推送；`docs/collab/STAGE2_PR_BODY.md` 没有变化时不需要同步 PR 正文。
-- **TASK-131 已澄清，可以直接实施**：契约 r3 把逐帧算法第 4 步改为 `p + max(1.0, 1000 / fps)`，不限制帧率范围，并新增 5 条边界用例；见任务文件「审查结论」。
-- **问题处理按协作方案 §3.5 分级自主**（用户 2026-10-16 决定）：能自己解决的先解决，在实施报告中记录；设计层面的问题交 Claude，同时继续不受影响的工作与后续任务；只有需要新授权、用户偏好或用户亲自操作时才问用户。硬边界不变。
-- **GitHub 命令**：用户 2026-10-16 给予常设批准（协作方案 §7）。本分支与 PR #6 的发布类命令可以直接在用户上下文 `yun` 中运行，不必每轮重新请求；范围以外的操作仍需逐项授权。
-- 按 `current_task` 执行，完成后按 `after_current` 继续。
+- **本轮开始**：按协作方案 §3.1 第 3 步，先提交 Claude 留下的文档改动（`Record coordinator updates`）并推送。`docs/collab/STAGE2_PR_BODY.md` 已更新，用 `gh pr edit 6 --body-file docs/collab/STAGE2_PR_BODY.md` 同步 PR 正文。
+- **本轮顺序**：TASK-137 → TASK-123 修复 → TASK-135 → TASK-133 → TASK-134 → TASK-121，然后结束本轮。
+- **TASK-123 修复**：按任务文件 §3「必须修复」1 至 5 实施，建议修复项尽量一并处理。修复推送后，在 PR #6 的评论里单独写一句“区域工具已修复，用户可以开始画区域”，让用户知道何时可以开始。
+- **MediaPipe**：用户 2026-10-16 决定开发阶段接受遥测（GZ-23），可以照常运行 MediaPipe。
+- **环境（2026-10-17 起）**：所有 Python 命令改用 `C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe`，包括离线门、测试与真实运行。
+  - 现有 `Gazelle` 环境作为回退保留，不要使用，也不要修改。
+  - 不在任何环境中安装或卸载包。
+  - 任务契约里尚未开始的部分已改为新路径。已验收任务的报告中出现的旧路径是历史记录，不要照着运行。
+  - 评估记录见 `evidence/2026-10-17-env-next-evaluation.md`。
+  - 预检的解释器一项也按新路径检查（协作方案 §5）。
+- **TASK-137 先做**：仓库侧的切换，包括 `environment.yml`、`environment_py311.yml`、AGENTS.md 中的环境句子、四份用户文档与 `tests/test_usage_docs.py`。在它提交之前，AGENTS.md 中仍写着 `Gazelle`；本说明优先，以用户 2026-10-17 的决定为准。
+- **新文件**：本次提交的 Claude 文档改动中包含 `evidence/2026-10-17-env-next-evaluation.md`、`tasks/TASK-136-gazelle-device-preprocessing.md` 与 `tasks/TASK-137-switch-to-gazelle-next.md`。TASK-136 已为 ready，排在第 3 轮开头，本轮不要实施。
+- **问题处理按协作方案 §3.5 分级自主**：能自己解决的先解决并记录；设计层面的问题交 Claude，同时继续不受影响的工作；只有需要新授权、用户偏好或用户亲自操作时才问用户。硬边界不变。
+- **GitHub 命令**：用户 2026-10-16 给予常设批准（协作方案 §7），本分支与 PR #6 的发布类命令可以直接在用户上下文 `yun` 中运行。
 - 每个任务推送后，在 PR #6 发一条英中双语评论（协作方案 §4），包含 §3.5 规定的四个小节。
 - 数据规则（协作方案 §5）：`E:\Gazelle_Workdata\` 只读；派生数据写到 `C:\Users\yun\Documents\Claude_Code\gazelle_data\workdata\`；长时间 CPU 任务以低优先级运行；GPU 推理前检查空闲显存。
-- 在 TASK-131 合入前，不要用 CLI 处理作业数据的原始 AVI 或 MP4，契约中指定的检查除外。
-- 历史记录：2026-10-16 环境预检通过；沙盒用户的 `gh` 没有凭据，GitHub 命令在用户上下文运行；首次推送与 draft PR #6 已完成。细节见 TASK-131 实施报告。
+- 字节码：用 `-I` 运行 Python 时 `PYTHONPYCACHEPREFIX` 不生效；需要隔离时改用 `-X pycache_prefix=<仓库外的短路径>`。
 
 ## 给 Claude 的说明
 
 - `next_actor` 为 `claude` 时：按提交 SHA 审查 `last_accepted` 之后的任务，复跑离线门，核对真实检查的数字；逐项确认实施报告中的 A 级自主决定，处理 B 级问题（协作方案 §3.2）。
-- 审查 TASK-131 时，独立复跑 29 个 MP4 分段前 600 帧的时间戳检查与原始 AVI 的截断检查。
-- 审查 TASK-123 时，用 `--regions-path` 指向临时文件，在内置浏览器画出 4 个默认区域并核对参考图。通过后在「给用户的说明」写明区域标记的启动命令。
+- 复核 TASK-123：在内置浏览器中按指南顺序（工作区最后画）画区域，确认能从画面选中内部区域并拖动顶点、双击能闭合、导出的参考图显示所有区域、完成标记与类别约束生效。通过后把 TASK-001 与 TASK-123 一并计入 `last_accepted`。
+- 审查 TASK-135：r4 表格与漂移回归、加强后的尾部检查、四份文档的独立小节。
 - 审查 TASK-121 时，用 `--labels-path` 指向临时文件，在内置浏览器完整试标 pilot 片段。通过后在「给用户的说明」写明标注启动方法。
 - 在阶段节点更新 `docs/collab/STAGE2_PR_BODY.md` 的状态表，由 Codex 同步到 GitHub。
-- 待办：TASK-134 完成后，用 `bbec056` 的导出快照在一段同步代理上做修复前基线运行，作为 TASK-101、TASK-102 的对照。
+- 待办：用 `bbec056` 的导出快照在一段同步代理上做修复前基线运行，作为 TASK-101、TASK-102 的对照。
+- 字节码：Claude 自己运行 Python 时也用 `-X pycache_prefix`，不要用 `-I` 配合环境变量。
 
 ## 给用户的说明
 
-Codex 已完成第 1 轮四项任务的实现、验证、提交推送与 draft PR [#6](https://github.com/Hyakuri/gazelle/pull/6) 报告。下一步请 Claude 读取当前 STATE，独立审查四项任务并试用区域标记工具；通过后再安排你画正式区域与独立 checkout 验收。
+第 1 轮审查已完成：TASK-131、TASK-132、TASK-001 通过；TASK-123 退回修改，Codex 本轮第一项就会修复。下一步请对 Codex 说“继续”。
 
-- **已记录你 2026-10-16 的决定**：Codex 分级自主（协作方案 §3.5）；本分支与 PR #6 的发布类 Git/GitHub 命令常设批准（协作方案 §7）。
-- **已记录你 2026-10-15 的决定**：カメラ2 为前方、カメラ1 为右侧、設備カメラ为全局；区域由你在全局摄像机画面上标记；同一日期为同一作业者，机位固定；批准 D4、D12 r2 与 D13 至 D15。
-- **接下来轮到你的两件事**：
-  1. 第 1 轮审查通过后，用区域标记工具画出取货台、作业台、放置区、工作区，约 10 分钟。启动命令届时写在这里。
-  2. 第 2 轮审查通过后，标注 26 个一分钟片段，约 2 小时，可分多次。
-- **可选**：若某名作业者出现在多个日期，提供每个日期的匿名作业者编号（例如 W1、W2），即可做严格的按作业者留一评估；不提供时按日期评估。
-- **当前验证边界**：时间戳与截断修复、清单和重封装已经由 Codex 实测；仍待 Claude 独立验收。原始 AVI 仍含空包，后续使用仓库外已校验的重封装 MP4，不把“截断失败”当成对原始 AVI 的解码修复。
+- **已记录你 2026-10-17 的决定：环境切换（D16）与 TASK-136（D17）。**
+  - 项目从现在起使用 `Gazelle-next`（Python 3.14、PyTorch 2.14、MediaPipe 1.1.1 等），激活命令为 `conda activate Gazelle-next`。
+  - 现有 `Gazelle` 原样保留作回退。
+  - 仓库侧的切换由 Codex 在第 2 轮第一项 TASK-137 完成；TASK-136 排在第 3 轮开头。
+  - 评估结论：输出与原环境等价；4K 输入下单次调用约慢 20%，TASK-136 完成后可快约 2 倍。见 `evidence/2026-10-17-env-next-evaluation.md`。
+- **下一步**：对 Codex 说“继续”。
+- **已记录你 2026-10-16 的决定：MediaPipe 遥测（GZ-23）。** 开发阶段接受 `mediapipe` 发送使用遥测；研究完成后再做安全方面的处理。Codex 与 Claude 可以照常运行 MediaPipe。
+- **画区域**：等 Codex 在 PR #6 报告“区域工具已修复”后再开始，约 10 分钟。在仓库根目录运行：
+
+  ```powershell
+  C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe -m tools.validation.roi_server --candidates C:\Users\yun\Documents\Claude_Code\gazelle_data\workdata\roi\candidates.json --annotator yun
+  ```
+
+  然后用浏览器打开终端显示的本机地址，按 `tools/validation/ROI_GUIDE_CN.md` 操作，画完后点击“导出参考图与类别”。
+- **之后**：第 2 轮审查通过后，标注 26 个一分钟片段，约 2 小时，可分多次。
+- **可选**：若某名作业者出现在多个日期，提供每个日期的匿名作业者编号（例如 W1、W2），即可做严格的按作业者留一评估。
+- **已记录的决定**：分级自主与常设批准（2026-10-16）；摄像机角色、区域标记方式、作业者与机位、D4、D12 r2、D13 至 D15（2026-10-15）。
 
 ## 待决问题
 
@@ -90,6 +123,10 @@ Codex 已完成第 1 轮四项任务的实现、验证、提交推送与 draft P
 | 编号 | 级别 | 提出者 | 内容 | 位置 | 状态 |
 | --- | --- | --- | --- | --- | --- |
 | Q-001 | B | Codex | TASK-131 第 4 步在 2000 FPS 时取整后不递增，违反 R1 | TASK-131 实施报告与审查结论 | 已解决：契约 r3 |
+| Q-002 | C | Claude | MediaPipe 0.10.35 的遥测如何处理（GZ-23） | 问题登记表 §5 | 已决定（2026-10-16）：开发阶段接受遥测，研究完成后再做安全处理 |
+| Q-003 | B | Codex | Torch Hub 加载 DINOv2 时联网探测（GZ-24） | 问题登记表 §5 | 已决定：与 D8 一并在第 4 阶段处理 |
+| Q-004 | C | Claude | D16：何时切换到候选环境 `Gazelle-next` | `evidence/2026-10-17-env-next-evaluation.md` §0、§7 | 已决定（2026-10-17）：尽早切换；现有 `Gazelle` 保留作回退，项目改用 `Gazelle-next`；仓库侧由 TASK-137 完成 |
+| Q-005 | C | Claude | D17：是否实施 TASK-136（Gazelle 输入预处理移到推理设备） | 同上；`tasks/TASK-136-gazelle-device-preprocessing.md` | 已决定（2026-10-17）：同意，第 3 轮开头实施 |
 
 ## 已完成
 
@@ -108,6 +145,10 @@ Codex 已完成第 1 轮四项任务的实现、验证、提交推送与 draft P
 | Codex 只读接手核对（HEAD `ef203a4`）：理解一致；指出 TASK-131 截断容差错误、研究工具文档同步冲突、会话写权限仍在旧目录 | 契约问题已由 Claude 修正；权限待用户设置 | `tasks/TASK-131-video-reader-timestamps-and-truncation.md`、`QUICKSTART_CN.md` |
 | Codex 第 1 轮预检、首次推送与 draft PR #6；报告 TASK-131 第 4 步的高帧率边界冲突 | 已实际运行（Codex） | `tasks/TASK-131-video-reader-timestamps-and-truncation.md` 实施报告 |
 | TASK-131 契约 r3 澄清；分级自主与常设批准写入协作方案 | 已修订（协调者） | `tasks/TASK-131-video-reader-timestamps-and-truncation.md` 审查结论、`COLLABORATION_PLAN_CN.md` §3.5 与 §7 |
+| Codex 第 1 轮：TASK-131、TASK-132、TASK-123、TASK-001 实现与真实检查 | 已实际运行（Codex） | 各任务文件 §2 |
+| Claude 第 1 轮审查：离线门、时间戳、截断、GPU smoke、清单与重封装、区域工具浏览器试用 | 已实际运行（Claude）；TASK-131、132、001 accepted，TASK-123 changes-requested | 各任务文件 §3 |
+| 候选环境 `Gazelle-next` 评估：MediaPipe 1.1.1 分析、离线门、真实 GPU 运行、视频读取与渲染比对、速度分析、优化探针与管线级实测；独立审查代理逐项核对数字，已按结果修正 | 已实际运行（Claude）；原 `Gazelle` 环境未改 | `evidence/2026-10-17-env-next-evaluation.md` |
+| 用户决定 D16（尽早切换，项目改用 `Gazelle-next`，原环境保留）与 D17（同意 TASK-136） | 已确认（2026-10-17） | 同上 §0 |
 
 ## 注意
 

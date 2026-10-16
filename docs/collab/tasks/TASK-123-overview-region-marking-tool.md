@@ -1,6 +1,6 @@
 # TASK-123：全局摄像机画面中的区域标记工具
 
-状态：ready（依赖 TASK-132）
+状态：changes-requested（2026-10-16，必须修复 5 项，见 §3）
 创建：2026-10-15（Asia/Tokyo）　协调者：Claude　实现者：Codex　验收：用户（标记体验）与 Claude（工具审查）
 依据：用户 2026-10-15 对 Q8 的回答：之后在設備カメラ的画面中标记取货台、作业台、放置区、工作区等区域。[验证集规范 r2](../../superpowers/specs/2026-10-15-workdata-validation-set-design.md) §4；[多摄像机设计](../../superpowers/specs/2026-10-15-multicamera-attention-design.md) §3.2。
 授权：2026-10-14 本地运算授权；2026-10-15 用户提供 `E:\Gazelle_Workdata` 供分析，只读使用。
@@ -13,7 +13,7 @@
 
 ### 必须实现
 
-代码放在 `tools/validation/`（含 `__init__.py`），只使用标准库与 `Gazelle` 环境已有的包。本任务建立的本机服务基础代码（127.0.0.1、原子保存、业务逻辑与 HTTP 分离）供 TASK-121 复用。
+代码放在 `tools/validation/`（含 `__init__.py`），只使用标准库与 `Gazelle-next` 环境已有的包。本任务建立的本机服务基础代码（127.0.0.1、原子保存、业务逻辑与 HTTP 分离）供 TASK-121 复用。
 
 1. **候选参考帧** `extract_roi_candidates.py`：读取 TASK-132 的清单与重封装后的 E 文件，每次录制在文件时长内均匀取 12 帧，缩放为 1920×1080，JPEG 质量 90，写入 `<数据根>\roi\candidates\<会话>\`；写 `candidates.json`，记录会话、源文件、容器时间、图像 SHA-256。
 2. **标记服务** `roi_server.py`：
@@ -63,7 +63,7 @@ TASK-132 的清单与重封装结果；验证集规范 r2 §4；作业数据分�
 ### 验证命令
 
 ```powershell
-$py = "C:\Users\yun\anaconda3\envs\Gazelle\python.exe"
+$py = "C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe"
 $env:PYTHONPYCACHEPREFIX = Join-Path $env:TEMP "gazelle-task-123-pycache"
 & $py -m unittest discover -s tests -p "test_validation_*.py" -v
 & $py -m compileall main.py gazelle tests tools
@@ -128,11 +128,33 @@ git status --short
 
 ## 3. 审查结论（Claude 追加）
 
-- 审查目标（SHA 范围）：
-- 独立复跑结果：
-- 试标记结果：
-- 发现：
-- 结论：
+### 2026-10-16 第 1 轮审查
+
+- 审查目标（SHA 范围）：`26b50f2`、`4220c98`，审查时 HEAD 为 `c5473bf`。
+- 独立复跑结果：完整离线门 562 项通过，无 skip。Claude 在内置浏览器中用临时文件 `claude_review_trial.json` 与 `claude_review_dblclick.json` 实际操作，正式区域文件全程不存在。另有一份独立代码审查。
+- 通过的项目：页面加载 84 张候选帧；选择主参考帧；画区域、回车闭合、自动保存；`roi_regions.py validate` 通过；删除顶点、“至少三个顶点”的限制、撤销；拖出自相交时拒绝保存；重启服务后恢复全部标记；导出 8 张图与 `classes.json`，默认区域下的类别与键值和验证集规范 r2 §4.1 一致；服务只监听 `127.0.0.1`，拒绝异源请求，令牌比较使用 `compare_digest`，图像只按清单 ID 提供，页面不引用外部资源；区域几何校验能拒绝蝶形、T 形、共线重叠、重复顶点与非法坐标。
+
+#### 必须修复
+
+1. **叠放顺序使内部区域无法编辑。** 区域按绘制顺序叠放，最后画的工作区覆盖整个画面。在画面上点击总是选中工作区；从列表选中内部区域后，它的顶点圆点被工作区挡住，按下鼠标又会选回工作区，无法拖动。按指南先画三个目标、最后画工作区，必然出现。修复：`cell` 区域放在最底层；选中区域的顶点圆点在所有多边形之后绘制；画面点击选择包含该点、面积最小的区域。补回归测试。
+2. **参考图丢失目标区域。** `render_roi_reference.py` 的 `draw_regions` 在同一个 RGBA 图层上依次调用 `ImageDraw.polygon`，后画的工作区直接覆盖先画的多边形，`roi_reference.png` 与七张叠加图只剩工作区边框和文字。沿边线采样：工作区 61/61 命中，取货台 0/61，放置区 0/61，作业台 3/61（来自画面中本身的蓝色治具）。修复：每个区域单独合成，所有填充之后再画边线与标签，`cell` 先画。补回归测试，检查重叠多边形渲染后每个区域的边线像素都存在。
+3. **双击闭合会产生重复顶点。** Claude 已在浏览器中复现：单击两点后在第三点双击，草稿中第三点出现两次，多边形没有闭合；再按回车时提示“未保存：Polygon vertices must be distinct”。原因是 `pointerdown` 事件的 `detail` 在 Chromium 中为 0，`e.detail>1` 的判断不起作用，而且每次按下都重绘画布，`dblclick` 可能不会触发。修复：在 `click` 事件中按 `detail` 只接受第一次点击，或在闭合前去掉与上一点相距约 3 像素以内的重复点；双击能可靠闭合。补回归测试。
+4. **区域文件在完成前就已存在。** 选定参考帧后立即生成 `roi_regions.json`，此后每次操作都会重写。TASK-121 以该文件存在作为“正式区域已就绪”，可能用半成品生成正式数据集。修复：导出时写入完成标记，记录完成时间与区域文件的 SHA-256；完成标记要求至少一个 `target` 且恰好一个 `cell`；`make_classes` 拒绝零个目标区域。TASK-121 改为以完成标记为准。
+5. **类别键可能超出一位数字，颜色可能撞色。** 目标区域没有数量上限，7 个目标时 `absent` 的键为 10；自定义目标一律使用 `#c0392b`，与 `away` 同色。修复：非零键最多 9 个，超出时拒绝并提示；自定义目标从一组与固定类别不同的颜色中依次分配。另外在指南中说明，键按目标区域的绘制顺序分配，重画会改变键。
+
+#### 建议修复
+
+- 服务端校验错误以英文显示，例如 `Polygon must not self-intersect`、`Polygon vertices must be distinct`，界面其余部分为中文；改为中文提示。
+- 备份只保护一步：每次保存（包括草稿点击）都轮换 `.json.bak`，页面重载后无法找回误删的区域。内容未变时不写，或保留多个备份。
+- 超大整数触发的 `OverflowError` 与深层嵌套 JSON 触发的 `RecursionError` 没有捕获；应返回 400，并在解析请求体之前检查令牌。
+- 草稿只校验 `points`，`region` 与多余字段原样保存；应按 schema 校验。
+- `extract_roi_candidates.py` 接受预期路径上的任何 MP4，没有对照 `remux_report.json` 确认已通过校验；没有检查时间递增与接近请求时间；重写 `candidates.json` 时没有备份。
+- 补测试：HTTP 超长请求、错误内容类型与令牌 403 的路径；T 形与共线重叠多边形。
+- 备注：没有最小面积限制，1 像素的三角形也能通过；可以考虑设下限。
+
+#### 结论
+
+changes-requested。必须修复 1 至 5 完成后由 Claude 复核。A 级自主决定全部认可。复现用的试用文件在仓库外的 `gazelle_data\workdata\roi\claude_review_*`。
 
 ## 4. 验收记录（用户反馈后由 Claude 填写）
 
