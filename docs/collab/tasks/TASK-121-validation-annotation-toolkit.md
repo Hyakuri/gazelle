@@ -92,15 +92,106 @@ git status --short
 
 ## 2. 实施报告（Codex 追加，不要修改上文）
 
-- 接手核对：
-- 提交与推送（SHA）：
-- 变更文件：
-- 命令、退出码、测试数、warnings 与 skips：
-- 数据集生成结果（段数、哈希、用时）：
-- 外部活动：
-- 反证式复核（v1.1 §9）：
-- 未运行的检查、限制、阻塞：
-- 状态标签（v1.1 §12）：
+### 2026-10-17 Codex 实现与实测；独立试标待 Claude
+
+- 实现提交：`a59d0515fe298054d6661831784bb75b9dd3aa2b`，`Add reproducible multiview annotation toolkit`，已推送到既有分支/draft PR #6。报告与交接 STATE 随后提交。没有开始第三轮。
+- 本轮按 STATE 在唯一仓库内 Inline Execution；所有 Python 均使用现有 `C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe`，字节码在仓库外。原 Gazelle 环境未使用或修改。
+- 新增 `sample_segments.py`、`extract_frames.py`、`labels.py`、`annotate_server.py`、内联页面、默认类别与中文指南；四组隔离 Python 测试、Node 页面 harness；同步四份用户文档与文档检查。已有 `tools/validation/__init__.py` 沿用，没有修改 Gazelle runtime。
+- 抽样采用默认 seed 20261015、四个时间分层（不足 45 分钟为两个）；每段 300 步，三机缺口按时间步并集计数，超过 2 秒最多重抽 10 次；加入固定 2026-09-07 22:20:00 pilot，标明不进入正式评估。没有按画面内容挑片段。
+- 只有区域文件完成标记和 SHA 有效、并具有 target/cell 时使用正式类别与参考图；否则使用默认类别。目标已存在时拒绝；显式 overwrite 先整体改名保存旧目录，不删除既有标注。
+- 精确读取代理帧、校验代理 SHA，拼接 1920×720、JPEG85，逐帧哈希记录。服务业务与 HTTP 分离，只绑定 127.0.0.1，全部资源本地；Host/Origin、CSRF、大小限制和 CSP；不显示模型预测。
+- 标注覆盖包含尚未判断的 null，和有效类别 unknown 区分；连续区间、变化点、删除/撤销、他人入镜、备注、原子保存/备份、revision 冲突保护与续标均已实现。严格 validate 拒绝未完成区间。
+
+### 数据集生成与复现
+
+- 输出：`C:\Users\yun\Documents\Claude_Code\gazelle_validation\roi_r2_trial`。
+- **27 段（26 正式候选 + 1 pilot），每段 300 步，共 8,100 张拼接 JPEG**；哈希和尺寸校验 exit 0。类别来源 `default-trial`，区域完成状态 `False`；本轮正式区域尚未就绪，因此这是默认类别试用集，正式集待区域导出后重新生成。
+- `manifest.json` SHA-256：`a8ba987f3b899f33fc6a5173d213f7eded168fbd48e4f2cdbbd44f8814cf0680`；`classes.json`：`51b0b8535288b635fce190cc9e6e06dfba2eefc3dc899a738721242cc385cec1`。这些是汇总哈希，manifest、帧、视频与标注本身未进 Git。
+- 外部脚本 `gazelle_runs/task-121-generate-real.py` 总用时 832.060s。它执行 CLI 抽样后另行调用 `plan(proxies_root, seed=20261015)`，逐项比较 27 段完整元数据，**完全一致**；复现检查 65.830s，证据 `task-121-reproducibility.json`。
+
+- `C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe -m tools.validation.sample_segments --proxies-root C:\Users\yun\Documents\Claude_Code\gazelle_data\workdata\proxies --dataset-root C:\Users\yun\Documents\Claude_Code\gazelle_validation\roi_r2_trial --regions-path C:\Users\yun\Documents\Claude_Code\gazelle_data\workdata\roi\roi_regions.json`：exit 0，65.458s。
+- `C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe -m tools.validation.extract_frames --dataset-root C:\Users\yun\Documents\Claude_Code\gazelle_validation\roi_r2_trial`：exit 0，508.442s。
+- `C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe -m tools.validation.extract_frames --dataset-root C:\Users\yun\Documents\Claude_Code\gazelle_validation\roi_r2_trial --validate-only`：exit 0，192.302s。
+
+抽样结果（epoch 是画面显示时钟的数值表示，不追加时区校准）：
+
+| 片段 | 起始代理帧 | 起始时钟 epoch s | pilot | 抽样次数 |
+| --- | ---: | ---: | --- | ---: |
+| 20260911_pilot | 6072 | 1788819600.000 | True | 1 |
+| 20260821_s01 | 1730 | 1786158347.800 | False | 1 |
+| 20260821_s02 | 6121 | 1786159226.000 | False | 1 |
+| 20260821_s03 | 12599 | 1786160521.600 | False | 1 |
+| 20260821_s04 | 17430 | 1786161487.800 | False | 1 |
+| 20260828_s01 | 85 | 1787599815.400 | False | 1 |
+| 20260828_s02 | 4832 | 1787600764.800 | False | 1 |
+| 20260903_s01 | 244 | 1788307249.000 | False | 1 |
+| 20260903_s02 | 6089 | 1788308418.000 | False | 1 |
+| 20260903_s03 | 12460 | 1788309692.200 | False | 1 |
+| 20260903_s04 | 16740 | 1788310548.200 | False | 1 |
+| 20260911_s01 | 3216 | 1788819028.800 | False | 1 |
+| 20260911_s02 | 6424 | 1788819670.400 | False | 1 |
+| 20260911_s03 | 13110 | 1788821007.600 | False | 1 |
+| 20260911_s04 | 14026 | 1788821190.800 | False | 1 |
+| 20260925_s01 | 1918 | 1790049962.200 | False | 1 |
+| 20260925_s02 | 6000 | 1790050778.600 | False | 1 |
+| 20260925_s03 | 9555 | 1790051489.600 | False | 1 |
+| 20260925_s04 | 15800 | 1790052738.600 | False | 1 |
+| 20261002_s01 | 547 | 1790719290.800 | False | 1 |
+| 20261002_s02 | 7399 | 1790720661.200 | False | 1 |
+| 20261002_s03 | 10992 | 1790721379.800 | False | 1 |
+| 20261002_s04 | 15778 | 1790722337.000 | False | 1 |
+| 20261009_s01 | 3201 | 1791256219.800 | False | 1 |
+| 20261009_s02 | 5967 | 1791256773.000 | False | 1 |
+| 20261009_s03 | 9241 | 1791257427.800 | False | 1 |
+| 20261009_s04 | 13946 | 1791258368.800 | False | 1 |
+
+### 验证命令、真实浏览器与失败记录
+
+```powershell
+& $py -m compileall main.py gazelle tests tools
+& $py -m unittest discover -s tests -v
+& $py main.py --help
+& $py main.py --list-models
+node tests/roi_page_test.cjs
+node tests/annotation_page_test.cjs
+git diff --check
+git status --short
+```
+
+- 最终相关代码的完整离线门 **607 tests / 10.748s / 0 skip，exit 0**；编译、两条 CLI、两个 Node harness、diff-check 全通过。日志 `gazelle_runs/round2-*-final.log`。默认测试使用合成帧/临时目录/假边界，不访问网络或真实 FFmpeg、CUDA、模型。非致命输出为 OpenCV 合成坏容器的 `moov atom not found` 与 Git LF/CRLF 提示。
+- 合成浏览器实测：类别变化点、unknown、删除/撤销、他人入镜区间、备注即时保存与刷新恢复；严格 labels validate 通过。两段合成数据还验证未完成入镜起点阻止切片，取消后可切片；先复现 Node 失败再修复。截图只含合成测试图，留在外部日志目录。
+- 真实 fixed pilot 预检：300 张、1920×720、哈希验证通过，41.203s；单段试用页面加载第一帧，无正式标签写入。该先行 probe 不充当 27 段完成证据。
+- 最终完整数据集页面实际加载：27 个片段选项，首段 `20260911_pilot`，300 时间步；首帧 complete，1920×720；只读检查后关闭临时标签页与服务。启动使用 `--labels-path` 指向 `codex_load_trial.json`，正式 `labels.json` 保持不存在；没有代用户判断真实注视类别。
+- 最终进程监听实测为且仅为 `127.0.0.1:8781`（psutil 读取自身服务连接）；页面唯一图像资源为本机 `/frame/20260911_pilot/0`，浏览器 warn/error 为空。最终服务 PID 226380 按命令行和数据集路径确认后终止；进程退出 1 是这次主动清理，非服务运行故障。页面只读加载也未创建 `codex_load_trial.json`。
+- 本机端口检查曾被 PowerShell 权限拒绝；改为按已知 PID 与完整服务命令行确认自己启动的进程后关闭，没有提权或修改系统设置。一次 UI 的标签定位无匹配，依据页面实际 select 元素继续操作，不是产品加载失败。
+- 外部证据：`task-121-sample.log`、`task-121-extract.log`、`task-121-dataset-validation.log`、`task-121-real-summary.json`、`task-121-browser-load.json`；合成标签严格校验日志及真实 pilot probe 独立保留。
+
+### 自主决定（A 级）
+
+- 三机缺口取并集，避免同一缺失时刻重复累计；每层在能容纳整段的起点范围均匀抽样，保留所有重抽记录。
+- 默认类别是 trial；已存在数据目录显式 overwrite 时保留成带时间戳备份，避免删除用户标注。
+- 序列化 autosave 队列配合服务器 revision/文件哈希冲突检查；备注 input 即保存。图片未加载完成前禁止判断，未完成入镜起点禁止切片，防止标签绑定到错帧或丢失区间。
+- 只读加载不创建 labels；可用不同 labels-path 独立试用。
+
+### 范围外改动
+
+- `tests/annotation_page_test.cjs`：用现有 Node 做 DOM 行为隔离验证，补足 Python HTTP 测试无法覆盖的浏览器操作；没有引入依赖或外部资源。其余文件均在契约范围。
+
+### 待 Claude 判断（B 级）
+
+- Q-007、Q-008、Q-009 从上游继承：运动事件同步未确认，内部覆盖缺口策略待确认，代理固定时钟抽查 60/63 通过（两项缺失、一项原始源帧也复现的 −1.4s 超限）。当前试用集验证工具/可重现采样，不证明科学同步或标注准确性。建议先审查这些证据，再决定正式数据集与评估使用。
+- 固定抽出的 `20261002_s01` 位于该摄像机映射的早期偏移区段，仍按原种子保留，没有因失败而排除或另挑片段。缺口检查只衡量最近源帧距离，不能代替真实时钟/物理同步精度检查；正式使用仍须先解决上游同步问题。
+- Claude 尚需在独立稳定状态下完整试标 300 步 pilot，使用临时 labels-path 并运行严格校验；Codex 的合成试标和真实首帧加载不能替代这一验收。
+
+### 待用户决定（C 级）
+
+无新增授权问题。正式区域绘制与 26 段人工标注是现有流程中的用户步骤，尚未完成；不能以默认类别 trial 替代。
+
+### 外部活动、反证复核与完成状态
+
+- 真实 CPU/OpenCV 代理解码、JPEG 写入与 loopback 浏览器服务已发生；TASK-121 没有调用 FFmpeg 子进程、模型、CUDA、下载或修改 Conda，也没有向外部发送数据。原始视频只读；全部代理、帧、标签与日志在授权外部目录。
+- 反证检查：坏 SHA/维度、manifest 不一致、非法或不完整区间、冲突保存均拒绝；default trial 和完成标记分支有测试；同种子两次完整比较一致；最终全量 8,100 帧校验完成，正式标签仍不存在。真实 UI 检查只证明加载/基本操作，不证明人工判断质量。
+- 代码、离线门、试用数据生成/复现/校验与本机页面加载：**已实际运行**；Claude 独立审查、完整 pilot 试标、用户正式区域与标注、阶段科学正确性：**待独立验收**。四份用户文档同步完成；源码/文档提交不含任何真实媒体或标注。
 
 ## 3. 审查结论（Claude 追加）
 
