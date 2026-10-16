@@ -140,6 +140,44 @@ git status --short
 - 未运行的检查、限制、阻塞：
 - 状态标签（v1.1 §12）：
 
+### 2026-10-16 接手与契约核对报告（Codex，尚未实施）
+
+- **接手基线**：新仓库 `C:\Users\yun\Documents\Claude_Code\hyakuri-gazelle`；`feature/stage2-correctness`；初始 HEAD `42d1e48076178d6db4d837b65267ac20e86f7a39`，工作区干净，`bbec056..HEAD` 无 `.py` 改动。当前记录基线为 `08dd48f`（`Record stage draft PR`）。已读取本任务 r2、作业数据分析 §3.1/§3.2、读取器、管线、MediaPipe 时间戳校验与相关测试；采用当前对话 v1.1，主线程执行，未开启子代理。
+- **预检与发布**：仓库、`gazelle_data`、`gazelle_runs`、`gazelle_validation`、`%TEMP%` 的空目录/文件创建与删除均在普通沙盒实测通过，探针已清理；原始数据只读列出 7 个目录。Python `3.11.15`；FFmpeg/ffprobe `2025-03-31-git-35c091f4b7-full_build-www.gyan.dev` 可执行。GPU 查询为 RTX 4080 SUPER，接手时 `5670 / 16376 MiB`，未推理。普通沙盒账户的 GitHub CLI 认证失败（HTTP 401）；用户明确批准本轮必要 Git/GitHub 命令经审批使用 `yun` 用户上下文，后者认证与 API 成功。此项记录为授权例外，不是普通沙盒认证通过。阶段分支已首次推送，远程 SHA 已核对，创建前查询无已有对应 PR；已创建 [draft PR #6](https://github.com/Hyakuri/gazelle/pull/6)，base 为 `feature/mediapipe-head-tracking`，正文取自既有 `STAGE2_PR_BODY.md`。
+- **阻塞：R1 与 r2 第 4 步不能对当前接受的全部 FPS 同时成立。** `resolve_video_fps(2000)` 返回 `2000.0`，没有上限约束。原始值为 `[0, NaN]` 时，第一帧输出 `0`；第二帧按精确公式 `p + 1000 / fps` 输出 `0.5`。Python `int(round(0.5)) == 0`，整数毫秒序列为 `[0, 0]`，违反 R1。直接调用现有 `MediaPipeBackend._video_timestamp`（不构造 backend 或模型）得到 `ValueError: MediaPipe video timestamps must strictly increase after rounding`。这是合成边界复现，不是对这批作业视频故障率的测量。
+- **命令与结果（已实际运行，普通沙盒、现有 Gazelle 环境）**：设置 `$env:PYTHONPYCACHEPREFIX = Join-Path $env:TEMP 'gazelle-task-131-pycache'`，将逐帧 r2 算法与断言作为标准输入交给 `& 'C:\Users\yun\anaconda3\envs\Gazelle\python.exe' -`。契约表的全部 7 组数值/来源用例均通过对照（`math.isclose` 用于表中省略的小数）；额外边界对照如下。诊断脚本正常结束，退出码 0；未运行 unittest suite，没有 suite 测试数或 skip 结果可报告。最小复现代码如下，可单独从仓库根目录运行：
+
+  ```python
+  from types import SimpleNamespace
+  from gazelle.runtime.media import resolve_video_fps
+  from gazelle.runtime.perception.mediapipe_backend import MediaPipeBackend
+
+  fps = resolve_video_fps(2000)
+  checker = SimpleNamespace(_last_timestamp_ms=None)
+  MediaPipeBackend._video_timestamp(checker, 0.0)
+  fallback = 0 + 1000 / fps  # r2 step 4 for the second raw value NaN
+  assert fallback == 0.5 and int(round(fallback)) == 0
+  try:
+      MediaPipeBackend._video_timestamp(checker, fallback)
+  except ValueError as error:
+      print(type(error).__name__ + ': ' + str(error))
+  else:
+      raise AssertionError('Expected the existing strict timestamp check to reject')
+  ```
+
+  | 输入 raw | FPS（原值/resolve 后） | r2 输出 | 整数毫秒 | 现有 backend 校验 |
+  | --- | --- | --- | --- | --- |
+  | `[0, NaN]` | `30 / 30.0` | `[0, 33.333333333333336]` | `[0, 33]` | 通过 |
+  | `[0, NaN]` | `1000 / 1000.0` | `[0, 1.0]` | `[0, 1]` | 通过 |
+  | `[0, NaN]` | `2000 / 2000.0` | `[0, 0.5]` | `[0, 0]` | 拒绝，违反 R1 |
+
+- **需要 Claude 明确的契约**：建议 R1 优先，补充 fallback 在整数毫秒上的最小递增约束，例如有限计算结果使用 `p + max(1.0, 1000 / fps)`，并补充高帧率边界测试；是否采用及最终算法由 Claude 决定。另一方向是显式界定并验证支持的 FPS 范围，但会改变当前输入兼容性。Codex 尚未采用任一方案，未更改帧率、读取器或 backend 检查。
+- **反证式复核**：核对了 `resolve_video_fps` 的实际返回值、Python 的实际取整以及生产 backend 的实际拒绝；30/1000 FPS 的对照通过，2000 FPS 的同路径对照失败。7 组表格用例本身一致，问题在通用 R1 与精确 fallback 公式的覆盖范围。未把独立校验声称为完整读取器或真实视频测试。
+- **变更范围与文档**：仅修改本任务的实施报告及 STATE 执行记录；任务契约、代码、测试、设计规范、ROADMAP 和四份用户文档保持不变。没有用户可见实现变化，因此本次无需同步四份用户文档。`git diff --check` 与首次发布前的 `git diff --check bbec056..HEAD` 通过；已观察到已有 LF/CRLF 转换提示，为非致命 Git 提示。
+- **外部活动**：GitHub 认证查询、分支推送、draft PR 创建与报告发布；Python 导入现有依赖，字节码放 `%TEMP%`。仅调用 FFmpeg/ffprobe 的版本查询与 `nvidia-smi` 状态查询。没有模型构造、推理、CUDA 运算、资源下载、Conda 修改、视频解码、FFmpeg 编解码或数据上传；没有复制或输出凭证。原始数据未写入。
+- **未运行与交接**：实现、聚焦单测、完整离线门、29 个 MP4 前 600 帧检查、原始 AVI 截断 CLI 检查、300 帧 GPU smoke 均未运行；TASK-132、TASK-123、TASK-001 未启动。按协作方案 §3.1 第 4 步，报告冲突并交回 Claude；`next_actor=claude`，`writer=none`，`current_task` 留在 TASK-131，任务不标为 `ready-for-review`。
+- **状态标签**：已静态检查；已实际运行（契约最小复现与首次发布）；尚未实施；待 Claude 修订契约及后续独立验收。
+
 ## 3. 审查结论（Claude 追加）
 
 - 审查目标（SHA 范围）：
