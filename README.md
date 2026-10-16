@@ -311,6 +311,27 @@ python main.py `
 
 ### Video Inference
 
+Video timestamps preserve valid container times, minimally repair rounded collisions,
+and estimate missing times from the previous rounded millisecond plus at least 1 ms
+or one source-frame interval. `run_config.json` records `container_frame_count`,
+`frames_required`, `decode_complete`, and `timestamp_sources` (counts for
+`container`, `repaired`, and `fps_fallback`). With a known container count N,
+the tolerance is T = max(2, ceil(0.005 * N)). A requested `--max-frames` at or
+before N - T must be decoded exactly; otherwise at least max(0, N - T) frames
+are required. Unknown counts disable this check. Early decoding failure exits
+nonzero, preserves partial JSONL and the failure config, and skips H.264 finalization.
+
+For AVI files containing tiny empty packets, run this local lossless remux from
+the repository root (replace the input/output paths):
+
+```powershell
+ffmpeg -n -fflags +genpts -i "input.avi" -map 0:v:0 -c:v copy -bsf:v "noise=drop=lt(size\,64)" "remuxed.mp4"
+```
+
+This invokes FFmpeg and writes a new video-only MP4; it preserves the input and
+refuses an existing output. It uses no model, CUDA, network, or downloads.
+
+
 The runtime can process a local video file frame by frame in an offline pipeline:
 
 ```powershell

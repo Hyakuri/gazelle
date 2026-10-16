@@ -1,4 +1,5 @@
 from dataclasses import asdict, dataclass
+import math
 from pathlib import Path
 import shutil
 from time import perf_counter
@@ -202,6 +203,10 @@ def _video_run_config_payload(
     output_fps: Optional[float],
     frames_read: int,
     frames_written: int,
+    container_frame_count: Optional[int],
+    frames_required: Optional[int],
+    decode_complete: Optional[bool],
+    timestamp_sources,
 ):
     payload = asdict(config)
     payload.update(
@@ -213,6 +218,10 @@ def _video_run_config_payload(
             "output_fps": None if output_fps is None else float(output_fps),
             "frames_read": int(frames_read),
             "frames_written": int(frames_written),
+            "container_frame_count": container_frame_count,
+            "frames_required": frames_required,
+            "decode_complete": decode_complete,
+            "timestamp_sources": dict(timestamp_sources),
         }
     )
     return payload
@@ -358,6 +367,13 @@ def run_video_pipeline(config, predictor_factory: Optional[Callable[[object], ob
     try:
         reader = VideoFrameReader(config.input_path)
         metadata = reader.metadata
+        container_frame_count = metadata.frame_count if metadata.frame_count and metadata.frame_count > 0 else None
+        frames_required = None
+        if container_frame_count is not None:
+            tolerance = max(2, math.ceil(0.005 * container_frame_count))
+            frames_required = max(0, container_frame_count - tolerance)
+            if config.max_frames is not None and config.max_frames <= frames_required:
+                frames_required = config.max_frames
         output_dir = create_output_dir(
             config.input_path,
             config.output_dir,
@@ -398,6 +414,7 @@ def run_video_pipeline(config, predictor_factory: Optional[Callable[[object], ob
         gaze_jsonl_writer = JsonlWriter(predictions_jsonl_path)
         frames_read = 0
         frames_written = 0
+        timestamp_sources = {"container": 0, "repaired": 0, "fps_fallback": 0}
         frame_iterator = iter(reader)
         while config.max_frames is None or frames_written < config.max_frames:
             try:
@@ -405,6 +422,7 @@ def run_video_pipeline(config, predictor_factory: Optional[Callable[[object], ob
             except StopIteration:
                 break
             frames_read += 1
+            timestamp_sources[getattr(frame, "timestamp_source", "container")] += 1
 
             head_result = head_provider.get_frame_result(
                 frame.image,
@@ -483,6 +501,7 @@ def run_video_pipeline(config, predictor_factory: Optional[Callable[[object], ob
                 writer.write(output_frame)
             frames_written += 1
 
+        decode_complete = None if frames_required is None else frames_read >= frames_required
         write_run_config_json(
             run_config_path,
             _video_run_config_payload(
@@ -494,8 +513,19 @@ def run_video_pipeline(config, predictor_factory: Optional[Callable[[object], ob
                 output_fps=video_fps,
                 frames_read=frames_read,
                 frames_written=frames_written,
+                container_frame_count=container_frame_count,
+                frames_required=frames_required,
+                decode_complete=decode_complete,
+                timestamp_sources=timestamp_sources,
             ),
         )
+        if decode_complete is False:
+            raise ValueError(
+                "Video decode truncated: read {} frames, required {}, container reports {}: {}. "
+                "The file may contain undecodable packets; see USAGE for empty AVI packets.".format(
+                    frames_read, frames_required, container_frame_count, config.input_path
+                )
+            )
         completed_resources = (
             ("gaze JSONL writer", gaze_jsonl_writer),
             ("head observation JSONL writer", head_jsonl_writer),

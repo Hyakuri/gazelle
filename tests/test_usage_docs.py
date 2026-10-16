@@ -469,6 +469,10 @@ class UsageDocumentationTest(unittest.TestCase):
                 "output_fps",
                 "frames_read",
                 "frames_written",
+                "container_frame_count",
+                "frames_required",
+                "decode_complete",
+                "timestamp_sources",
             ],
         }
         for guide_path in (ENGLISH_GUIDE, CHINESE_GUIDE):
@@ -478,6 +482,12 @@ class UsageDocumentationTest(unittest.TestCase):
                 for scope in ("image", "video")
             }
             self.assertEqual(expected, actual)
+
+    def test_video_decode_and_timestamp_contract_is_documented(self):
+        for path in (ENGLISH_README, CHINESE_README, ENGLISH_GUIDE, CHINESE_GUIDE):
+            text = self._read(path)
+            for token in ("container_frame_count", "frames_required", "decode_complete", "timestamp_sources", "noise=drop"):
+                self.assertIn(token, text, str(path))
 
     def test_facial_transformation_matrix_contract_is_precise(self):
         required = (

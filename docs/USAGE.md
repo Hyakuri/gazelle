@@ -450,6 +450,16 @@ Most CLI names become config names by replacing hyphens with underscores. The ex
 | video | `output_fps` | number (non-null) | Overrides the nullable base value with the resolved positive finite writer/tracker FPS. |
 | video | `frames_read` | integer (non-null) | Added nonnegative count of decoded frames read. |
 | video | `frames_written` | integer (non-null) | Added nonnegative count of observation/prediction records and output frames written. |
+| video | `container_frame_count` | integer or null | Positive container estimate; null when unknown. |
+| video | `frames_required` | integer or null | Minimum required decoded count; null when unknown. |
+| video | `decode_complete` | boolean or null | Whether the required count was met; null when not checked. |
+| video | `timestamp_sources` | object (non-null) | Integer counts for `container`, `repaired`, and `fps_fallback`. |
+
+There are 49 unique image keys and 56 unique video keys. For container count N,
+T = max(2, ceil(0.005 * N)). `--max-frames` at or before N - T requires exactly
+the requested count; otherwise `frames_required` is max(0, N - T). Unknown
+counts disable the check. Truncation exits nonzero after preserving partial
+JSONL and `run_config.json` with `decode_complete: false`, and skips H.264 finalization.
 
 ## 13. Cache, downloads, device selection, and xFormers notes
 
@@ -472,7 +482,17 @@ CPU construction temporarily disables xFormers. CUDA construction requests xForm
 
 Unsupported suffixes, missing input/head-data/checkpoint files, malformed/duplicate JSON records, invalid boxes/devices, and provider prerequisites fail clearly. Static ID count must equal bbox count. Normalized/pixel boxes must be finite and remain nonempty after normalization/clipping. Output conflicts require another root or `--overwrite`; cache/network failures stop preparation or inference.
 
-**known runtime limitation:** OpenCV video timestamps are rounded to integer milliseconds for MediaPipe and must strictly increase after rounding. Repeated timestamps or a sub-millisecond collision may abort the run. If source FPS is invalid, the reader's timestamp fallback remains 30 FPS even when `--output-fps` controls a different writer/tracker FPS; the two clocks can diverge and affect bridge timing. This describes current behavior, not desired behavior.
+The reader preserves finite nonnegative container timestamps that strictly increase after rounding. Repeated, backward, or sub-millisecond collisions receive the smallest integer-millisecond repair. Missing timestamps (including zero from frame index 2 onward) use the previous rounded time plus max(1 ms, one source-frame interval); an invalid first timestamp becomes zero. An unrepresentable finite increasing time fails explicitly. These repairs do not synchronize cameras.
+
+**known runtime limitation:** If source FPS is invalid, the reader's timestamp fallback remains 30 FPS even when `--output-fps` controls a different writer/tracker FPS; the two clocks can diverge and affect bridge timing.
+
+For AVI empty packets, run this lossless remux from the repository root, replacing paths:
+
+```powershell
+ffmpeg -n -fflags +genpts -i "input.avi" -map 0:v:0 -c:v copy -bsf:v "noise=drop=lt(size\,64)" "remuxed.mp4"
+```
+
+This runs local FFmpeg and writes a new video-only MP4 without audio, retaining the original input. `-n` protects existing output. No inference, CUDA, network access, or downloads occur.
 
 Perception quality depends on visible-face evidence. The `pose_only` path uses approximate pose-only geometry, and a stale bridge box can lag rapid motion for as long as `--head-track-max-gap-ms`. Detection/pose quality degrades with extreme profile views, occlusion, PPE such as masks/glasses/helmets, motion blur, and low resolution. Although `--max-heads` supports up to 10, the current system has limited real multi-person validation.
 

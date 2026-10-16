@@ -24,6 +24,7 @@ class VideoFrame:
     index: int
     timestamp_ms: float
     image: Image.Image
+    timestamp_source: str = "container"
 
 
 def is_supported_image_path(path) -> bool:
@@ -147,21 +148,41 @@ class VideoFrameReader:
 
     def __iter__(self):
         frame_index = 0
+        previous_ms = None
         while self._capture is not None:
             ok, frame_bgr = self._capture.read()
             if not ok:
                 break
 
-            timestamp_ms = self._capture.get(self._cv2.CAP_PROP_POS_MSEC)
-            if (
-                not _valid_non_negative_number(timestamp_ms)
-                or (frame_index > 0 and float(timestamp_ms) <= 0.0)
+            raw = self._capture.get(self._cv2.CAP_PROP_POS_MSEC)
+            valid = _valid_non_negative_number(raw)
+            if previous_ms is None:
+                timestamp_ms = float(raw) if valid else 0.0
+                timestamp_source = "container" if valid else "fps_fallback"
+            elif valid and int(round(float(raw))) > previous_ms:
+                timestamp_ms = float(raw)
+                timestamp_source = "container"
+            elif valid and not (frame_index >= 2 and float(raw) == 0.0):
+                timestamp_ms = float(previous_ms + 1)
+                timestamp_source = "repaired"
+            else:
+                interval = max(1.0, 1000.0 / resolve_video_fps(self._metadata.fps))
+                timestamp_ms = previous_ms + interval
+                timestamp_source = "fps_fallback"
+            if not math.isfinite(timestamp_ms) or (
+                previous_ms is not None and int(round(timestamp_ms)) <= previous_ms
             ):
-                timestamp_ms = frame_index / resolve_video_fps(self._metadata.fps) * 1000.0
+                raise ValueError("Cannot represent a finite increasing video timestamp: {}".format(self.path))
+            previous_ms = int(round(timestamp_ms))
 
             frame_rgb = self._cv2.cvtColor(frame_bgr, self._cv2.COLOR_BGR2RGB)
             image = Image.fromarray(frame_rgb).convert("RGB")
-            yield VideoFrame(index=frame_index, timestamp_ms=float(timestamp_ms), image=image)
+            yield VideoFrame(
+                index=frame_index,
+                timestamp_ms=timestamp_ms,
+                image=image,
+                timestamp_source=timestamp_source,
+            )
             frame_index += 1
 
     def close(self) -> None:

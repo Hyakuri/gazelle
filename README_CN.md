@@ -320,6 +320,24 @@ python main.py `
 
 ### 视频推理
 
+视频保留有效容器时间戳，对取整冲突做最小修补；时间戳缺失时，在上一帧整数毫秒上
+增加至少 1 ms 或一个源帧间隔。`run_config.json` 记录 `container_frame_count`、
+`frames_required`、`decode_complete` 和 `timestamp_sources`（`container`、
+`repaired`、`fps_fallback` 三类计数）。容器帧数为 N 时，容差
+T = max(2, ceil(0.005 * N))。`--max-frames` 不超过 N - T 时必须完整读出请求帧数；
+其余情况至少读出 max(0, N - T) 帧。未知容器帧数不检查。解码提前失败会以非零码退出，
+保留部分 JSONL 和失败配置，跳过 H.264 终结。
+
+含微小空包的 AVI 可从仓库根目录执行以下本地无损重封装（替换输入、输出路径）：
+
+```powershell
+ffmpeg -n -fflags +genpts -i "input.avi" -map 0:v:0 -c:v copy -bsf:v "noise=drop=lt(size\,64)" "remuxed.mp4"
+```
+
+命令调用 FFmpeg，写入新的视频流 MP4，不包含音频；保留原始输入并拒绝覆盖已有输出。
+不构造模型、不使用 CUDA、不联网、不下载。
+
+
 runtime 可以对本地视频文件进行逐帧离线推理：
 
 ```powershell

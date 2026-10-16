@@ -450,6 +450,15 @@ Landmark、matrix、head-pose value shape：
 | video | `output_fps` | number (non-null) | 用 resolved positive finite writer/tracker FPS override nullable base value。 |
 | video | `frames_read` | integer (non-null) | 新增 decoded frame 的 nonnegative read count。 |
 | video | `frames_written` | integer (non-null) | 新增 observation/prediction record 和 output frame 的 nonnegative written count。 |
+| video | `container_frame_count` | integer or null | 正的容器估算帧数；未知时为 null。 |
+| video | `frames_required` | integer or null | 最少要求的解码帧数；未知时为 null。 |
+| video | `decode_complete` | boolean or null | 是否达到要求帧数；未检查时为 null。 |
+| video | `timestamp_sources` | object (non-null) | `container`、`repaired`、`fps_fallback` 三类整数计数。 |
+
+图像共有 49 个唯一键，视频共有 56 个唯一键。容器帧数为 N 时，
+T = max(2, ceil(0.005 * N))。`--max-frames` 不超过 N - T 时必须读出全部请求帧数；
+否则 `frames_required` 为 max(0, N - T)。未知帧数不检查。截断会以非零码退出，
+保留部分 JSONL 和带有 `decode_complete: false` 的 `run_config.json`，跳过 H.264 终结。
 
 ## 13. 缓存、下载、device 选择和 xFormers 说明
 
@@ -472,7 +481,17 @@ CPU construction 临时禁用 xFormers。只有 resolved device 是 CUDA 且没�
 
 不支持的 suffix、缺少 input/head-data/checkpoint、malformed/duplicate JSON record、无效 box/device、provider prerequisite 都会明确失败。static ID count 必须等于 bbox count。normalized/pixel box 必须 finite，normalization/clipping 后仍非空。output conflict 需另一个 root 或 `--overwrite`；cache/network failure 会停止准备或推理。
 
-**known runtime limitation：** OpenCV video timestamp 会为 MediaPipe 四舍五入为 integer ms，并且 must strictly increase after rounding。重复 timestamp 或 sub-millisecond collision 可能使运行 abort。source FPS 无效时，即使 `--output-fps` 控制不同的 writer/tracker FPS，reader timestamp fallback 仍是 30 FPS；两个 clock 可能偏离并影响 bridge timing。这是当前行为，不是 desired behavior。
+读取器保留有限、非负且取整后严格递增（strictly increase after rounding）的容器时间戳。重复、倒退或 sub-millisecond 冲突做最小整数毫秒修补。缺失时间戳（含下标 2 起的零值）用上一帧取整时间加 max(1 ms, 一个源帧间隔)；首帧无效时间戳取零。无法表示有限递增时间时明确报错。这些修补不实现多机同步。
+
+**known runtime limitation：** source FPS 无效时，即使 `--output-fps` 控制不同的 writer/tracker FPS，reader timestamp fallback 仍是 30 FPS；两个 clock 可能偏离并影响 bridge timing。
+
+AVI 空包可从仓库根目录执行以下无损重封装，替换输入、输出路径：
+
+```powershell
+ffmpeg -n -fflags +genpts -i "input.avi" -map 0:v:0 -c:v copy -bsf:v "noise=drop=lt(size\,64)" "remuxed.mp4"
+```
+
+此命令调用本地 FFmpeg，写入不含音频的新 MP4，保留原始输入；`-n` 保护已有输出。不执行推理、不使用 CUDA、不联网、不下载。
 
 Perception quality 依赖 visible-face evidence。`pose_only` 使用近似 pose-only geometry；stale bridge box 在快速移动时最多可滞后 `--head-track-max-gap-ms`。极端 profile、遮挡、mask/glasses/helmet 等 PPE、motion blur、low resolution 都会降低 detection/pose quality。虽然 `--max-heads` 最多支持 10，当前系统仍只有 limited real multi-person validation。
 
