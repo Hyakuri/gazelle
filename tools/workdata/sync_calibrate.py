@@ -173,12 +173,15 @@ def corrected_time(base,calibration):
         segment=next((s for s in calibration['segments'] if s['start']<=relative<s['end']),None)
         if segment is None:
             segment=calibration['segments'][0 if relative<calibration['segments'][0]['start'] else -1]
-        return base-segment['c0']-segment['c1']*relative
+        return base-segment['c0']-segment['c1']*relative,segment['c1']
     current=base
     for _ in range(2):
-        current=evaluate(current)
-    # Test the final candidate against the equation, not the preceding update.
-    if not np.isfinite(current) or abs(evaluate(current)-current)>.001:
+        current,_=evaluate(current)
+    updated,slope=evaluate(current)
+    # Convert equation residual to error relative to this segment's linear solution.
+    scale=abs(1+slope)
+    error=abs(updated-current)/scale if scale else float('inf')
+    if not np.isfinite(current) or not np.isfinite(error) or error>.001:
         raise ValueError('Clock correction did not converge within 1 ms in two iterations')
     return float(current)
 

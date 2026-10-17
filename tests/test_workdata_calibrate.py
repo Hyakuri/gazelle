@@ -119,6 +119,15 @@ class CalibrationTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'converge'):
             corrected_time(100.1,fit)
 
+    def test_convergence_gate_measures_solution_error_not_unscaled_residual(self):
+        fit=dict(valid=True,origin=0.,segments=[dict(start=-100.,end=100.,c0=9.91,c1=-.01)])
+        candidate=-10.0091
+        exact=-9.91/.99
+        self.assertLess(abs(candidate-(-9.91+.01*candidate)),.001)
+        self.assertGreater(abs(candidate-exact),.001)
+        with self.assertRaisesRegex(ValueError,'converge'):
+            corrected_time(0.,fit)
+
     def test_explicit_sample_reuse_verifies_pixels_grid_and_complete_decoding(self):
         from tools.workdata.sample_cache import read_sample_cache
         from tools.workdata.common import hash_file

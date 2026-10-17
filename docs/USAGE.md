@@ -659,8 +659,10 @@ This CPU-only mode checks the base-map hash, grid, source size/mtime, pixel SHA-
 no source-video decoding, model inference, GPU work, FFmpeg calls or network access.
 The output map must not already exist. Original samples remain read-only; `sampling_evidence`
 retains their original fingerprints and file hashes beside the current fitting implementation.
-Two clock-correction iterations are checked against the original equation within 1 ms;
-unsolved step boundaries still fail. Reuse is for fitting repairs, not sampling changes.
+Two clock-correction iterations require local linear solution error within 1 ms:
+divide the original equation residual by `abs(1+c1)`. A singular local equation fails,
+and the 0.4 s positive-step no-solution regression still fails explicitly.
+Reuse is for fitting repairs, not sampling changes.
 
 Proxy generation, using the same external `$data`:
 

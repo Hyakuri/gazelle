@@ -632,7 +632,8 @@ python -m tools.workdata.sync_calibrate --timemaps "$data\timemaps_v2_base" --ou
 此模式仅使用 CPU，核对基础映射哈希、网格、源 size/mtime、像素 SHA-256、96×54 uint8 形状、
 逐步来源与完整源解码记录，不解码源视频、不推理、不使用 GPU、FFmpeg 或网络。
 输出映射须尚不存在；原样本只读，`sampling_evidence` 保留其原指纹与文件哈希，并另记当前拟合实现。
-时钟修正仍迭代两次，按原方程检验是否在 1 ms 内；无解的台阶边界仍失败。复用仅用于拟合修复，不用于采样变更。
+时钟修正仍迭代两次，要求相对于局部线性解的误差不超过 1 ms：以原方程残差除以 `abs(1+c1)`。
+局部方程奇异时失败，0.4 s 正台阶无解回归仍明确失败。复用仅用于拟合修复，不用于采样变更。
 详见[中文工具指南](../tools/workdata/README_CN.md)。
 
 代理生成沿用外部 `$data`：

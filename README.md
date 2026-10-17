@@ -364,6 +364,8 @@ decoded/OCR evidence in a different output root, retaining its original implemen
 `sync_calibrate --reuse-samples` refits verified grayscale caches without decoding source
 video. Use a fresh output map; the old sampling fingerprint and current fitting fingerprint
 are recorded separately, and the original samples remain unchanged.
+The two clock-correction iterations require local linear solution error within 1 ms,
+computed as equation residual divided by `abs(1+c1)`.
 
 Local research data tools build a read-only source inventory and losslessly
 remux AVI empty packets. Run `python -m tools.workdata.inventory` and
