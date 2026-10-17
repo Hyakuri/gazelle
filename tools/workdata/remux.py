@@ -61,13 +61,14 @@ def validate_output(path, input_packets, input_duration, ffprobe):
         interval = None
     decoded['nominal_frame_interval_ms'] = interval
     last_pts = packets['last_pts']
+    assumed_zero=metadata.get('start_time') is None
     try:
-        start_time = float(metadata.get('start_time', 0.))
+        start_time = 0. if assumed_zero else float(metadata['start_time'])
         if not math.isfinite(start_time):start_time=None
     except (TypeError,ValueError,OverflowError):
         start_time=None
     delta = last_ms - 1000 * (last_pts - start_time) if last_ms is not None and last_pts is not None and start_time is not None else None
-    decoded.update(start_time=start_time, tail_pts_delta_ms=delta)
+    decoded.update(start_time=start_time, start_time_assumed_zero=assumed_zero, tail_pts_delta_ms=delta)
     tail_pts = (last_ms is not None and interval is not None and last_pts is not None
                 and delta is not None and abs(delta) <= interval)
     checks = dict(packet_count=packets['count'] == input_packets['count'] - input_packets['small_count'],

@@ -92,6 +92,7 @@ class MediaTest(unittest.TestCase):
                     frames = list(reader)
                 self.assertEqual(len(frames), len(expected))
                 for frame, timestamp, source in zip(frames, expected, sources):
+                    self.assertIsInstance(frame.timestamp_ms,float)
                     self.assertAlmostEqual(frame.timestamp_ms, timestamp, places=6)
                     self.assertEqual(frame.timestamp_source, names[source])
                 rounded = [int(round(frame.timestamp_ms)) for frame in frames]

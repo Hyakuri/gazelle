@@ -52,3 +52,7 @@ assert.equal(run('draft.region'),null);
 run("regions=[]; $('customKey').value='rack'; $('customName').value='Rack'; $('custom').onclick();");
 assert(!defaults.fixed_classes.some(row => row.color === run('draft.region.color')), 'custom color must avoid fixed classes');
 console.log('PASS: cell order, topmost vertices, smallest hit, drag, double-click, custom color');
+run('updateCompletion({complete:true,has_export:true});');
+assert.equal(run("$('completion').textContent"),'已导出、未修改');
+run('updateCompletion({complete:false,has_export:true});');
+assert.match(run("$('completion').textContent"),/需要重新导出/);

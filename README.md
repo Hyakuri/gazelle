@@ -334,7 +334,11 @@ trial dataset; an explicit unfinished region file is rejected. Each session uses
 and formal segments never overlap the pilot. Labels use version 2: `viewed_ranges`
 records displayed steps, unseen steps retain stripes, and **本段完成** explicitly
 writes `finished_at` only after every step has been viewed and labelled. Editing
-labels or other-person ranges clears completion. `labels validate --segment ID`
+labels or other-person ranges clears completion. Replay a long span after changing its labels
+before confirming completion: viewed only means displayed. Completion uses previously saved
+viewed ranges; new ranges in that request are saved but cannot qualify it. View-only autosaves
+are coalesced to at most once per second, with immediate pause/switch/finish/hide/close flushes;
+label, people and note edits save immediately. `labels validate --segment ID`
 strictly checks just that segment; repeat the option for several. It uses CPU only, with no FFmpeg executable, model, GPU, downloads
 or external network. See [usage](docs/USAGE.md#15-research-data-tools) and the
 [annotation guide](tools/validation/ANNOTATION_GUIDE_CN.md).

@@ -335,6 +335,9 @@ python main.py `
 各会话独立使用 `seed + int(session)`，`--sessions` 默认只含七次已批准录制，正式片段不与 pilot 重叠。
 标注使用 version 2：`viewed_ranges` 记录实际显示的步，未看部分保留斜线纹理；全部看过且有类别后，
 点击“本段完成”才写入 `finished_at`。修改类别或他人区间会清除完成状态。
+修改较长片段的类别后，确认完成前请回放检查，因为“已看”只表示显示过。
+完成条件只认此前已保存的已看范围；同请求的新范围会保存，但不能用于本次确认。
+仅已看变化最多每秒保存一次，暂停/换段/完成/隐藏/关闭前立即写入；类别、他人区间、备注立即保存。
 `labels validate --segment ID` 只严格检查指定段，可重复给出。仅使用 CPU，不启动 FFmpeg
 可执行程序，不使用模型、GPU、下载或外部网络。入口见[用法](docs/USAGE_CN.md#15-研究数据工具)
 与[标注指南](tools/validation/ANNOTATION_GUIDE_CN.md)。

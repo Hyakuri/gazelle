@@ -276,6 +276,8 @@ class RoiRegionsTest(unittest.TestCase):
             payload['regions'][0]['unexpected']='discard me'
             saved=app.update(payload,app.token)
             self.assertNotIn('unexpected',saved['regions'][0])
+            self.assertTrue(saved['complete'],'no-op save retains server export completion')
+            self.assertTrue(saved['has_export'])
             payload['regions'][0]['polygon']=[[.1,.1],[.11,.1],[.1,.11]]
             app.update(payload,app.token)
             warning=app.export(app.token)

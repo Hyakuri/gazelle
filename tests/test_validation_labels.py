@@ -3,6 +3,8 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from contextlib import redirect_stderr
+from io import StringIO
 
 from tools.validation.labels import expand_runs, validate_document, LabelStore
 
@@ -15,6 +17,46 @@ def fixture():
 
 
 class LabelTest(unittest.TestCase):
+    def test_finish_only_counts_previously_saved_viewing_but_preserves_new_ranges(self):
+        manifest,classes=fixture()
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            for name,data in [('manifest.json',manifest),('classes.json',classes)]:
+                (root/name).write_text(json.dumps(data))
+            store=LabelStore(root,root/'trial.json','reviewer')
+            payload=dict(segment_id='s1',revision=0,labels=[dict(start_step=0,end_step_exclusive=5,label='target')],
+                         viewed_ranges=[],other_people=[],note='')
+            store.update(payload)
+            payload.update(revision=1,viewed_ranges=[dict(start_step=0,end_step_exclusive=5)],finish=True)
+            with self.assertRaisesRegex(ValueError,'previously saved'):
+                store.update(payload)
+            persisted=LabelStore(root,root/'trial.json','reviewer').document()
+            self.assertEqual(persisted['segments'][0]['viewed_ranges'],payload['viewed_ranges'])
+            self.assertIsNone(persisted['segments'][0]['finished_at'])
+            payload['revision']=persisted['revision']
+            self.assertIsNotNone(store.update(payload)['segments'][0]['finished_at'])
+
+    def test_cli_segment_errors_are_one_line_and_viewed_errors_use_their_own_name(self):
+        from tools.validation.labels import main,viewed_steps
+        with self.assertRaisesRegex(ValueError,'viewed_ranges'):
+            viewed_steps([dict(start_step=0,end_step_exclusive=6)],5)
+        manifest,classes=fixture()
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            for name,data in [('manifest.json',manifest),('classes.json',classes)]:
+                (root/name).write_text(json.dumps(data))
+            store=LabelStore(root,root/'trial.json','reviewer')
+            store.update(dict(segment_id='s1',revision=0,labels=[dict(start_step=0,end_step_exclusive=5,label='target')],
+                              viewed_ranges=[],other_people=[],note=''))
+            output=StringIO()
+            with redirect_stderr(output):
+                status=main(['validate','--dataset-root',str(root),'--labels-path',str(root/'trial.json'),'--segment','s1'])
+            self.assertEqual(status,1)
+            self.assertEqual(len(output.getvalue().splitlines()),1)
+            self.assertIn('s1',output.getvalue())
+            self.assertIn('not been completed',output.getvalue())
+            self.assertNotIn('Traceback',output.getvalue())
+
     def test_expand_requires_exact_nonoverlapping_coverage(self):
         rows=[dict(start_step=0,end_step_exclusive=2,label='target'),
               dict(start_step=2,end_step_exclusive=5,label='unknown')]

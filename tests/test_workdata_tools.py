@@ -83,6 +83,14 @@ class WorkdataToolsTest(unittest.TestCase):
                 self.assertTrue(result['valid'])
                 self.assertAlmostEqual(result['decode_details']['tail_pts_delta_ms'],0)
 
+    def test_missing_or_none_start_time_is_explicitly_assumed_zero(self):
+        for extra in ({},{'start_time':None}):
+            with self.subTest(extra=extra), patch.object(remux,'probe_metadata',return_value=dict(duration=100,r_frame_rate='30/1',**extra)), patch.object(remux,'probe_packets',return_value=dict(count=100,pts_strict=True,last_pts=99.95)), patch.object(remux,'check_decode',return_value=dict(windows=[30,30,60],tail_eof=True,last_timestamp_ms=99950,frame_interval_ms=1000/30)):
+                result=remux.validate_output(Path('fake'),dict(count=100,small_count=0),100,'ffprobe')
+                self.assertTrue(result['valid'])
+                self.assertTrue(result['decode_details']['start_time_assumed_zero'])
+                self.assertEqual(result['decode_details']['start_time'],0.)
+
     def test_atomic_publication_and_failed_force_preserve_existing(self):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)

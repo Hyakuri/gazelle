@@ -98,6 +98,20 @@ git status --short
 
 ## 2. 实施报告（Codex 追加，不要修改上文）
 
+### 2026-10-18 实施与验证
+
+- 在 TASK-140 两组低优先级代理生成与一组验证期间，主线程 Inline Execution 完成本任务；没有子代理。
+- 完成条件检查请求前已保存的 viewed_ranges；携带新已看范围与 finish 的请求会先保存范围、拒绝本次完成，重读后可确认。没有新增完成捷径或更改 schema。
+- 页面聚合仅已看变化，每秒至多一次；暂停、换段、完成、隐藏和关闭立即 flush，关闭使用 keepalive 并保留未保存提示。类别、他人区间、备注立即保存。错误时停止编辑。
+- labels CLI 错误单行、含段号/原因、exit 1；viewed_ranges 使用自己的错误文本。remux 缺失/None start_time 记为 0 并记录 start_time_assumed_zero。media.py 已有 float 修复，无需改实现，新增类型断言覆盖 p+1 分支。
+- ROI 保存与导出响应返回服务端 complete/has_export，页面据此显示；无变化保存保持已导出。四份用户文档与两份中文指南同步“较长类别修改后回放；已看只表示显示过”。
+- 先红后绿：未保存已看仍被错误完成、viewed 错误措辞、None start_time 均实际复现。聚焦 77 tests / 3.396s 通过；完整离线门 **664 tests / 17.718s / 0 skip**，compileall main.py gazelle tests tools、help、list-models、diff-check 均通过。两个 Node harness 通过；伪时钟覆盖 1 秒聚合与暂停/换段/隐藏/关闭即时保存、备注不降频。坏 MP4 回归保留非致命 moov atom 提示。
+- 实际浏览器：旧 roi_r2_trial、独立 `gazelle_runs/task-124/browser-trial.json`，没有写正式 labels。正常播放至 193/300，暂停并换段、重新加载，续标从 194 步开始，原 193 步全部保留；继续播放到 300/300 后按钮启用，确认后回到该段显示“已确认完成”。页面只使用测试类别 unknown，不作为科学标注。
+- 每次实际保存的时间/段号/已看计数记录在 browser-save-audit.jsonl；播放周期约每秒一次，暂停末尾约 0.238 s 的间隔属于要求的强制 flush，单列而不冒充限频失败或删除记录。浏览器证据与精确区间统计在 browser-summary.json；所有日志留在仓库外。
+- 外部活动：本机 loopback 浏览器、CPU/OpenCV 读取既有试用帧；本任务无 FFmpeg、GPU、模型、网络下载、环境改动。同期 TASK-140 的真实 CPU/FFmpeg 另记。正式 ROI/完成标记不变。
+- A 级：聚合在客户端保存队列中执行，服务端仍同步原子写入并按已持久化状态判断完成，避免引入后台易丢失的待写状态。完成请求中新增加的观看进度在拒绝完成时仍原子保存。范围外：无。
+- B 级：待 Claude 独立浏览器审查数据完整性与保存频率。C 级：无。**已实施、已静态检查、已实际运行；未独立验收。**
+
 - 接手核对：
 - 提交与推送（SHA）：
 - 变更文件：

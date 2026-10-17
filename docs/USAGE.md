@@ -761,6 +761,13 @@ image before accepting a judgment. Version 2 labels record merged, monotonically
 growing `viewed_ranges`. Unseen steps keep a stripe texture even when labelled.
 Only **本段完成** explicitly writes `finished_at`, after all steps have been viewed
 and labelled; changing a label or other-person range clears it. Version 1 labels
+are not accepted. Completion checks only previously saved viewed ranges; ranges newly
+included in the finish request are saved but do not qualify that request. Replay a long span
+after changing its labels before confirming completion: viewed only means displayed.
+View-only autosaves occur at most once per second; pause, switch, finish, hide and close
+flush immediately. Label, people and note edits are never throttled; failed saves stop editing.
+`labels validate` errors include the segment and reason in one line, exit 1, without traceback.
+Region save/export status comes from the server, including unchanged saves. Version 1 labels
 are rejected with instructions to reannotate. Strict validation requires all three
 conditions; repeat `--segment ID` to restrict strict checks to selected segments.
 Unlabelled draft steps are distinct from intentional `unknown`; `--allow-incomplete` only validates drafts and does not

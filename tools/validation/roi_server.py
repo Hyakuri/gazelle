@@ -80,7 +80,8 @@ class RoiApplication:
                 if previous_draft is not None:
                     atomic_json(self.draft_path.with_suffix('.json.bak'), previous_draft)
                 atomic_json(self.draft_path, draft)
-            return copy.deepcopy(document)
+            return dict(copy.deepcopy(document),complete=roi_regions.completed_document(self.regions_path) is not None,
+                        has_export=roi_regions.completion_path(self.regions_path).exists())
 
     def export(self, token, confirm_small=False):
         self.check_token(token)
@@ -95,7 +96,9 @@ class RoiApplication:
                 return dict(confirmation_required=True,small_regions=small)
             root = roi_regions.default_export_root(self.regions_path)
             outputs = render(self.regions_path, self.candidates_path, root, confirm_small=confirm_small)
-            return dict(images=len(outputs), output_root=str(root))
+            return dict(images=len(outputs), output_root=str(root),
+                        complete=roi_regions.completed_document(self.regions_path) is not None,
+                        has_export=roi_regions.completion_path(self.regions_path).exists())
 
 
 def make_handler(app):

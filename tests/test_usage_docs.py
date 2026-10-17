@@ -528,6 +528,10 @@ class UsageDocumentationTest(unittest.TestCase):
                           '--labels-path', '--allow-incomplete', 'roi_r2_trial',
                           '../tools/validation/ANNOTATION_GUIDE_CN.md'):
                 self.assertIn(token, text, str(path))
+        for path in (ENGLISH_README,ENGLISH_GUIDE):
+            self.assertIn('viewed only means displayed',self._read(path))
+        for path in (CHINESE_README,CHINESE_GUIDE):
+            self.assertIn('“已看”只表示显示过',self._read(path))
         for path in (ENGLISH_README, CHINESE_README, ENGLISH_GUIDE, CHINESE_GUIDE):
             text = self._read(path)
             for token in ('roi_regions.complete.json', 'cell_other', 'away', 'absent', 'unknown', '1–6', '1–9',
