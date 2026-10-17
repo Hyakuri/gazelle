@@ -14,7 +14,7 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 | current_task | `docs/collab/tasks/TASK-139-content-calibrated-sync.md`（用户本轮已批准 D18，见 Q-010） |
 | after_current | `docs/collab/tasks/TASK-102-spawn-frame-confirmation.md`，然后 `docs/collab/tasks/TASK-002-face-ray-sign-alignment.md`，然后结束本轮并把 `next_actor` 改为 `claude` |
 | environment | `Gazelle-next`：`C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe`（用户 2026-10-17 决定 D16）。现有 `Gazelle` 作为回退保留，不改动 |
-| last_pushed | `04096c4e2cdae8a2b7a8a5e23207b90abc750f88`（TASK-136 实现；其后报告提交以实时 Git 为准） |
+| last_pushed | `35a0a3a6973b62a4f5bf8f2f16d71a0b7c3514c0`（TASK-102 实现；其后报告提交以实时 Git 为准） |
 | last_accepted | `b527287`（2026-10-17 第 2 轮审查：此前全部提交已通过，包括 TASK-001、TASK-123 修复、TASK-135、TASK-137。其后的 TASK-133 只部分通过，TASK-134、TASK-121 的结论见下表） |
 | 更新 | 2026-10-17，Claude：第 2 轮审查完成；同步问题已查明，建议同步协议 r2（D18，待用户批准）。第 3 轮交 Codex，第一项为 TASK-138 |
 
@@ -97,7 +97,7 @@ Claude 实际运行的检查：完整离线门 562 项；29 个 MP4 分段 17,40
 | Codex 第 3 轮 | TASK-138 标注与区域工具的后续修复 | ready-for-review | 611 tests、两个 Node harness、300 步浏览器验证及 11/11 只读尾部复核通过；见任务 §2 |
 | Codex 第 3 轮 | TASK-136 Gazelle 输入预处理移到推理设备 | ready-for-review | 616 tests；6 次 300 帧 CUDA 对照通过，4K static 中位数降低 65.651%；见任务 §2 |
 | Codex 第 3 轮 | TASK-139 同步协议 r2：以 B 为基准的画面内容校准 | proposed（待 D18） | GZ-26；用户批准后执行；约 6 小时后台 CPU |
-| Codex 第 3 轮 | TASK-102 新轨迹首帧立即确认（D2） | ready | GZ-03 |
+| Codex 第 3 轮 | TASK-102 新轨迹首帧立即确认（D2） | ready-for-review | 633 tests；四次真实 30 帧对照，A/B 首帧 no_head 均 1→0；见任务 §2 |
 | Codex 第 3 轮 | TASK-002 面部射线与 roll 符号对齐 | ready | GZ-02 |
 | Codex 第 3 轮 | TASK-101 人脸与姿态关联修正（D1） | blocked | 等 TASK-102 审查通过；GZ-01 |
 | 用户 | 标注 26 段，约 2 小时 | 待前置 | 需 TASK-138、TASK-139 与正式区域都完成后，按新数据集标注 |

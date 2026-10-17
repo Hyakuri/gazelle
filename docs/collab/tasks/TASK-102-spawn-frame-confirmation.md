@@ -1,6 +1,6 @@
 # TASK-102：新轨迹首帧立即确认（决策 D2）
 
-状态：ready
+状态：ready-for-review（2026-10-17，待 Claude 与用户独立验收）
 创建：2026-10-15（Asia/Tokyo）　协调者：Claude　实现者：Codex　验收：用户（独立 checkout）
 问题来源：GZ-03（登记表 C007、C011）。设计：[2026-10-15 规范 §3](../../superpowers/specs/2026-10-15-face-pose-association-and-track-confirmation-design.md)。
 授权：用户 2026-10-15 批准 D2 按 Claude 的推荐执行。
@@ -94,16 +94,53 @@ git status --short
 
 ## 2. 实施报告（Codex 追加，不要修改上文）
 
-- 接手核对：
-- 提交与推送（SHA）：
-- 变更文件：
-- 命令、退出码、测试数、warnings 与 skips：
-- 证据类型：
-- 真实 smoke 结果与基线对比：
-- 外部活动：
-- 反证式复核（v1.1 §9）：
-- 未运行的检查、限制、阻塞：
-- 状态标签（v1.1 §12）：
+### 2026-10-17 实施与验证
+
+- TASK-139 的三个低优先级 CPU 扫描继续运行期间，在同一主线程执行本任务；不依赖同步输出，没有子代理。原始数据和正式 ROI 未改动。
+- 实现 `35a0a3a6973b62a4f5bf8f2f16d71a0b7c3514c0` — `Expose provisional heads on each track spawn frame`。11 文件：tracking/contracts/outputs、三组对应测试、usage docs 测试与四份用户文档。provider 已经通过 bridge 传递完整 perception，无须重复改写。
+- 四类行分流；pending 保存像素 bbox 和 spawn 帧，帧差 ≤2；按 IoU 降序/public ID/candidate index 贪心一对一关联。已知→新确认→spawn 的处理顺序，输出仍按候选顺序。重复 spawn 保留最初 age 并刷新 pending；失效、reset、close 清空 pending。provisional 不创建或刷新桥接，序列化始终是 bool。
+- 只读检查实际 `Gazelle-next` 的 trackers 2.6.1：高分匹配使用 `>=`、新 spawn 返回 −1，当前三项配置仍满足分类依据；新版未确认轨迹漏检后可能更早被清理，适配层 re-spawn 关联同样覆盖该情形。未访问运行中上游 tracker 的私有属性。
+
+#### 命令和结果
+
+解释器 `C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe`，字节码 `%TEMP%\gazelle-task-102-pycache`，输出 `gazelle_runs\task-102\`。
+
+| 命令 | 结果 |
+| --- | --- |
+| 新 spawn 测试和真实 ByteTrack 两帧测试（修改前） | exit 1，2 methods / 3 errors，均因首帧为空而 IndexError，实际复现 |
+| `python -m unittest tests.test_head_tracking tests.test_mediapipe_head_provider tests.test_outputs -q` | 首次 96 tests 中仅原 tracking schema 断言失败；按批准字段更新后通过 |
+| 聚焦五模块，加同期 PTS 修复两模块 | exit 0，179 tests / 3.498s / 0 skip |
+| `python -m compileall main.py gazelle tests tools` | exit 0 |
+| `python -m unittest discover -s tests -v` | exit 0，633 tests / 10.938s / 0 skip；含同期 TASK-139 相等 PTS 修复，尚不含其后 TASK-002 新测试 |
+| `python main.py --help`、`python main.py --list-models`、`git diff --check` | 均通过 |
+| `python ...\task-102\smoke.py` | 最终 exit 0；转换 + 四次模型运行均成功 |
+| 四个渲染结果 `ffprobe -v error -count_frames -show_streams -of json <video>` | exit 0，全部 640×360、30 帧；A 为 H.264，B 为 MPEG-4 |
+
+首次 smoke 把内部字段名误当 CLI 选项（`--draw-face-pose-ray` 等），在参数解析时 exit 2、`NETWORK_AUDIT=[]`，尚未加载模型。依据实际 parser 改为 `--face-pose-ray --pose-head-ray --head-box --face-box`，旧错误日志保留为 attempt 文件。没有为通过而修改环境。非致命输出：坏 MP4 单测提示、xFormers 不可用和 MediaPipe 日志初始化提示。
+
+#### 真实对照
+
+从自带 `assets/Sunny_1.gif` 用 FFmpeg `-vf fps=30,scale=640:360 -frames:v 30 -an -threads 2 -c:v libx264 -pix_fmt yuv420p` 生成仓库外 `sunny.mp4`。基线为 `git archive 3d07444` 的只读源码快照，之后为 `35a0a3a`；同一 Gazelle-next 环境与缓存，四次连续运行。
+
+公共参数：`--input <sunny.mp4> --output-dir <external> --cache-dir <repo>\models --device cuda --head-source mediapipe --max-frames 30 --save-rendered --face-pose-ray --pose-head-ray`。A 加 `--max-heads 1 --video-codec avc1`；B 加 `--max-heads 2 --video-codec mp4v --gazelle-head-mode all --gaze-render-mode all-predictions --head-box --face-box`。完整 argv/退出码见 `commands.json`，结果见 `comparison.json`。
+
+| 模式 | no_head（前→后） | 不同 person_id 数（前→后） | tracked_only 行（前→后） | 修复后 provisional 行 |
+| --- | --- | --- | --- | ---: |
+| A 保守 | 1 → 0 | 2 → 4 | 3 → 0 | 4 |
+| B 诊断 | 1 → 0 | 2 → 3 | 4 → 3 | 3 |
+
+两组各 30/30 observation/prediction 行；修复后第 0 帧已有头且 provisional=true。A gaze 为 ok 15 / no_gaze 15，B 为 ok 30。所有 tracking.provisional 都是 bool，全部 tracked_only 为 false。ID 数增加反映原先被隐藏的短暂 spawn，不是身份质量改善的证明。历史 2026-10-14 基线 A 为 ok14/no_gaze15/no_head1、B 为 ok29/no_head1；本次采用同环境、同新生成片段的基线，不能把历史环境和本次所有数值视为严格可比。
+
+#### 复核、活动和限制
+
+- 反证：同帧双 spawn 一对一；相同 IoU 以 ID/候选索引决定；远框及过期 pending 分配新 ID；低分 −1 不占 ID；重新 spawn age 不重置；provisional 下一帧漏检没有幽灵桥接。真实 trackers 两帧集成测试通过，无 skip。
+- 真实 CUDA、MediaPipe CPU、FFmpeg 转码/H.264 最终编码及 ffprobe 均发生。启动前检查 GPU 空闲；Python audit 阻止 Torch Hub 请求后缓存回退成功，无下载、缓存 size/mtime 改动、安装或 Conda 修改。原生 MediaPipe 遥测不在 Python audit 覆盖范围。
+- A 级：复用既有 fusion `_bbox_iou`，保持算法一致；以传入 tracker 的像素框关联。TrackedHeadCandidate.provisional 默认 false，兼容既有构造；provider 无额外代码改动。
+- 范围外：无；TASK-139 相等 PTS 修复单独提交为 `47694e5`。四份用户文档已同步，schema 测试锁定 tracking.provisional。
+- B 级：待独立审查拥挤/错配风险、ID 数变化与真实重复 spawn。TASK-101 的跨人融合/候选池问题仍不在本任务范围内。C 级：无。
+- 已执行全部契约检查；没有运行可选作业视频补充 smoke。所有媒体和结果在仓库外，不上传。
+
+**已实施、已静态检查、已实际运行；待 Claude 独立审查和用户独立 checkout 验收。**
 
 ## 3. 审查结论（Claude 追加）
 
