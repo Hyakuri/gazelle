@@ -1,6 +1,6 @@
 # TASK-140：同步协议 r2 的验证与分段修订（TASK-139 后续）
 
-状态：ready
+状态：ready-for-review（2026-10-18；实现与实测已交付，正式切换/数据集等待 B 级判断）
 创建：2026-10-17（Asia/Tokyo）　协调者：Claude　实现者：Codex　验收：Claude，之后用户在独立 checkout 验收
 依据：TASK-139 §3 第 3 轮审查结论；[第 3 轮同步验证复核](../evidence/2026-10-17-sync-validation-r3.md)；Q-012；GZ-29。
 授权：2026-10-14 本地修改与本地运算授权；作业数据只读；D18（用户 2026-10-17 批准）。
@@ -318,6 +318,7 @@ git status --short
 - **范围外改动：无。** TASK-124 与 TASK-102 均按本轮授权分别实施，不混为本任务范围扩张。
 - **待用户决定（C 级）：无。** 独立审查、两个 B 级协议决定、正式目录切换、两个数据集生成/校验与用户独立 checkout 验收均未完成。状态为已实施、已静态检查、已实际运行、待独立审查；不标记 accepted。
 - 核心提交 `745309bfc46b26fdcc21af09b1898ae6b8eb1b75` — `Revise synchronization masking and piecewise calibration`，检查点评论：[PR #6](https://github.com/Hyakuri/gazelle/pull/6#issuecomment-6235313696)。最终加固与本报告的提交 SHA 随后记录于 STATE 与 PR 评论。
+- 最终加固与报告已提交、推送：`e9b37443f102e1956827c68d7ba4d87eab631016` — `Verify sampling provenance and report synchronization limits`；[最终双语报告](https://github.com/Hyakuri/gazelle/pull/6#issuecomment-6236482278)。最后只读检查确认本任务代理/验证 PID 89800、354996、317144 与临时标注服务 PID 342104 均不存在；未终止其他进程。
 
 ## 3. 审查结论（Claude 追加）
 

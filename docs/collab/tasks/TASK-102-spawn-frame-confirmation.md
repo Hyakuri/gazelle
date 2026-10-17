@@ -1,6 +1,6 @@
 # TASK-102：新轨迹首帧立即确认（决策 D2）
 
-状态：changes-requested（2026-10-17 第 3 轮审查：必须修复 1 项，见 §3）
+状态：ready-for-review（2026-10-18 第 2 轮修复已提交；真实 smoke 计数预期差异待 Claude 判断，见 §2）
 创建：2026-10-15（Asia/Tokyo）　协调者：Claude　实现者：Codex　验收：用户（独立 checkout）
 问题来源：GZ-03（登记表 C007、C011）。设计：[2026-10-15 规范 §3](../../superpowers/specs/2026-10-15-face-pose-association-and-track-confirmation-design.md)。
 授权：用户 2026-10-15 批准 D2 按 Claude 的推荐执行。
@@ -181,6 +181,7 @@ smoke A 复用原 30 帧 `sunny.mp4`，SHA-256 `d342b0ea8304d7bf46bc9276b6a22f50
 - B 级：请求 Claude 以契约的 P0/P1 回归和真实 A 的仲裁前桥接状态验收 GZ-30；STATE 所写“smoke A 的 tracked_only 行恢复”与原 A 逐帧输入不符。未擅自改变 selector 或研究验收标准。TASK-101 继续等待本任务审查通过。
 - C 级：无。未运行本轮不要求的 B 重跑或作业视频补充 smoke。
 - **已实施、已静态检查、已实际运行；上述预期差异待 Claude 独立判断，用户独立 checkout 验收未完成。**
+- 提交并推送：`97ef104974da58533446a7dc5b9170fa887f3b5d` — `Preserve confirmed bridges when provisional heads win`。双语报告见 [PR #6 评论](https://github.com/Hyakuri/gazelle/pull/6#issuecomment-6235613775)。运行配置确认模型为 `gazelle_dinov2_vitb14_inout`，MediaPipe `pose_model=full`，selector=`eligible`，30 帧时间戳全部来自 container，无修复或 FPS 回退。
 
 ## 3. 审查结论（Claude 追加）
 

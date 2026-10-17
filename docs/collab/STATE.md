@@ -9,14 +9,26 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 | stage | 阶段 2：作业数据可用、多机同步、正确性修复，建立区域标注 |
 | branch | `feature/stage2-correctness`（基于 PR #5 head `bbec056`） |
 | pr | [#6](https://github.com/Hyakuri/gazelle/pull/6)（draft）；正文来源 `docs/collab/STAGE2_PR_BODY.md` |
-| writer | codex |
-| next_actor | codex |
-| current_task | `docs/collab/tasks/TASK-140-sync-validation-and-steps.md`（第 4 轮第一项，正式标注的前提） |
-| after_current | `docs/collab/tasks/TASK-124-annotation-hardening.md`，然后 `docs/collab/tasks/TASK-102-spawn-frame-confirmation.md`（第 2 轮修复），然后结束本轮并把 `next_actor` 改为 `claude`。TASK-140 的长时间 CPU 计算期间可以先做后两项 |
+| writer | none |
+| next_actor | claude |
+| current_task | `docs/collab/tasks/TASK-102-spawn-frame-confirmation.md`（已按授权完成 TASK-140 → TASK-124 → TASK-102 第 2 轮修复的执行与报告；三项待 Claude 审查） |
+| after_current | 第 4 轮执行结束，交回 Claude；先审查三项任务并处理 Q-014、Q-015、Q-016，再决定后续任务。正式数据集仍未生成，TASK-101 仍 blocked |
 | environment | `Gazelle-next`：`C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe`（用户 2026-10-17 决定 D16）。现有 `Gazelle` 作为回退保留，不改动 |
-| last_pushed | `a9e7676d0e8f778f72c41f30404923174e1c0d63`（全部实现及最终报告；其后仅本次 STATE 交接提交，以实时 Git HEAD 为准） |
+| last_pushed | `e9b37443f102e1956827c68d7ba4d87eab631016`（本轮全部实现及最终报告；其后仅任务状态/报告链接与本 STATE 交接提交，以实时 Git HEAD 为准） |
 | last_accepted | `1c761c5`。2026-10-17 第 3 轮审查：此前全部提交已通过，包括 TASK-121 与 TASK-138、TASK-136、TASK-134 的生成机制。TASK-133 的时间映射与同步检验部分由 TASK-139 取代。其后：TASK-139 部分通过；TASK-102 changes-requested；TASK-002 单独通过（`b24dd67`、`d9a4adc`） |
-| 更新 | 2026-10-17 22 时，Claude：第 3 轮审查完成；D18 已归档；Q-011、Q-012 已决定。第 4 轮交 Codex，第一项为 TASK-140。23 时：用户确认 Q-013 |
+| 更新 | 2026-10-18，Codex：第 4 轮执行结束，释放写入权并交 Claude。离线门 668 项通过；同步 7/7 通过，但 0911 时钟不足、0903 切点定位及 TASK-102 smoke 预期需 B 级判断。未切换正式数据 |
+
+## 第 4 轮交接记录（Codex，2026-10-18）
+
+- **执行范围**：主线程 Inline Execution，无子代理。TASK-140 长时间 CPU 期间完成 TASK-124 与 TASK-102 第 2 轮修复；三项已实施、测试、提交推送并分别发布双语报告，状态为 `ready-for-review`，不代表 Claude 或用户验收。最终相关代码离线门 **668 tests / 12.529s / 0 skip**；compileall main.py gazelle tests tools、help、list-models、diff-check 均通过。之后只改执行报告与状态。
+- **TASK-140**：七份 v3 拟合均合格；五会话保留 v2 代理与原来源，0903 三机重建、0911 三机新建。21 段候选代理共 **352,050 帧**，本轮新编码 108,180 帧；视频/旁注/SHA/解码/规格检查通过。25 张事件条图逐像素检查通过，Codex 目视抽查 11 张；全量独立目视仍待 Claude。同步按第 6 条 **7/7 通过**（20 对通过、0903 A–E 4 窗证据不足，推算 A−E=+0.015140 s）。
+- **正式数据交付仍阻塞**：总验证 **6/7 通过**，0911 时钟只有 **8/9 可评估**，低于 90%；0903 第一切点 23 个细化窗全无效，切点条图为空工位。未放宽门槛、换时钟样本或删除会话。旧 `proxies`、`timemaps`、`roi_r2_trial` 原路径保留；未创建 `roi_r2` 或正式 labels。新媒体分别留在 `proxies_v2_pending`（保留五会话）和 `proxies_v3_rebuild`（0903/0911），新映射/验证在 `timemaps_v3` / `sync_validation_v3`。
+- **TASK-124**：服务端只认已保存的已看范围；播放保存降频，暂停等边界立即保存；错误消息、区域完成状态与 remux 缺失 start_time 均已加固。真实浏览器试用保留 193/300 已看步，重开续播后完成；连续播放写盘间隔 1.032907–1.293548 s，暂停立即保存。只写外部临时试用副本，没有改正式标注。
+- **TASK-102 第 2 轮**：临时头胜出时保留已确认桥接，P0/P1 回归通过。真实 30 帧 CUDA/MediaPipe smoke 的模型与编码命令成功，但“原 A 三行 tracked_only 应恢复”的包装断言失败：这些帧实际被合法 provisional 头占用。真实仲裁前诊断确认桥接保留；没有为恢复计数改 selector。Q-016 待 Claude 澄清，TASK-101 保持 blocked。
+- **来源与保护**：最终补齐采样指纹并校验 21 份旧旁注/像素，未改写旧样本或生产来源。新代理保留 `745309b` 的生成指纹，不声称最终 guard 后重跑。40/40 来源/重封装 size/mtime 匹配；正式区域、完成标记、参考图、classes 哈希与既有导出一致。原始数据只读，20261016 未纳入。没有环境修改、安装、下载、媒体/标注/权重/缓存/凭据上传。
+- **真实活动**：TASK-140 仅 CPU、PyAV/OpenCV、真实 FFmpeg/ffprobe；低优先级长任务最多三进程。TASK-102 使用已有 `gazelle_dinov2_vitb14_inout` 缓存与 CUDA/MediaPipe，Python 审计阻断一次 Hub request 后走缓存；原日志与失败保留。普通沙盒预检与 yun Git/GitHub 授权例外分别记录。所有本轮长任务已退出、临时标注服务已结束，未清理未知/既有忽略文件。
+- **Claude 接手**：审查各任务 A 级决定；处理 Q-014 的未定位切点、Q-015 的同源帧时钟补读、Q-016 的 smoke 输入/预期差异；独立复跑与目视后再决定能否正式切换/生成数据集。没有新增 C 级问题，不需用户重做区域或认证。`last_accepted` 维持 `1c761c5`，用户独立 checkout 最终验收仍未完成。
+- 提交：`51659db` 协调文档，`745309b` TASK-140 核心，`2dc76be` TASK-124，`97ef104` TASK-102 修复，`e9b3744` 来源加固与最终报告。[TASK-140 最终及全轮报告](https://github.com/Hyakuri/gazelle/pull/6#issuecomment-6236482278)、[TASK-124](https://github.com/Hyakuri/gazelle/pull/6#issuecomment-6235471387)、[TASK-102](https://github.com/Hyakuri/gazelle/pull/6#issuecomment-6235613775)。最后提交仅任务状态/链接与本 STATE 交接，以远端 HEAD 为准。
 
 ## 第 3 轮审查结论（Claude，2026-10-17）
 
@@ -83,9 +95,9 @@ Claude 实际运行的检查：
 | Codex 第 3 轮 | TASK-102 新轨迹首帧立即确认（D2） | changes-requested | 必须修复 1 项（GZ-30），第 4 轮修复 |
 | Codex 第 3 轮 | TASK-002 面部射线与 roll 符号对齐 | accepted | Q-011 已解决 |
 | Claude | 审查第 3 轮 | 完成 | 见「第 3 轮审查结论」与第 3 轮同步验证复核 |
-| Codex 第 4 轮 | TASK-140 同步协议 r2 的验证与分段修订 | ready（本轮第一项） | GZ-29、Q-012；补齐 20260911，7 次录制全部通过后切换代理并生成两个数据集 |
-| Codex 第 4 轮 | TASK-124 标注工具加固 | ready | TASK-138 的应修项；正式标注前完成 |
-| Codex 第 4 轮 | TASK-102 第 2 轮修复 | changes-requested | 见 TASK-102 §3 |
+| Codex 第 4 轮 | TASK-140 同步协议 r2 的验证与分段修订 | ready-for-review | 同步 7/7 通过；0911 时钟 8/9、0903 第一切点无法细化，Q-014/Q-015 待决，未切换或生成数据集 |
+| Codex 第 4 轮 | TASK-124 标注工具加固 | ready-for-review | 已推送；离线与临时副本浏览器自测通过，待独立审查 |
+| Codex 第 4 轮 | TASK-102 第 2 轮修复 | ready-for-review | 桥接修复与回归通过；真实 smoke 计数预期差异见 Q-016 |
 | Codex 第 4 轮 | TASK-101 人脸与姿态关联修正（D1） | blocked | 等 TASK-102 审查通过；GZ-01 |
 | 待定 | 参考射线改为像素各向同性方向（GZ-28） | proposed | 第 3 阶段特征提取（TASK-141）之前；契约届时编写 |
 | 用户 | 标注 26 段，约 2 小时 | 待前置 | 需 TASK-140 与 TASK-124 通过审查，并生成正式数据集 `roi_r2` |
@@ -128,6 +140,7 @@ Claude 实际运行的检查：
 
 ## 给 Claude 的说明
 
+- **第 4 轮当前补充（Codex）**：先读上方交接与 Q-014 至 Q-016。两个新数据集尚未生成，不能执行下方 manifest 验收；TASK-102 的原 smoke A 计数期望也需先澄清。下方保留第 3 轮制定的审查要求，不将其默认为已满足。
 - `next_actor` 为 `claude` 时：按提交 SHA 审查 `last_accepted` 之后的任务，复跑离线门，核对真实检查的数字；逐项确认实施报告中的 A 级自主决定，处理 B 级问题（协作方案 §3.2）。
 - 审查 TASK-140：
   - 在 20260911 的新代理上抽缩略图，用 `gazelle_runs\claude-review-r3\sync\analyze_sync_r3.py` 复算。该脚本按“X 相对 Y”的约定输出，含屏蔽与不屏蔽两种。
@@ -144,6 +157,8 @@ Claude 实际运行的检查：
 - 字节码：Claude 自己运行 Python 时也用 `-X pycache_prefix`，不要用 `-I` 配合环境变量。
 
 ## 给用户的说明
+
+**2026-10-18 当前交接（Codex）**：第 4 轮已执行并交回 Claude，请对 Claude 说“继续”。正式标注仍未就绪；没有新的用户决策请求，区域无需重画。下方是第 3 轮交接时的说明，其中“对 Codex 说继续”的步骤已完成。
 
 第 3 轮审查已完成：
 
@@ -187,6 +202,9 @@ Claude 实际运行的检查：
 | Q-011 | B | Codex | TASK-002：原始 GIF 与转码视频第 15 帧均无 face head-pose；原图旋转组漏检，转码旋转组 roll 与方向检查通过 | TASK-002 §2；外部 task-002/comparison.json、extra-comparison.json | 已解决（2026-10-17）。Claude 复跑：第 15 帧能否检出头姿取决于输入编码，不是代码缺陷。用 2026-10-14 的验收转码，第 15 帧射线 (−0.902, +0.431)，旋转后 roll 变化 +19.9° 与 −19.3°。验收输入与旋转判据按 TASK-002 §3 澄清，阈值未降低 |
 | Q-012 | B | Codex | TASK-139 协议边界及真实失败：MAD 可掩盖少数台阶；正台阶可能无解；B 时间轴与各自 OSD 容差冲突；新代理六对残差超限 | TASK-139 §2 最终报告；外部 task-139/protocol-edge-cases.json、0911-split-diagnostics.json、final-output-audit.json | 0911 E：53 窗、MAD=0.101424>0.08，最佳分段比=0.592274；同样本互相关与参考一致。新代理 0903 E-B/A-E、0925 A-B/A-E、1009 A-B/E-B 残差失败；1002 A 三项 +2.8/+2/+2 s、1009 A 两项 +1.8/+1.4 s 的 OSD 超限。18/21 代理、12/18 残差对、49/54 时钟通过，七会话数据集阻塞。未改门槛、删窗口或会话；推荐 Claude 先复核源帧/固定产物再修订契约，尚未暂定实施（以上为 Codex 报告的原状态）。已决定（2026-10-17）：（1）分段：增加尾部条件，总是尝试切分，按 L1 选切点；（2）台阶处：在各摄像机自身基础时间上显式计算最终时间，规定重叠与缺口，并标记 `sync_uncertain`；（3）时钟抽查：与该摄像机自己的显示时钟比较。六对残差失败来自测量方法（GZ-29），不是代理时间轴。见第 3 轮同步验证复核 §6 与 TASK-140 |
 | Q-013 | C | Claude | 确认：正式区域中 `work_area` 的类型由“目标”改为“工作区”（cell），是用户批准的唯一修正。批准由 Codex 转述，Claude 只读核对，确认这是唯一的语义变化 | TASK-138 §2、§3 | 已确认（2026-10-17）：用户直接回复 Claude“是的，我确认” |
+| Q-014 | B | Codex | 0903 E 第一切点 23 个细化短窗均无效，粗切点 b=961.247810 s 的 ±10 s 定位无法验证；切点条图为空工位 | TASK-140 §2；外部 task-140/refinement-reference.json、proposed-exclusion-impact.json | 待 Claude：参考算法复算一致。推荐按相邻有效长窗界限（必要时加半窗裕量）保守扩大不确定区间后排除抽样；固定种子四段起点不变。未暂定采用，未改正式数据 |
+| Q-015 | B | Codex | 0911 时钟只有 8/9 可评估；E 固定 k=15804 及原定四个邻帧的代理 OCR 均缺失。同源精确 PTS 可读，d=+0.023192 s | TASK-140 §2；外部 task-140/clock-diagnostic.json/.png/.log | 待 Claude：推荐决定是否允许带来源的同一源帧/PTS 补读；当前原验证仍失败，未改 OCR、阈值或固定样本。切换与数据集暂停 |
+| Q-016 | B | Codex | TASK-102 修复后真实 A 的旧三行 tracked_only 未恢复，因对应帧现在有合法 provisional 观测；契约 P0/P1 回归与真实仲裁前桥接诊断通过 | TASK-102 §2 第 2 轮；外部 task-102-r2/smoke.py、bridge_diagnostic.py 及日志 | 待 Claude：推荐按 P0/P1 契约及仲裁前证据验收桥接保护，澄清 smoke A 计数预期；原包装断言失败保留，未改 selector/验收标准，TASK-101 仍 blocked |
 
 ## 已完成
 
