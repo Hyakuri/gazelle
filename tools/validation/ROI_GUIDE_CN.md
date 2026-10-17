@@ -36,12 +36,17 @@ python -m tools.validation.roi_server --candidates "$data\roi\candidates.json" -
 自动保存使用原子替换，上一版为 `.json.bak`。未闭合草稿单独保存在 `.draft.json`，
 重启同一命令后恢复。保存失败或自相交时顶部显示“未保存”，请修改或撤销，不要直接关闭。
 区域文件只在用户开始操作后创建；仅打开页面不会生成区域。自动保存的文件仍是草稿，
-只有成功导出后的完成标记才表示完成。标记包含版本、完成时间与区域文件 SHA-256；
+只有成功导出后的完成标记才表示完成。version 2 标记包含完成时间、区域文件 SHA-256、
+`export_root` 导出目录，以及 `exports` 中 `roi_reference.png`、`classes.json` 的 SHA-256；
 后续修改或开始新草稿使完成状态失效，需重新导出。下游使用 `roi_regions.completed_document()`
-检查完成状态。重复保存相同内容不轮换备份。
+检查完成状态与全部导出哈希。页面显示“已导出、未修改”或“需要重新导出”。旧 version 1 标记需重新导出。
+重复保存相同内容不轮换备份。面积小于画面 0.5% 的区域在导出时提示，用户确认后仍可导出，不设硬性下限。
 
 审查或试用请加 `--regions-path "$data\roi\review_trial.json" --annotator reviewer`。
 该文件的草稿与备份同名派生，导出放到 `review_trial_export`，不覆盖正式区域和参考图。
+命令行渲染可用 `--out-root` 指定其他导出目录；省略时，`roi_regions.json` 导出到文件旁，
+其他文件名导出到 `<stem>_export/`。完成标记始终写在区域 JSON 旁；抽样只读取标记指明的目录并核对哈希。
+小区域的 CLI 导出需显式 `--confirm-small`。服务端按 schema 保存区域行，丢弃多余字段。
 
 也可单独校验和导出：
 

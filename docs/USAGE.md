@@ -594,9 +594,14 @@ colors. Export requires 1–6 targets and exactly one cell, with no unfinished d
 Digit keys follow target drawing order, then `cell_other`, `away`, `absent` (at
 most 1–9); `unknown` is 0. Deleting and redrawing a target changes that order.
 Autosave alone does not complete annotation: successful export writes
-`roi_regions.complete.json` (`version`, `completed_at`, `regions_sha256`). Later
+`roi_regions.complete.json` (version 2, `completed_at`, `regions_sha256`, `export_root`,
+and `exports` hashes for `roi_reference.png` and `classes.json`). Later
 edits invalidate completion until re-export. Downstream tools use
-`roi_regions.completed_document()` to check the marker and file hash.
+`roi_regions.completed_document()` to check the marker and all file hashes.
+The page shows completion status and asks for confirmation of regions below 0.5%
+of image area. CLI rendering accepts `--confirm-small` and optional `--out-root`;
+without `--out-root`, `roi_regions.json` exports beside itself and other filenames
+export to `<stem>_export/`. The completion marker always stays beside the region JSON.
 
 Clock commands, from the repository root using the same external `$data`:
 
@@ -641,34 +646,47 @@ Three-view annotation, from the repository root in Gazelle-next:
 
 ```powershell
 $dataset = 'C:\Users\yun\Documents\Claude_Code\gazelle_validation\roi_r2_trial'
-python -m tools.validation.sample_segments --proxies-root "$data\proxies" --dataset-root $dataset --regions-path "$data\roi\roi_regions.json"
+python -m tools.validation.sample_segments --proxies-root "$data\proxies" --dataset-root $dataset
 python -m tools.validation.extract_frames --dataset-root $dataset
 python -m tools.validation.extract_frames --dataset-root $dataset --validate-only
 python -m tools.validation.annotate_server --dataset-root $dataset --labels-path "$dataset\review_trial.json" --annotator reviewer
 # After annotation and stopping the local server:
 python -m tools.validation.labels validate --dataset-root $dataset --labels-path "$dataset\review_trial.json"
+# Strict pilot check; other segments receive structural checks:
+python -m tools.validation.labels validate --dataset-root $dataset --labels-path "$dataset\review_trial.json" --segment 20260911_pilot
 ```
 
 These tools use no model, GPU, downloads, external network or FFmpeg executable.
 Extraction streams CPU OpenCV frames at below-normal priority. Defaults use seed
 20261015, four strata per session (two below 45 minutes), 60-second segments and
 5 Hz steps. Segments with more than two seconds of gap steps are redrawn up to
-ten times; the fixed pilot is listed first and excluded from evaluation.
+ten times; pilot overlaps also trigger a recorded redraw. The fixed pilot is listed
+first and excluded from evaluation. Each session uses `seed + int(session)`;
+`--sessions` defaults to 20260821 20260828 20260903 20260911 20260925 20261002 20261009.
+Other sessions are ignored with a message; the manifest records selected sessions.
 Every proxy and extracted frame is bound by SHA-256.
 
-Regions must pass their completion-marker/hash check to supply classes and a
-reference image. Until then, use the `roi_r2_trial` dataset with default classes;
+Explicit `--regions-path` requires completed regions and valid export hashes;
+otherwise sampling fails. Classes and reference bytes come only from the marker's
+export directory, with hashes checked before copying. Omit `--regions-path` to use
+the `roi_r2_trial` dataset with default classes;
 when regions are ready, create a fresh `roi_r2` dataset for formal annotation.
 Existing datasets are refused unless `--overwrite` is explicit; this preserves
 the entire previous directory under a timestamped backup name. Formal labels
-default to `labels.json`; use `--labels-path` for reviews. Loading alone creates
-no labels. Changes autosave atomically with a rolling `.bak`, reject stale or
-externally changed labels, and resume at the first unlabelled step.
+default to `labels.json`; use `--labels-path` for reviews. Displaying a loaded image
+records a viewed step and creates/saves labels. Changes autosave atomically with a
+rolling `.bak` and reject stale or externally changed labels. Resume chooses the
+first unfinished segment, then its first unseen step, first null step, or step 0.
 
 The editor provides playback, step controls, number-key change points, deletion,
 undo, a colour timeline and other-person intervals. It waits for the current
-image before accepting a judgment. Unlabelled draft steps are distinct from
-intentional `unknown`; `--allow-incomplete` only validates drafts and does not
+image before accepting a judgment. Version 2 labels record merged, monotonically
+growing `viewed_ranges`. Unseen steps keep a stripe texture even when labelled.
+Only **本段完成** explicitly writes `finished_at`, after all steps have been viewed
+and labelled; changing a label or other-person range clears it. Version 1 labels
+are rejected with instructions to reannotate. Strict validation requires all three
+conditions; repeat `--segment ID` to restrict strict checks to selected segments.
+Unlabelled draft steps are distinct from intentional `unknown`; `--allow-incomplete` only validates drafts and does not
 certify completion. See the [Chinese annotation guide](../tools/validation/ANNOTATION_GUIDE_CN.md).
 All videos, frames and labels remain outside Git and must not be uploaded.
 

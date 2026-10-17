@@ -54,14 +54,17 @@ class AnnotationApplication:
                 if hash_file(reference)!=expected:raise ValueError('ROI reference changed')
                 return 200,reference.read_bytes(),'image/png'
         if method=='POST' and path=='/api/save':
-            if not secrets.compare_digest(str(token).encode(),self.token.encode()):
-                raise PermissionError('Invalid local editor token')
+            self.check_token(token)
             return self.json(self.store.update(payload))
         return 404,b'{}','application/json; charset=utf-8'
 
     @staticmethod
     def json(value):
         return 200,json.dumps(value,ensure_ascii=False).encode('utf-8'),'application/json; charset=utf-8'
+
+    def check_token(self,token):
+        if not secrets.compare_digest(str(token).encode(),self.token.encode()):
+            raise PermissionError('Invalid local editor token')
 
 
 def make_handler(app):
@@ -86,6 +89,7 @@ def make_handler(app):
             try:
                 payload=None
                 if method=='POST':
+                    app.check_token(self.headers.get('X-Editor-Token',''))
                     length=int(self.headers.get('Content-Length','0'))
                     if self.headers.get('Content-Type')!='application/json' or not 0<length<=1024*1024:
                         raise ValueError('Expected JSON up to 1 MiB')

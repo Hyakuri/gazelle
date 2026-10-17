@@ -186,21 +186,49 @@ def completion_path(path):
     return Path(path).with_suffix('.complete.json')
 
 
-def mark_complete(path, expected_sha256=None):
+def default_export_root(path):
+    path=Path(path)
+    return path.parent if path.name=='roi_regions.json' else path.parent/(path.stem+'_export')
+
+
+def small_regions(payload):
+    result=[]
+    for row in payload['regions']:
+        points=row['polygon']
+        area=abs(sum(a[0]*b[1]-b[0]*a[1] for a,b in zip(points,points[1:]+points[:1])))/2
+        if area<.005:result.append(dict(key=row['key'],name_zh=row['name_zh'],area_fraction=area))
+    return result
+
+
+def mark_complete(path, expected_sha256=None, out_root=None):
     validate_complete(load(path))
     digest = hash_file(path)
     if expected_sha256 is not None and expected_sha256 != digest:
         raise ValueError('Regions changed during export; export again')
-    atomic_json(completion_path(path), dict(version=1,
+    root=Path(out_root if out_root is not None else default_export_root(path)).resolve()
+    exports={name:hash_file(root/name) for name in ('roi_reference.png','classes.json')}
+    if json.loads((root/'classes.json').read_text(encoding='utf-8'))!=make_classes(load(path)):
+        raise ValueError('Exported classes differ from regions')
+    atomic_json(completion_path(path), dict(version=2,export_root=str(root),exports=exports,
                 completed_at=datetime.now(timezone.utc).isoformat(), regions_sha256=digest))
+
+
+def completed_exports(path):
+    marker=json.loads(completion_path(path).read_text(encoding='utf-8'))
+    if type(marker.get('version')) is not int or marker['version']!=2:
+        raise ValueError('Export completion marker version 2 required; export again')
+    root=Path(marker['export_root'])
+    if not root.is_absolute() or set(marker['exports'])!={'roi_reference.png','classes.json'}:
+        raise ValueError('Invalid export completion marker')
+    for name,digest in marker['exports'].items():
+        if hash_file(root/name)!=digest:raise ValueError('Export hash mismatch: '+name)
+    return marker
 
 
 def completed_document(path):
     """Return only the unchanged document recorded by a successful export."""
     try:
-        marker = json.loads(completion_path(path).read_text(encoding='utf-8'))
-        if type(marker.get('version')) is not int or marker['version'] != 1:
-            return None
+        marker = completed_exports(path)
         datetime.fromisoformat(marker['completed_at'])
         if marker['regions_sha256'] != hash_file(path):
             return None

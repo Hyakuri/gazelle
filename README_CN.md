@@ -322,7 +322,11 @@ python main.py `
 ### 研究数据工具
 
 本机标注工具抽取三视角 60 秒片段与逐步 JPEG，在 `127.0.0.1` 提供自动保存的浏览器界面。
-已完成的区域定义提供类别，否则生成默认类别试用数据集。仅使用 CPU，不启动 FFmpeg
+已完成的区域定义提供类别；省略 `--regions-path` 才生成默认类别试用数据集，显式指定未完成文件会报错。
+各会话独立使用 `seed + int(session)`，`--sessions` 默认只含七次已批准录制，正式片段不与 pilot 重叠。
+标注使用 version 2：`viewed_ranges` 记录实际显示的步，未看部分保留斜线纹理；全部看过且有类别后，
+点击“本段完成”才写入 `finished_at`。修改类别或他人区间会清除完成状态。
+`labels validate --segment ID` 只严格检查指定段，可重复给出。仅使用 CPU，不启动 FFmpeg
 可执行程序，不使用模型、GPU、下载或外部网络。入口见[用法](docs/USAGE_CN.md#15-研究数据工具)
 与[标注指南](tools/validation/ANNOTATION_GUIDE_CN.md)。
 
@@ -348,7 +352,10 @@ python main.py `
 先画目标区域，最后画工作区；重叠处点击选中最小区域，顶点始终显示在工作区上方。
 导出要求 1–6 个目标区域与恰好一个工作区。数字键按目标绘制顺序分配，之后为
 `cell_other`、`away`、`absent`（最多 1–9）；`unknown` 为 0。自动保存仍是草稿：
-成功导出才写入含时间与区域 SHA-256 的 `roi_regions.complete.json`；修改后需重新导出才算完成。
+成功导出才写入含时间与区域 SHA-256 的 `roi_regions.complete.json`；version 2 标记还绑定
+`export_root`、`roi_reference.png` 与 `classes.json` 的 SHA-256，抽样复制前核对二者。
+CLI 的 `--out-root` 指定导出目录；默认正式区域导出到 JSON 旁，其他文件名导出到 `<stem>_export/`。
+页面显示完成状态，面积小于画面 0.5% 的区域需确认。修改后需重新导出才算完成。
 
 ### 视频推理
 

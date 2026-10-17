@@ -12,20 +12,25 @@
 conda activate Gazelle-next
 $data = 'C:\Users\yun\Documents\Claude_Code\gazelle_data\workdata'
 $dataset = 'C:\Users\yun\Documents\Claude_Code\gazelle_validation\roi_r2_trial'
-python -m tools.validation.sample_segments --proxies-root "$data\proxies" --dataset-root $dataset --regions-path "$data\roi\roi_regions.json"
+python -m tools.validation.sample_segments --proxies-root "$data\proxies" --dataset-root $dataset
 python -m tools.validation.extract_frames --dataset-root $dataset
 python -m tools.validation.extract_frames --dataset-root $dataset --validate-only
 ```
 
 正式区域必须有与当前文件 SHA-256 一致的完成标记，以及至少一个目标和恰好一个工作区。
-工具通过 `roi_regions.completed_document()` 检查后，从区域生成类别并复制 `roi_reference.png`。
-区域尚未完成时使用 `default_classes.json`，数据集只供试用。正式区域就绪后把 `$dataset`
-改为 `...\gazelle_validation\roi_r2` 重新生成；旧试用标注不会自动变成正式标注。
+工具通过 `roi_regions.completed_document()` 检查 version 2 完成标记，只从标记的 `export_root`
+复制 `classes.json` 和 `roi_reference.png`，复制前核对二者 SHA-256。
+省略 `--regions-path` 时使用 `default_classes.json`，数据集只供试用；显式给出未完成区域时直接报错。
+正式区域和同步代理就绪后，把 `$dataset` 改为 `...\gazelle_validation\roi_r2`，抽样命令加
+`--regions-path "$data\roi\roi_regions.json"` 重新生成；旧试用标注不会自动变成正式标注。
 
 抽样只读取代理旁注、会话信息与哈希，不解码视频、不调用 FFmpeg。固定种子为 `20261015`，
-每会话等分四层，每层均匀随机取一个完整 60 秒片段；不足 45 分钟时取两层。
+各会话独立使用 `seed + int(session)`，等分四层，每层均匀随机取一个完整 60 秒片段；不足 45 分钟时取两层。
+`--sessions` 默认只含 20260821 20260828 20260903 20260911 20260925 20261002 20261009；
+其他会话打印提示后忽略。manifest 记录参与会话。自选会话列表仍需包含固定 pilot 所在会话。
 若任一机位标记缺口的时间步合计超过 2 秒（同一步只计一次），在同层最多重抽 10 次，记录每次尝试；耗尽则失败，不降低标准。
 另加入画面时钟 2026-09-07 22:20:00 的一分钟 pilot，置于列表最前，排除于正式评估。
+正式片段与 pilot 重叠时在同层重抽，并在 attempts 中记录 `pilot_overlap`。
 
 目标目录已存在时拒绝覆盖。显式 `--overwrite` 会把旧目录整体改名为带时间的 `.backup-...`
 再创建新数据集，保留旧帧和标注。不要把数据集根设为仓库、代理根或其上级。
@@ -43,8 +48,10 @@ python -m tools.validation.annotate_server --dataset-root $dataset --annotator y
 
 浏览器打开终端显示的 `127.0.0.1` 地址，默认端口 8766。页面资源内联，无外部 URL；服务只绑定本机。
 默认写入 `$dataset\labels.json`。每次修改自动保存，上一版保存在 `labels.json.bak`；看到“已保存到本机”
-后再关闭页面。终端 Ctrl+C 关闭服务，之后用同一命令重新打开，会定位到首个未标注步。
-仅加载页面不会创建正式标注文件。不同数据集或类别配置的标注不能混用，哈希不一致时拒绝续标。
+后再关闭页面。终端 Ctrl+C 关闭服务，之后重新打开，会定位到首个未完成段的首个未看步；
+全部看过时找首个 null 步，否则停在第 0 步。画面加载并显示后自动记录已看步并保存文件。
+不同数据集或类别配置的标注不能混用，哈希不一致时拒绝续标。
+标注 schema 为 version 2；旧 version 1 明确拒绝，需用新工具重新标注，没有自动迁移。
 
 审查或试用请用独立路径：
 
@@ -72,8 +79,10 @@ python -m tools.validation.annotate_server --dataset-root $dataset --labels-path
 | 6 | `absent` | 作业者不在工位 |
 | 0 | `unknown` | 无法判断；这是一项有效标注 |
 
-灰色斜线是“尚未标注”（草稿内为 null），与主动选择 `unknown` 不同。只有每步都已选择类别，
-片段才有完成时间。区域参考存在时可展开查看；没有参考图时显示文字定义。
+未标注在草稿内为 null，与主动选择 `unknown` 不同。斜线表示“尚未看过”，即使已有类别也保留。
+`viewed_ranges` 记录实际完整显示过的步并合并区间，只增不减；跳过的步不会被记为已看。
+全部步已看过且有类别后，“本段完成”按钮才可用；点击才写入 `finished_at`。
+随后修改类别或他人入镜区间会清除完成状态，需要再次确认。区域参考存在时可展开查看。
 
 ## 4. 操作
 
@@ -81,7 +90,7 @@ python -m tools.validation.annotate_server --dataset-root $dataset --labels-path
 - 注视目标改变时按数字键：从当前步开始标注，直到下一个已有变化点。也可点击类别按钮。
 - 点击彩色时间轴、拖动滑块或点击变化点按钮定位。Delete 删除当前步的变化点；首步删除后恢复未标注。
 - Ctrl+Z 或“撤销”恢复最近一次修改；撤销同样立即保存。刷新页面后撤销栈清空，已保存内容仍保留。
-- “下一个未标注”寻找尚未选择类别的位置；完成所有片段后运行严格校验。
+- “下一个未标注”只寻找尚未选择类别的位置；每段仍需看完全部步并点击“本段完成”，之后跳到下一未完成段。
 - 在第二个人出现时点击“他人入镜开始”，最后可见的一步点击“结束（含当前步）”。相邻/重叠区间合并；
   点击已保存区间旁的 × 删除。尚未结束的起点只保留在当前页面，切换片段前必须结束或取消。
 - 画面加载完成前类别按钮禁用，数字键和他人入镜标记也会等待；加载失败时暂停播放。
@@ -93,9 +102,12 @@ python -m tools.validation.annotate_server --dataset-root $dataset --labels-path
 python -m tools.validation.labels validate --dataset-root $dataset
 # 试用文件：
 python -m tools.validation.labels validate --dataset-root $dataset --labels-path "$dataset\review_trial.json"
+# 只严格检查 pilot，其余段只检查结构；可重复给出 --segment：
+python -m tools.validation.labels validate --dataset-root $dataset --labels-path "$dataset\review_trial.json" --segment 20260911_pilot
 ```
 
-严格校验要求每个 manifest 片段的所有步骤由合法类别区间恰好覆盖一次、无重叠，元数据与数据集一致。
+严格校验要求每个指定段有 `finished_at`、`viewed_ranges` 覆盖全部步、类别没有 null；
+类别区间恰好覆盖一次、无重叠，元数据与数据集一致。不带 `--segment` 时检查全部段。
 `--allow-incomplete` 仅检查草稿结构，不能代表标注完成。校验只读取 JSON，不解码视频、不调用 FFmpeg。
 `labels.expand_runs()` 可将区间展开为逐步数组；数组不另存为正式标注。
 

@@ -317,8 +317,14 @@ python main.py `
 
 The local annotation toolkit samples 60-second three-view segments, extracts
 JPEG steps, and serves an autosaving browser editor at `127.0.0.1`. Completed
-region definitions supply the classes; otherwise it creates a default-class
-trial dataset. It uses CPU only, with no FFmpeg executable, model, GPU, downloads
+region definitions supply the classes. Omit `--regions-path` for a default-class
+trial dataset; an explicit unfinished region file is rejected. Each session uses
+`seed + int(session)` independently; `--sessions` defaults to the seven approved dates
+and formal segments never overlap the pilot. Labels use version 2: `viewed_ranges`
+records displayed steps, unseen steps retain stripes, and **本段完成** explicitly
+writes `finished_at` only after every step has been viewed and labelled. Editing
+labels or other-person ranges clears completion. `labels validate --segment ID`
+strictly checks just that segment; repeat the option for several. It uses CPU only, with no FFmpeg executable, model, GPU, downloads
 or external network. See [usage](docs/USAGE.md#15-research-data-tools) and the
 [annotation guide](tools/validation/ANNOTATION_GUIDE_CN.md).
 
@@ -352,7 +358,12 @@ the smallest region, with its vertex handles above the cell. Export requires
 1–6 targets and exactly one cell. Digit keys follow target drawing order, then
 `cell_other`, `away`, `absent` (at most 1–9); `unknown` is 0. Autosave is a draft:
 successful export writes `roi_regions.complete.json` with a timestamp and region
-SHA-256. Editing invalidates completion until the next export.
+SHA-256. Marker version 2 also binds `export_root` and the SHA-256 of
+`roi_reference.png` and `classes.json`; sampling verifies both before copying.
+`--out-root` selects the CLI export directory; otherwise formal regions export
+beside their JSON and other filenames export to `<stem>_export/`. The page displays
+completion status, and regions below 0.5% of the image require confirmation.
+Editing invalidates completion until the next export.
 
 ### Video Inference
 

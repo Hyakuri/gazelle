@@ -7,7 +7,7 @@ import uuid
 from PIL import Image, ImageDraw, ImageFont
 from tools.workdata.common import atomic_json, hash_file, source_path
 from .extract_roi_candidates import validate_candidates
-from .roi_regions import load, make_classes, mark_complete, pixel_point, reference_matches, validate_complete, validate_draft
+from .roi_regions import load, make_classes, mark_complete, pixel_point, reference_matches, validate_complete, validate_draft, default_export_root, small_regions
 
 
 def find_font(path=None):
@@ -53,9 +53,12 @@ def _save_png(image, path):
         temporary.unlink(missing_ok=True)
 
 
-def render(regions_path, candidates_path, out_root, font_path=None):
+def render(regions_path, candidates_path, out_root=None, font_path=None, confirm_small=False):
     digest = hash_file(regions_path)
     payload = validate_complete(load(regions_path))
+    small=small_regions(payload)
+    if small and not confirm_small:
+        raise ValueError('Regions below 0.5% need confirmation (--confirm-small): '+', '.join(r['key'] for r in small))
     draft_path = Path(regions_path).with_suffix('.draft.json')
     if draft_path.exists():
         if validate_draft(json.loads(draft_path.read_text(encoding='utf-8')), payload)['region'] is not None:
@@ -64,7 +67,7 @@ def render(regions_path, candidates_path, out_root, font_path=None):
     matches = [row for row in manifest['candidates'] if reference_matches(payload['reference'], row)]
     if len(matches) != 1:
         raise ValueError('Reference must match exactly one candidate image')
-    out_root = Path(out_root)
+    out_root = Path(out_root) if out_root is not None else default_export_root(regions_path)
     font = find_font(font_path)
     selected = {'roi_reference.png': matches[0]}
     sessions = set()
@@ -83,7 +86,7 @@ def render(regions_path, candidates_path, out_root, font_path=None):
                 rendered.close()
         outputs.append(str(path))
     atomic_json(out_root / 'classes.json', make_classes(payload))
-    mark_complete(regions_path, expected_sha256=digest)
+    mark_complete(regions_path, expected_sha256=digest, out_root=out_root)
     return outputs
 
 
@@ -91,10 +94,11 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description='Render the reference, session overlays and annotation classes.')
     parser.add_argument('--regions-path', type=Path, required=True)
     parser.add_argument('--candidates', type=Path, required=True)
-    parser.add_argument('--out-root', type=Path, required=True)
+    parser.add_argument('--out-root', type=Path)
+    parser.add_argument('--confirm-small', action='store_true', help='Confirm regions below 0.5% of the image')
     parser.add_argument('--font', type=Path)
     args = parser.parse_args(argv)
-    outputs = render(args.regions_path, args.candidates, args.out_root, args.font)
+    outputs = render(args.regions_path, args.candidates, args.out_root, args.font, args.confirm_small)
     print('Rendered {} references; wrote classes.json'.format(len(outputs)))
     return 0
 

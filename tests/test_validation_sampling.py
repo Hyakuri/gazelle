@@ -6,12 +6,46 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from tools.validation.sample_segments import create_dataset, sample_session, validate_manifest
+from tools.validation.sample_segments import create_dataset, sample_session, validate_manifest, plan, PILOT_TIME
 from tools.validation import roi_regions
 from tests.test_validation_roi import document
 
 
 class SamplingTest(unittest.TestCase):
+    def test_session_seeds_ignore_other_sessions_redraws_and_exclude_pilot(self):
+        dates=['20260821','20260911']
+        def read(path):
+            date=path.parent.name
+            session=dict(session=date,grid=dict(t0=PILOT_TIME-100 if date=='20260911' else PILOT_TIME-90000,N=18000,step_hz=5.,step=.2),
+                         cameras={c:dict(path='fake',sha256='a'*64) for c in ('cam_a','cam_b','cam_e')},
+                         time_map_version=1,time_map_sha256='a'*64)
+            return session,[False]*18000
+        with tempfile.TemporaryDirectory() as tmp, patch('tools.validation.sample_segments.read_session',side_effect=read) as reader:
+            root=Path(tmp)
+            for date in dates+['20261016']:
+                (root/date).mkdir();(root/date/'session.json').touch()
+            first=plan(root,sessions=dates)
+            def extra_draw(session,gaps,rng,*args):
+                if session['session']=='20260821':rng.random()
+                return sample_session(session,gaps,rng,*args)
+            with patch('tools.validation.sample_segments.sample_session',side_effect=extra_draw):
+                second=plan(root,sessions=dates)
+            self.assertEqual(first['sessions'],dates)
+            self.assertFalse(any(call.args[0].parent.name=='20261016' for call in reader.call_args_list))
+            self.assertEqual([r for r in first['segments'] if r['session']=='20260911'],
+                             [r for r in second['segments'] if r['session']=='20260911'])
+            pilot=first['segments'][0]
+            for row in first['segments'][1:]:
+                if row['session']==pilot['session']:
+                    self.assertFalse(row['start_frame']<pilot['end_frame_exclusive'] and pilot['start_frame']<row['end_frame_exclusive'])
+        class Draws:
+            values=iter([100,500,5000])
+            def randint(self,a,b):return next(self.values)
+        session,_=read(Path('20260911/session.json'));session['grid']['N']=9000
+        rows=sample_session(session,[False]*9000,Draws(),excluded=[(100,400)])
+        self.assertEqual(rows[0]['start_frame'],500)
+        self.assertTrue(rows[0]['attempts'][0]['pilot_overlap'])
+
     def test_seeded_strata_cover_whole_session_without_content_selection(self):
         session=dict(session='test',grid=dict(t0=100.,N=18000,step_hz=5.,step=.2),
                      cameras={},time_map_version=1,time_map_sha256='a'*64)
@@ -60,19 +94,28 @@ class SamplingTest(unittest.TestCase):
             payload=document()
             payload['regions'].append(dict(payload['regions'][0],key='work_cell',kind='cell',color='#9b59b6'))
             roi_regions.save(regions,payload)
-            first=create_dataset(base/'proxies',dataset,regions_path=regions)
+            with self.assertRaisesRegex(ValueError,'completed'):
+                create_dataset(base/'proxies',dataset,regions_path=regions)
+            first=create_dataset(base/'proxies',dataset)
             self.assertEqual(first['classes_source'],'default-trial')
             self.assertIsNone(first['regions_sha256'])
             (dataset/'labels.json').write_text('preserved user labels')
-            roi_regions.mark_complete(regions)
-            (base/'roi_reference.png').write_bytes(b'synthetic reference')
+            exported=base/'custom';exported.mkdir()
+            (exported/'roi_reference.png').write_bytes(b'synthetic reference')
+            (exported/'classes.json').write_text(json.dumps(roi_regions.make_classes(payload)))
+            roi_regions.mark_complete(regions,out_root=exported)
             with self.assertRaises(FileExistsError):create_dataset(base/'proxies',dataset,regions_path=regions)
             second=create_dataset(base/'proxies',dataset,regions_path=regions,overwrite=True)
             self.assertEqual(second['classes_source'],'completed-regions')
             self.assertEqual((Path(second['previous_dataset_backup'])/'labels.json').read_text(),'preserved user labels')
             self.assertEqual(json.loads((dataset/'classes.json').read_text(encoding='utf-8'))['classes'][0]['label'],'desk')
             self.assertEqual((dataset/'roi_reference.png').read_bytes(),b'synthetic reference')
+            for name in ('roi_reference.png','classes.json'):
+                file=exported/name;original=file.read_bytes();file.write_bytes(b'tampered')
+                with self.assertRaisesRegex(ValueError,'matching hashes'):
+                    create_dataset(base/'proxies',base/'hash-mismatch',regions_path=regions)
+                self.assertFalse((base/'hash-mismatch').exists())
+                file.write_bytes(original)
             payload['regions'][0]['name_zh']='Changed'
             roi_regions.save(regions,payload)
-            third=create_dataset(base/'proxies',base/'different',regions_path=regions)
-            self.assertEqual(third['classes_source'],'default-trial')
+            with self.assertRaises(ValueError):create_dataset(base/'proxies',base/'different',regions_path=regions)

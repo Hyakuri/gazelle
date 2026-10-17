@@ -68,13 +68,29 @@ def validate_other_people(runs,count):
         previous=b
 
 
-def validate_document(document,manifest,classes,allow_incomplete=False):
+def viewed_steps(ranges,count):
+    validate_other_people(ranges,count)
+    previous=None
+    steps=set()
+    for row in ranges:
+        if previous==row['start_step']:
+            raise ValueError('Adjacent viewed_ranges must be merged')
+        steps.update(range(row['start_step'],row['end_step_exclusive']))
+        previous=row['end_step_exclusive']
+    return steps
+
+
+def validate_document(document,manifest,classes,allow_incomplete=False,segments=None):
     labels=validate_classes(classes)
-    if (not isinstance(document,dict) or document.get('version')!=1
+    if isinstance(document,dict) and document.get('version')==1:
+        raise ValueError('Annotation version 1 is unsupported; reannotate with the new tool')
+    if (not isinstance(document,dict) or document.get('version')!=2
             or not _integer(document.get('revision')) or document['revision']<0
             or not isinstance(document.get('segments'),list)):
         raise ValueError('Invalid annotation document')
     expected={s['segment_id']:s for s in manifest['segments']}
+    strict=set(expected if segments is None else segments)
+    if not strict.issubset(expected):raise ValueError('Unknown strict validation segment')
     seen=set()
     for row in document['segments']:
         if not isinstance(row,dict) or row.get('segment_id') not in expected or row['segment_id'] in seen:
@@ -83,7 +99,9 @@ def validate_document(document,manifest,classes,allow_incomplete=False):
         for key in ('session','start_wall_time','step_hz','step_count'):
             if row.get(key)!=source[key]:
                 raise ValueError('Segment metadata differs from manifest: '+key)
-        values=expand_runs(row.get('labels'),row['step_count'],labels,allow_incomplete)
+        incomplete=allow_incomplete or row['segment_id'] not in strict
+        values=expand_runs(row.get('labels'),row['step_count'],labels,incomplete)
+        viewed=viewed_steps(row.get('viewed_ranges'),row['step_count'])
         validate_other_people(row.get('other_people'),row['step_count'])
         if (not isinstance(row.get('note'),str) or len(row['note'])>10000
                 or not isinstance(row.get('annotator'),str) or not row['annotator']
@@ -94,9 +112,9 @@ def validate_document(document,manifest,classes,allow_incomplete=False):
             if row.get(key) is not None:
                 if not isinstance(row[key],str):raise ValueError('Invalid timestamp')
                 datetime.fromisoformat(row[key])
-        if row.get('finished_at') is not None and (row.get('started_at') is None or None in values):
+        if row.get('finished_at') is not None and (row.get('started_at') is None or None in values or len(viewed)!=row['step_count']):
             raise ValueError('Incomplete segment cannot have finished_at')
-        if not allow_incomplete and (row.get('started_at') is None or row.get('finished_at') is None):
+        if not incomplete and (row.get('started_at') is None or row.get('finished_at') is None or len(viewed)!=row['step_count']):
             raise ValueError('Segment has not been completed')
     if seen!=set(expected):
         raise ValueError('Every manifest segment must be present')
@@ -122,8 +140,8 @@ class LabelStore:
             for source in self.manifest['segments']:
                 rows.append(dict({k:source[k] for k in ('segment_id','session','start_wall_time','step_hz','step_count')},
                                  labels=[dict(start_step=0,end_step_exclusive=source['step_count'],label=None)],
-                                 other_people=[],note='',annotator=annotator,started_at=None,finished_at=None,active_seconds=0.))
-            document=dict(version=1,revision=0,**self.fingerprint,segments=rows)
+                                 viewed_ranges=[],other_people=[],note='',annotator=annotator,started_at=None,finished_at=None,active_seconds=0.))
+            document=dict(version=2,revision=0,**self.fingerprint,segments=rows)
         self.data=validate_document(document,self.manifest,self.classes,allow_incomplete=True)
         self.saved_hash=hash_file(self.path) if self.path.exists() else None
 
@@ -134,8 +152,11 @@ class LabelStore:
         with self.lock:
             labels=validate_classes(self.classes)
             for row in self.data['segments']:
+                if row['finished_at'] is not None:continue
                 values=expand_runs(row['labels'],row['step_count'],labels,True)
-                if None in values:return row['segment_id'],values.index(None)
+                viewed=viewed_steps(row['viewed_ranges'],row['step_count'])
+                missing=next((i for i in range(row['step_count']) if i not in viewed),None)
+                return row['segment_id'],missing if missing is not None else (values.index(None) if None in values else 0)
             return self.data['segments'][0]['segment_id'],0
 
     def update(self,payload):
@@ -154,12 +175,24 @@ class LabelStore:
             delta=payload.get('active_seconds_delta',0.)
             if type(delta) not in (int,float) or not math.isfinite(delta) or not 0<=delta<=86400:
                 raise ValueError('Invalid active time')
+            viewed=payload.get('viewed_ranges',row['viewed_ranges'])
+            steps=viewed_steps(viewed,row['step_count'])
+            if not viewed_steps(row['viewed_ranges'],row['step_count']).issubset(steps):
+                raise ValueError('viewed_ranges may only grow')
+            changed=any(payload.get(key)!=row[key] for key in ('labels','other_people'))
+            row['viewed_ranges']=copy.deepcopy(viewed)
             for key in ('labels','other_people','note'):
                 row[key]=copy.deepcopy(payload.get(key))
             values=expand_runs(row['labels'],row['step_count'],validate_classes(self.classes),True)
             timestamp=now()
+            finish=payload.get('finish',False)
+            if type(finish) is not bool:raise ValueError('finish must be boolean')
+            if changed:row['finished_at']=None
+            if finish:
+                if changed or None in values or len(steps)!=row['step_count']:
+                    raise ValueError('Review every step and save all labels before confirming completion')
+                row['finished_at']=timestamp
             row.update(annotator=self.annotator,started_at=row['started_at'] or timestamp,
-                       finished_at=(row['finished_at'] or timestamp) if None not in values else None,
                        active_seconds=row['active_seconds']+delta)
             document['revision']+=1
             validate_document(document,self.manifest,self.classes,allow_incomplete=True)
@@ -177,12 +210,13 @@ def main(argv=None):
     parser.add_argument('--dataset-root',type=Path,required=True)
     parser.add_argument('--labels-path',type=Path)
     parser.add_argument('--allow-incomplete',action='store_true')
+    parser.add_argument('--segment',action='append',help='Strictly validate this segment only; repeat for several')
     args=parser.parse_args(argv)
     path=args.labels_path or args.dataset_root/'labels.json'
     if not path.is_file():raise ValueError('Labels file does not exist')
     store=LabelStore(args.dataset_root,path,'validator')
-    validate_document(store.document(),store.manifest,store.classes,args.allow_incomplete)
-    print('Valid annotation segments: {}'.format(len(store.manifest['segments'])))
+    validate_document(store.document(),store.manifest,store.classes,args.allow_incomplete,args.segment)
+    print('Valid annotation segments: {}; strict selection: {}'.format(len(store.manifest['segments']),args.segment or 'all'))
     return 0
 
 

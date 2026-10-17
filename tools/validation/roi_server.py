@@ -40,7 +40,8 @@ class RoiApplication:
                         draft=draft, defaults=roi_regions.defaults()['regions'],
                         reserved_keys=[row['label'] for row in roi_regions.defaults()['fixed_classes']],
                         custom_colors=roi_regions.defaults()['custom_colors'],
-                        complete=roi_regions.completed_document(self.regions_path) is not None, token=self.token)
+                        complete=roi_regions.completed_document(self.regions_path) is not None,
+                        has_export=roi_regions.completion_path(self.regions_path).exists(), token=self.token)
 
     def image(self, candidate_id):
         if candidate_id not in self.by_id:
@@ -64,8 +65,13 @@ class RoiApplication:
             )}, regions=payload.get('regions'), annotator=self.annotator,
                 created_at=old['created_at'] if old else now, updated_at=now)
             roi_regions.validate(document)
+            fields=('key','name_zh','kind','color','polygon')
+            document['regions']=[{key:region[key] for key in fields} for region in document['regions']]
             draft = payload.get('draft', dict(points=[], region=None))
             roi_regions.validate_draft(draft, document)
+            if draft['region'] is not None:
+                draft=copy.deepcopy(draft)
+                draft['region']={key:draft['region'][key] for key in fields if key!='polygon'}
             if old and all(document[key] == old[key] for key in document if key != 'updated_at'):
                 document = old
             previous_draft = json.loads(self.draft_path.read_text(encoding='utf-8')) if self.draft_path.exists() else None
@@ -76,7 +82,7 @@ class RoiApplication:
                 atomic_json(self.draft_path, draft)
             return copy.deepcopy(document)
 
-    def export(self, token):
+    def export(self, token, confirm_small=False):
         self.check_token(token)
         from .render_roi_reference import render
         with self.lock:
@@ -84,10 +90,11 @@ class RoiApplication:
                 draft = json.loads(self.draft_path.read_text(encoding='utf-8'))
                 if draft.get('region') is not None:
                     raise ValueError('Close or cancel the draft before export')
-            root = self.regions_path.parent
-            if self.regions_path.name != 'roi_regions.json':
-                root = root / (self.regions_path.stem + '_export')
-            outputs = render(self.regions_path, self.candidates_path, root)
+            small=roi_regions.small_regions(roi_regions.load(self.regions_path))
+            if small and confirm_small is not True:
+                return dict(confirmation_required=True,small_regions=small)
+            root = roi_regions.default_export_root(self.regions_path)
+            outputs = render(self.regions_path, self.candidates_path, root, confirm_small=confirm_small)
             return dict(images=len(outputs), output_root=str(root))
 
 
@@ -140,7 +147,7 @@ def make_handler(app):
                 if not isinstance(payload, dict):
                     raise ValueError('Expected a JSON object')
                 token = self.headers.get('X-Editor-Token', '')
-                result = app.update(payload, token) if self.path == '/api/save' else app.export(token)
+                result = app.update(payload, token) if self.path == '/api/save' else app.export(token,payload.get('confirm_small',False))
                 self._send(200, json.dumps(result, ensure_ascii=False).encode('utf-8'))
             except PermissionError as error:
                 self._send(403, json.dumps(dict(error=str(error))).encode('utf-8'))

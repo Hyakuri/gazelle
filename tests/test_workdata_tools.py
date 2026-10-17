@@ -69,11 +69,19 @@ class WorkdataToolsTest(unittest.TestCase):
             for bad in ({**target, 'count': 59}, {**target, 'pts_strict': False}):
                 with patch.object(remux, 'probe_packets', return_value=bad):
                     self.assertFalse(remux.validate_output(Path('fake.mp4'), source, 100, 'ffprobe')['valid'])
+
             self.assertFalse(remux.validate_output(Path('fake.mp4'), source, 99, 'ffprobe')['valid'])
             for changes in (dict(windows=[30, 30, 29]), dict(tail_eof=False),
                             dict(last_timestamp_ms=98000), dict(last_timestamp_ms=99910)):
                 with patch.object(remux, 'check_decode', return_value={**decoded, **changes}):
                     self.assertFalse(remux.validate_output(Path('fake.mp4'), source, 100, 'ffprobe')['valid'])
+
+    def test_tail_pts_removes_stream_start_time(self):
+        for start in (.033,.25):
+            with self.subTest(start=start), patch.object(remux,'probe_metadata',return_value=dict(duration=100,r_frame_rate='30/1',start_time=str(start))), patch.object(remux,'probe_packets',return_value=dict(count=100,pts_strict=True,last_pts=99.95+start)), patch.object(remux,'check_decode',return_value=dict(windows=[30,30,60],tail_eof=True,last_timestamp_ms=99950,frame_interval_ms=1000/30)):
+                result=remux.validate_output(Path('fake'),dict(count=100,small_count=0),100,'ffprobe')
+                self.assertTrue(result['valid'])
+                self.assertAlmostEqual(result['decode_details']['tail_pts_delta_ms'],0)
 
     def test_atomic_publication_and_failed_force_preserve_existing(self):
         with TemporaryDirectory() as tmp:

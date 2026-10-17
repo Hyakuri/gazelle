@@ -168,7 +168,7 @@ class VideoFrameReader:
                 timestamp_source = "repaired"
             else:
                 interval = 1000.0 / resolve_video_fps(self._metadata.fps)
-                timestamp_ms = max(previous_output + interval, previous_ms + 1)
+                timestamp_ms = float(max(previous_output + interval, previous_ms + 1))
                 timestamp_source = "fps_fallback"
             if not math.isfinite(timestamp_ms) or (
                 previous_ms is not None and int(round(timestamp_ms)) <= previous_ms

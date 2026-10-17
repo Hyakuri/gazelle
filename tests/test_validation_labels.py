@@ -38,8 +38,8 @@ class LabelTest(unittest.TestCase):
             payload=dict(segment_id='s1',revision=0,labels=[dict(start_step=0,end_step_exclusive=5,label='target')],
                          other_people=[],note='',active_seconds_delta=3.)
             result=store.update(payload)
-            self.assertIsNotNone(result['segments'][0]['finished_at'])
-            validate_document(result,manifest,classes)
+            self.assertIsNone(result['segments'][0]['finished_at'])
+            with self.assertRaises(ValueError):validate_document(result,manifest,classes)
             with self.assertRaisesRegex(ValueError,'revision'):store.update(payload)
             payload.update(revision=1,labels=[dict(start_step=0,end_step_exclusive=5,label=None)])
             store.update(payload)
@@ -53,6 +53,46 @@ class LabelTest(unittest.TestCase):
             path.write_text(path.read_text(encoding='utf-8')+'\n',encoding='utf-8')
             payload['revision']=2
             with self.assertRaisesRegex(ValueError,'outside this editor'):resumed.update(payload)
+
+    def test_viewed_ranges_explicit_finish_and_selected_strict_validation(self):
+        manifest,classes=fixture()
+        manifest['segments'].append(dict(manifest['segments'][0],segment_id='s2'))
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            for name,data in [('manifest.json',manifest),('classes.json',classes)]:
+                (root/name).write_text(json.dumps(data))
+            store=LabelStore(root,root/'trial.json','reviewer')
+            payload=dict(segment_id='s1',revision=0,labels=[dict(start_step=0,end_step_exclusive=5,label='target')],
+                         viewed_ranges=[dict(start_step=0,end_step_exclusive=1)],other_people=[],note='')
+            first=store.update(payload)
+            self.assertEqual(first['version'],2)
+            self.assertIsNone(first['segments'][0]['finished_at'])
+            self.assertEqual(store.resume(),('s1',1))
+            payload['revision']=1
+            with self.assertRaises(ValueError):store.update(dict(payload,finish=True))
+            for ranges in ([],[dict(start_step=0,end_step_exclusive=6)],
+                           [dict(start_step=0,end_step_exclusive=2),dict(start_step=1,end_step_exclusive=3)]):
+                with self.assertRaises(ValueError):store.update(dict(payload,viewed_ranges=ranges))
+            payload['viewed_ranges']=[dict(start_step=0,end_step_exclusive=5)]
+            store.update(payload)
+            self.assertEqual(store.resume(),('s1',0))
+            payload.update(revision=2,finish=True)
+            done=store.update(payload)
+            self.assertIsNotNone(done['segments'][0]['finished_at'])
+            validate_document(done,manifest,classes,segments=['s1'])
+            with self.assertRaises(ValueError):validate_document(done,manifest,classes)
+            with self.assertRaises(ValueError):validate_document(done,manifest,classes,segments=['missing'])
+            self.assertEqual(store.resume(),('s2',0))
+            payload.update(revision=3,finish=False,other_people=[dict(start_step=1,end_step_exclusive=2)])
+            changed=store.update(payload)
+            self.assertIsNone(changed['segments'][0]['finished_at'])
+            payload.update(revision=4,finish=True)
+            store.update(payload)
+            payload.update(revision=5,finish=False,labels=[dict(start_step=0,end_step_exclusive=5,label='unknown')])
+            self.assertIsNone(store.update(payload)['segments'][0]['finished_at'])
+            legacy=deepcopy(first);legacy['version']=1
+            with self.assertRaisesRegex(ValueError,'version 1.*reannotate'):
+                validate_document(legacy,manifest,classes,allow_incomplete=True)
 
     def test_other_people_ranges_and_class_config_are_checked(self):
         manifest,classes=fixture()

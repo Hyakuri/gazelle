@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const html = fs.readFileSync(path.join(__dirname, '../tools/validation/roi_page.html'), 'utf8');
-const script = html.match(/<script>([\s\S]*?)<\/script>/)[1].replace(/init\(\);\s*$/, '');
+const script = html.match(/<script>([\s\S]*?)<\/script>/)[1].replace(/init\(\)\.then\([^\n]+\);\s*$/, '');
 class Element {
   constructor(tag) { this.tag = tag; this.children = []; this.attrs = {}; this.events = {}; this.style = {}; this.classList = {toggle() {}}; }
   setAttribute(k, v) { this.attrs[k] = v; }

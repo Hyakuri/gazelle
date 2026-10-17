@@ -581,8 +581,12 @@ python -m tools.validation.render_roi_reference --regions-path "$data\roi\roi_re
 双击闭合不会增加重复顶点，自定义目标自动使用不同颜色。导出要求 1–6 个目标、恰好一个工作区，
 且没有未闭合草稿。数字键按目标绘制顺序分配，之后为 `cell_other`、`away`、`absent`（最多 1–9）；
 `unknown` 为 0。删除后重画会改变顺序。自动保存不表示完成：成功导出才写入
-`roi_regions.complete.json`（`version`、`completed_at`、`regions_sha256`）。后续修改使完成状态失效，
-需重新导出。下游工具用 `roi_regions.completed_document()` 校验完成标记与文件哈希。
+`roi_regions.complete.json`（version 2、`completed_at`、`regions_sha256`、`export_root`，以及
+`exports` 中 `roi_reference.png` 与 `classes.json` 的哈希）。后续修改使完成状态失效，
+需重新导出。下游工具用 `roi_regions.completed_document()` 校验完成标记与全部文件哈希。
+页面显示完成状态，面积小于画面 0.5% 的区域需确认；CLI 支持 `--confirm-small` 与可选 `--out-root`。
+未给 `--out-root` 时，`roi_regions.json` 导出到文件旁，其他文件名导出到 `<stem>_export/`；
+完成标记始终保存在区域 JSON 旁。
 
 时钟工具在仓库根目录运行，沿用上面的外部 `$data`：
 
@@ -621,27 +625,37 @@ python -m tools.workdata.proxies --timemaps "$data\timemaps" --out-root "$data\p
 
 ```powershell
 $dataset = 'C:\Users\yun\Documents\Claude_Code\gazelle_validation\roi_r2_trial'
-python -m tools.validation.sample_segments --proxies-root "$data\proxies" --dataset-root $dataset --regions-path "$data\roi\roi_regions.json"
+python -m tools.validation.sample_segments --proxies-root "$data\proxies" --dataset-root $dataset
 python -m tools.validation.extract_frames --dataset-root $dataset
 python -m tools.validation.extract_frames --dataset-root $dataset --validate-only
 python -m tools.validation.annotate_server --dataset-root $dataset --labels-path "$dataset\review_trial.json" --annotator reviewer
 # 标注后关闭本机服务，再运行：
 python -m tools.validation.labels validate --dataset-root $dataset --labels-path "$dataset\review_trial.json"
+# 单独严格检查 pilot，其他段只检查结构：
+python -m tools.validation.labels validate --dataset-root $dataset --labels-path "$dataset\review_trial.json" --segment 20260911_pilot
 ```
 
 这些工具不使用模型、GPU、下载、外部网络或 FFmpeg 可执行程序；抽帧用 CPU OpenCV 流式处理，
 优先级低于正常。默认种子 20261015，每会话四层（不足 45 分钟取两层），每段 60 秒、5 Hz。
-缺口时间步合计超过两秒的片段最多重抽十次；固定 pilot 放在首位并排除于评估。
+缺口时间步合计超过两秒或与 pilot 重叠时最多重抽十次，记录每次尝试；固定 pilot 放在首位并排除于评估。
+每会话独立使用 `seed + int(session)`；`--sessions` 默认值为
+20260821 20260828 20260903 20260911 20260925 20261002 20261009。
+其他会话打印提示后忽略，manifest 记录参与抽样的会话列表。
 所有代理与抽出帧均绑定 SHA-256。
 
-区域文件须通过完成标记与哈希检查，才用于生成类别并复制参考图；此前使用默认类别的
-`roi_r2_trial` 试用数据集。区域就绪后新建 `roi_r2` 用于正式标注。已有目录默认拒绝覆盖；
+显式 `--regions-path` 要求有效完成标记与导出哈希，否则报错。类别和参考图只从标记指明的目录
+读取，复制前核对哈希；省略该参数时使用默认类别的 `roi_r2_trial` 试用数据集。
+区域就绪后新建 `roi_r2` 用于正式标注。已有目录默认拒绝覆盖；
 显式 `--overwrite` 会将整个旧目录改名为带时间的备份并保留。正式标注默认写 `labels.json`，
-审查用 `--labels-path` 指向独立文件。仅加载页面不创建标注；每次修改原子保存并保留上一版
-`.bak`，拒绝过期版本或外部修改冲突，重启后定位首个未标注步。
+审查用 `--labels-path` 指向独立文件。画面加载并显示后记录已看步、创建或保存标注；每次修改原子保存
+并保留上一版 `.bak`，拒绝过期版本或外部修改冲突。重启定位首个未完成段，再依次找首个未看步、
+首个 null 步，否则停在第 0 步。
 
 界面支持播放、步进、数字键变化点、删除、撤销、彩色时间轴和他人入镜区间；当前画面加载完成后
-才接受判断。草稿中的未标注与主动选择 `unknown` 不同；`--allow-incomplete` 只检查草稿，
+才接受判断。标注 version 2 记录合并且只增不减的 `viewed_ranges`；未看步骤即使有类别仍叠加斜线。
+全部看过且有类别后，点击“本段完成”才写入 `finished_at`；修改类别或他人区间会清空完成时间。
+version 1 标注明确拒绝，需用新工具重新标注。严格校验要求这三项同时满足；可重复给出 `--segment ID`
+只对指定段严格检查，其余段检查结构。草稿中的未标注与主动选择 `unknown` 不同；`--allow-incomplete` 只检查草稿，
 不代表完成。详见[中文标注指南](../tools/validation/ANNOTATION_GUIDE_CN.md)。
 视频、帧和标注都保存在 Git 之外，不上传。
 
