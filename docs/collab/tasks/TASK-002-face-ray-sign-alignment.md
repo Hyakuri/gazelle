@@ -89,16 +89,55 @@ git status --short
 
 ## 2. 实施报告（Codex 追加，不要修改上文）
 
-- 接手核对：
-- 提交与推送（SHA）：
-- 变更文件：
-- 命令、退出码、测试数、warnings 与 skips：
-- 证据类型：
-- 真实 smoke 结果：
-- 外部活动：
-- 反证式复核（v1.1 §9）：
-- 未运行的检查、限制、阻塞：
-- 状态标签（v1.1 §12）：
+### 2026-10-17 实施与验证
+
+- 接续 TASK-102；TASK-139 CPU 扫描仍在后台运行，主线程 Inline Execution，没有子代理。STATE 的 writer/next_actor 均为 codex。
+- 实现提交 `b24dd67` — `Align face reference rays with display coordinate signs`。两处计算、两组单测、usage 文档测试与四份用户文档，共 9 文件。roll 取反，vertical 改为 `+sin(pitch)`；yaw、pitch、pose ray、门控、置信度与裁剪规则不变。
+- 组合旋转与 ±90° 奇异分支的性质测试直接比较矩阵第三列的 `(r02,-r12)`；补充四个符号和两类射线同向检查。文档标出 `yaw_right`、`pitch_down`、`roll_clockwise` 及旧结果的兼容性变化。
+
+#### 命令与结果
+
+解释器 `C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe`；字节码 `%TEMP%\gazelle-task-002-pycache`；所有证据在 `C:\Users\yun\Documents\Claude_Code\gazelle_runs\task-002\`。
+
+| 命令/检查 | 结果 |
+| --- | --- |
+| 新 reference ray 测试在修改前运行 | exit 1，11 tests，8 failures（含组合矩阵 subtests），复现垂直/roll 符号问题 |
+| `python -m unittest tests.test_reference_rays tests.test_mediapipe_backend tests.test_head_fusion tests.test_usage_docs -v` | exit 0，49 tests / 0.037s / 0 skip |
+| `python -m compileall main.py gazelle tests` | exit 0 |
+| `python -m unittest discover -s tests -v` | exit 0，637 tests / 17.562s / 0 skip；包含当前 TASK-139 实现与 refit 修复 |
+| `python main.py --help`、`python main.py --list-models`、`git diff --check` | 全部通过 |
+| `python ...\task-002\smoke.py`、`python ...\task-002\extra_smoke.py`，另一次未旋转 frame22 图像运行 | 均 exit 0；累计 1 次 30 帧视频、7 次图像运行 |
+
+非致命日志包括坏 MP4 单测的 `moov atom not found`、xFormers 不可用和 MediaPipe 日志初始化提示。无新增 skip；进程 exit 0 不代表下列真实验收条件全部通过。
+
+#### 真实 smoke：通过项与未满足项
+
+公共参数：`python ...\task-136\smoke.py cli <repo> --input <input> --output-dir <external> --cache-dir <repo>\models --device cuda --head-source mediapipe --max-heads 2 --save-rendered --face-pose-ray --pose-head-ray --head-box --face-box --gazelle-head-mode all --gaze-render-mode all-predictions`。视频另加 `--max-frames 30 --video-codec mp4v`。完整 argv 和退出码在 `commands.json`、`extra-commands.json`；单独未旋转 frame22 使用相同公共参数，输入 `frame22.png`，输出 `frame22-output`，日志 `frame22.log`。
+
+先复用 TASK-102 从 Sunny_1.gif 转出的 `sunny.mp4`。30/30 prediction 行除 inference_ms 外与 TASK-102 B-after 完全相同，未改变 Gazelle 结果。视频帧 15 的男孩 `head_pose=null`、`face_pose_reference_ray=null`，同帧女孩也无 face ray；不能确认要求的 x<0、y>0。保留截图 `video-frame15-rendered.png`。帧 16 男孩方向为 `(-0.875627, +0.482988)`，仅作相邻帧补充证据，**不替代帧 15 的验收**。
+
+从该视频提取近正脸帧 22，以 PIL `rotate(-20, expand=False)` / `rotate(20, expand=False)` 分别旋转，结果如下。方向角为显示坐标 atan2(y,x)，增加表示顺时针。
+
+| 输入 | roll_deg | ray (x,y) | 方向角 |
+| --- | ---: | --- | ---: |
+| 未旋转 | -5.573736 | (0.967677, 0.252194) | 14.607353° |
+| 顺时针 20° | +14.550630 | (0.848284, 0.529542) | 31.974518° |
+| 逆时针 20° | -26.660848 | (0.992832, 0.119518) | 6.864307° |
+
+两张旋转图的 roll 均在目标 ±20° 的 ±8° 容差内，射线方向相对未旋转图分别向顺/逆时针变化。结果 `rotation-angle-check.json`；已目视检查 `clockwise\clockwise_gazelle\rendered.png` 与 `counterclockwise\counterclockwise_gazelle\rendered.png`。
+
+为排除转码与帧编号差异，再用 PIL 直接提取原始 GIF 的零基帧 15、22：帧 15 仍无 head-pose；帧 22 未旋转时可得到 roll=-5.220733°，但其顺时针图只检出女孩、逆时针图未检出人物。因此**原始 GIF 旋转组未满足验收**，没有降低检测阈值或换环境重试。详见 `extra-comparison.json` 与 `gif-*-output` 下渲染结果。
+
+#### 复核、活动与待审查
+
+- 反证式复核：修改前性质测试确实失败；包括非零复合旋转与奇异分支；真实视频 prediction 数据不变；未把原图自带的绿色视线标注误认为本实现 face ray。
+- 真实 CUDA 推理与 MediaPipe CPU 执行；每次启动前检查显存/利用率。复用缓存，Python audit 阻断 Torch Hub 请求后缓存回退，无下载、安装或 Conda 修改。原生 MediaPipe 遥测不受 Python audit 覆盖。原始 3 次与补充 4 次运行的缓存 size/mtime 差异均为空；最后 frame22 使用同一缓存。视频读写使用 OpenCV，旋转使用 PIL；本任务没有另外调用 FFmpeg 可执行文件，转码素材沿用 TASK-102。
+- A 级：保留相同编码视频进行前后 prediction 比较，并增加原始 GIF 直接提取检查以识别输入差异；所有失败原样保留。
+- 范围外改动：无。四份用户文档同步，既有 schema 字段名不变。
+- B 级（Q-011）：Gazelle-next 下帧 15 没有可用 face head-pose，原始 GIF 旋转图也漏检；历史 2026-10-14 Gazelle 结果不能当作本次证据。推荐 Claude 在稳定版本/同一素材上独立复跑，决定是否修订真实样例；当前保留原验收标准，未暂定替换帧或放宽标准。视频转码旋转组通过、原始图组未通过，必须分别审查。
+- C 级：无。未运行可选作业视频 smoke；独立审查与用户独立 checkout 验收未运行。
+
+**已实施、已静态检查、已实际运行；真实验收部分未满足，待 Claude 判断与独立复核。**
 
 ## 3. 审查结论（Claude 追加）
 

@@ -14,7 +14,7 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 | current_task | `docs/collab/tasks/TASK-139-content-calibrated-sync.md`（用户本轮已批准 D18，见 Q-010） |
 | after_current | `docs/collab/tasks/TASK-102-spawn-frame-confirmation.md`，然后 `docs/collab/tasks/TASK-002-face-ray-sign-alignment.md`，然后结束本轮并把 `next_actor` 改为 `claude` |
 | environment | `Gazelle-next`：`C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe`（用户 2026-10-17 决定 D16）。现有 `Gazelle` 作为回退保留，不改动 |
-| last_pushed | `35a0a3a6973b62a4f5bf8f2f16d71a0b7c3514c0`（TASK-102 实现；其后报告提交以实时 Git 为准） |
+| last_pushed | `b24dd67`（TASK-002 实现；其后报告提交以实时 Git 为准） |
 | last_accepted | `b527287`（2026-10-17 第 2 轮审查：此前全部提交已通过，包括 TASK-001、TASK-123 修复、TASK-135、TASK-137。其后的 TASK-133 只部分通过，TASK-134、TASK-121 的结论见下表） |
 | 更新 | 2026-10-17，Claude：第 2 轮审查完成；同步问题已查明，建议同步协议 r2（D18，待用户批准）。第 3 轮交 Codex，第一项为 TASK-138 |
 
@@ -98,7 +98,7 @@ Claude 实际运行的检查：完整离线门 562 项；29 个 MP4 分段 17,40
 | Codex 第 3 轮 | TASK-136 Gazelle 输入预处理移到推理设备 | ready-for-review | 616 tests；6 次 300 帧 CUDA 对照通过，4K static 中位数降低 65.651%；见任务 §2 |
 | Codex 第 3 轮 | TASK-139 同步协议 r2：以 B 为基准的画面内容校准 | proposed（待 D18） | GZ-26；用户批准后执行；约 6 小时后台 CPU |
 | Codex 第 3 轮 | TASK-102 新轨迹首帧立即确认（D2） | ready-for-review | 633 tests；四次真实 30 帧对照，A/B 首帧 no_head 均 1→0；见任务 §2 |
-| Codex 第 3 轮 | TASK-002 面部射线与 roll 符号对齐 | ready | GZ-02 |
+| Codex 第 3 轮 | TASK-002 面部射线与 roll 符号对齐 | ready-for-review | 637 项离线门通过；转码旋转组通过；帧 15 无 pose 与原图漏检见 Q-011 |
 | Codex 第 3 轮 | TASK-101 人脸与姿态关联修正（D1） | blocked | 等 TASK-102 审查通过；GZ-01 |
 | 用户 | 标注 26 段，约 2 小时 | 待前置 | 需 TASK-138、TASK-139 与正式区域都完成后，按新数据集标注 |
 | Claude | 阶段 2 验收：离线门、作业数据真实 smoke、同步精度、修复前后对比 | 未开始 | |
@@ -183,6 +183,7 @@ Claude 实际运行的检查：完整离线门 562 项；29 个 MP4 分段 17,40
 | Q-008 | B | Codex | TASK-134 固定连续网格与“完全落在重叠时段”存在冲突：20260903 共同覆盖有 0.079/0.134 秒内部缺口 | TASK-134 实施报告 | 已确认（2026-10-17）：采用 Codex 的做法（整体网格、记录覆盖缺口、最近帧与半步长缺口标记），TASK-139 中作为默认行为 |
 | Q-009 | B | Codex | TASK-134 固定抽查 60/63：两项识别缺失，20261002 E/k1750 为 −1.4 秒超限 | TASK-134 实施报告 | 已查明（2026-10-17）：超限来自 20261002 E 前 571 秒的显示时钟成片偏移（−0.93 秒）加整秒读数下限；新抽查规则（邻帧补读、E 按 ±2 秒粗查）在 TASK-139 实施 |
 | Q-010 | C | Claude | D18：采用同步协议 r2（以前方摄像机 B 为基准，A 与 E 用画面运动校准偏移与漂移）；D13 的时间轴定义随之改为“以 B 的画面时钟为基准、内容校准后的 5 Hz” | `evidence/2026-10-17-sync-analysis.md` §7；`tasks/TASK-139-content-calibrated-sync.md` | Codex 收讫用户直接批准（2026-10-17）：“D18 批准，按你的推荐进行。” TASK-139 的用户授权已满足；Claude 后续归档决定 |
+| Q-011 | B | Codex | TASK-002：原始 GIF 与转码视频第 15 帧均无 face head-pose；原图旋转组漏检，转码旋转组 roll 与方向检查通过 | TASK-002 §2；外部 task-002/comparison.json、extra-comparison.json | 待 Claude 在同素材/环境独立复跑并判断真实样例；未替换验收帧或降低门槛，计算性质测试已通过 |
 
 ## 已完成
 
