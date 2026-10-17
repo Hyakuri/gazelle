@@ -622,7 +622,7 @@ Clock commands, from the repository root using the same external `$data`:
 ```powershell
 python -m tools.workdata.osd_clock --image C:\path\outside-repository\clock.png
 python -m tools.workdata.timemap --inventory "$data\inventory\inventory.json" --remux-root "$data\remux" --out-root "$data\timemaps_v2_base"
-python -m tools.workdata.sync_calibrate --timemaps "$data\timemaps_v2_base" --out-root "$data\timemaps_v2" --samples-root "$data\sync_samples_v2" --session 20260828
+python -m tools.workdata.sync_calibrate --timemaps "$data\timemaps_v2_base" --out-root "$data\timemaps_v3" --samples-root "$data\sync_samples_v2" --session 20260828
 python -m tools.workdata.sync_check --timemaps "$data\timemaps_v2" --out-root "$data\sync_checks" --session 20260828
 ```
 
@@ -635,11 +635,17 @@ median absolute residual ≤0.5 s and ≥90% within ±1.5 s. Unreadable clocks s
 Synchronization r2 uses front camera B as the reference. A/E use 5 Hz, 96×54 gray
 motion, six cells selected across all lags, 60 s windows and ±10 s correlation search.
 Valid windows require r ≥0.5, prominence ≥0.1 and a peak away from the boundary.
-Theil–Sen fits need ≥10 windows spanning ≥30% of the session and MAD ≤0.08 s;
-supported steps are refined with 20 s windows. Final time solves `t = base_X(pts) - L(t)`.
+Theil–Sen fits need ≥10 windows spanning ≥30%, ≥5 per segment, MAD ≤0.08 s and
+at most 10% residuals beyond 0.2 s. Always search one/two cuts per segment (≤3 total):
+L1 cost must decrease ≥25% and every jump must reach max(0.2 s, 4 × candidate MAD).
+Refine each cut within ±120 s using 20 s windows / 10 s strides and minimum two-sided L1.
+v3 fits use camera base centers b = t + L and explicitly compute `T(b) = b - L(b)`.
+Negative jumps leave gaps; positive jumps exclude pre-cut frames whose T is at least
+the actual first post-cut T. The selectable timeline strictly increases. Cut ±10 s
+uncertainty and gap/overlap ranges are flagged `sync_uncertain` in sidecars.
 It is B's displayed-clock axis, not calibrated UTC. Calibration needs visible worker
 motion; empty or stationary periods cannot calibrate themselves. Uncalibratable cameras
-remain explicit failures and cannot generate v2 proxies. The optional legacy `sync_check`
+remain explicit failures and cannot generate calibrated proxies. The optional legacy `sync_check`
 keeps three 120 s, 10 Hz diagnostic windows, reports boundary/non-prominent peaks separately,
 and requires a valid peak with |lag| ≤0.5 s. It is not the r2 residual acceptance gate.
 Caches bind mapping and sampling implementation hashes. See the [Chinese guide](../tools/workdata/README_CN.md).
@@ -654,21 +660,26 @@ To repair only calibration fitting, explicitly reuse saved grayscale evidence in
 python -m tools.workdata.sync_calibrate --timemaps "$data\timemaps_v2_base" --out-root "$data\timemaps_v2_refit" --samples-root "$data\sync_samples_v2" --session 20260828 --reuse-samples
 ```
 
-This CPU-only mode checks the base-map hash, grid, source size/mtime, pixel SHA-256,
+This CPU-only mode compares the actual sampling implementation hash and checks the base-map hash, grid, source size/mtime, pixel SHA-256,
 96×54 uint8 shape, per-step provenance and complete source-decoding records. It performs
 no source-video decoding, model inference, GPU work, FFmpeg calls or network access.
 The output map must not already exist. Original samples remain read-only; `sampling_evidence`
 retains their original fingerprints and file hashes beside the current fitting implementation.
-Two clock-correction iterations require local linear solution error within 1 ms:
-divide the original equation residual by `abs(1+c1)`. A singular local equation fails,
-and the 0.4 s positive-step no-solution regression still fails explicitly.
-Reuse is for fitting repairs, not sampling changes.
+Source keyframe packets are scanned to EOF without decoding and cached by source SHA,
+size and mtime (`--keyframes-root`). A motion step is missing when files change or a
+keyframe p satisfies previous_pts < p ≤ current_pts. Gaps remain missing. Validation
+also masks proxy keyframes and reports per-camera fractions. Its 96×54 grayscale
+thumbnails use `INTER_AREA`; calibration retains PyAV reformat. Sampling and fitting
+fingerprints are separate. Legacy caches require independently verified source receipts
+(`--sampling-provenance`) binding original sidecar/pixel hashes and the same sampling hash;
+this never permits a mismatch. Reuse is for fitting repairs, not sampling changes.
+Legacy v2 readers retain their two-iteration guard (equation residual / `abs(1+c1)`).
 
 Proxy generation, using the same external `$data`:
 
 ```powershell
-python -m tools.workdata.proxies --timemaps "$data\timemaps_v2" --out-root "$data\proxies" --session 20260828 --allow-internal-gaps
-python -m tools.workdata.sync_validate --proxies "$data\proxies" --out-root "$data\sync_validation" --session 20260828 --clock-samples C:\path\outside-repository\check_proxy_clocks.json
+python -m tools.workdata.proxies --timemaps "$data\timemaps_v3" --out-root "$data\proxies_v3_pending" --session 20260828 --allow-internal-gaps
+python -m tools.workdata.sync_validate --proxies "$data\proxies" --timemaps "$data\timemaps_v3" --keyframes-root "$data\keyframes_v3" --out-root "$data\sync_validation" --session 20260828 --clock-samples C:\path\outside-repository\check_proxy_clocks.json
 ```
 
 Defaults are `--step-hz 5 --size 1920 1080`, CRF 20, yuv420p, constant frame rate,
@@ -683,17 +694,28 @@ time difference and a gap flag when the difference exceeds half a grid step.
 Multiple common-coverage intervals are rejected by default. The explicit
 `--allow-internal-gaps` option retains one continuous clock grid
 across the entire range and records every coverage gap and nearest-frame gap flag;
-it does not compress time. Preserve old proxies and trial datasets as dated backups before
-regeneration. `sync_validate` reuses the saved fixed k indices, tries k−1/k+1/k−2/k+2
+it does not compress time. Keep old proxies in place until all seven sessions pass;
+then rename them to dated backups and switch the validated directories. `sync_validate` reuses the saved fixed k indices, tries k−1/k+1/k−2/k+2
 only for missing clock reads, and records unevaluable samples (≥90% must be evaluable).
 `delta_distribution` groups evaluable/unevaluable/pass counts, signed minimum/median/maximum
 and absolute p90 clock differences by camera. Failed differences remain included;
 statistics are null when no readings are evaluable.
-Clock tolerances are A/B ±1 s and E ±2 s. Residual checks cover A–B, E–B and A–E:
+Clock differences are `d = base_X(pts) - reading`, using the selected source frame's
+own base map and integer OSD reading: A/B −0.5 ≤ d <1.5 s, E −1.5 ≤ d <2.5 s.
+`reading_minus_grid_distribution` separately reports reading minus grid time as sign evidence.
+Residual checks cover A–B, E–B and A–E:
 ≥90% of valid windows within ±0.2 s, median |lag| ≤0.1 s, midpoint |offset| ≤0.1 s,
 and |drift| ≤0.1 s/hour. All failures remain in reports; no window is removed to pass.
-Three ±1 s event strips per session support independent visual review. Regenerate trial
-and completed-ROI datasets only after calibrated proxies exist; formal annotation waits
+Results are passed, failed, or `insufficient_evidence` (<10 windows or <30% coverage).
+A–B and E–B must pass; A–E may instead lack evidence, with its inferred lag reported.
+Per-window/overall closure (A−B)−(E−B)−(A−E) and maximum endpoint bias are descriptive, not new gates.
+Three ±1 s worker-motion strips plus one within ±10 s of each cut support visual review;
+every reread frame's thumbnail must match cached validation pixels exactly.
+Compare v3/v2 lag over each existing session: retain v2 proxies and their original SHA
+when every camera differs by ≤0.05 s, otherwise regenerate. Record that provenance.
+Only after all seven sessions pass, regenerate trial and completed-ROI datasets;
+redraw segments containing `sync_uncertain` in the same stratum and record every attempt.
+Never create formal labels automatically. Formal annotation waits
 for independent synchronization acceptance. See the
 [Chinese tool guide](../tools/workdata/README_CN.md).
 

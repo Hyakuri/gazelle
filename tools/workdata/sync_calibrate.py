@@ -11,10 +11,13 @@ from .common import atomic_json, hash_file
 from .sample_cache import read_sample_cache
 
 
-def motion_cells(thumbs,gaps):
+def motion_cells(thumbs,gaps,keyframe_mask=None):
     delta=np.abs(np.diff(np.asarray(thumbs,dtype=np.int16),axis=0)).astype(np.float32)
     cells=delta.reshape(len(delta),6,9,12,8).mean(axis=(2,4)).reshape(len(delta),72)
-    cells[np.asarray(gaps[1:]) | np.asarray(gaps[:-1])]=np.nan
+    bad=np.asarray(gaps[1:]) | np.asarray(gaps[:-1])
+    if keyframe_mask is not None:
+        bad=bad | np.asarray(keyframe_mask[1:])
+    cells[bad]=np.nan
     return np.log1p(cells)
 
 
@@ -76,69 +79,110 @@ def _line(t,y):
     return dict(c0=c0,c1=c1,mad=float(np.median(abs(residual-np.median(residual)))),n=len(t))
 
 
+def _window_time(row):
+    return row.get('b_mid_seconds',row['t_mid_seconds'])
+
+
+def _mad(values):
+    return float(np.median(abs(values-np.median(values))))
+
+
+def _fit_gate(fit,residual):
+    fit['residual_mad']=_mad(residual)
+    fit['residual_tail_fraction']=float(np.mean(abs(residual)>.2))
+    reason=('fewer_than_five_windows_in_segment' if any(s['n']<5 for s in fit['segments']) else
+            'residual_mad_exceeds_0_08' if fit['residual_mad']>.08 else
+            'residual_tail_exceeds_0_2' if fit['residual_tail_fraction']>.1 else 'valid')
+    fit.update(valid=reason=='valid',reason=reason)
+
+
 def fit_calibration(windows,duration):
-    good=[w for w in windows if w['valid']]
-    times=np.array([w['t_mid_seconds'] for w in good]);lags=np.array([w['lag_seconds'] for w in good])
+    good=sorted((w for w in windows if w['valid']),key=_window_time)
+    times=np.array([_window_time(w) for w in good]);lags=np.array([w['lag_seconds'] for w in good])
     base=dict(valid=False,valid_windows=len(good),total_windows=len(windows),duration=duration,
-              windows=windows,segments=[],breakpoints=[])
+              windows=windows,segments=[],breakpoints=[],split_search=[])
     if len(good)<10:
         return dict(base,reason='fewer_than_ten_valid_windows')
     coverage=float((times[-1]-times[0])/duration)
     base['coverage_fraction']=coverage
     if coverage<.3:
         return dict(base,reason='insufficient_temporal_coverage')
+    fits={}
+    def piece(lo,hi):
+        if (lo,hi) not in fits:
+            line=_line(times[lo:hi],lags[lo:hi])
+            residual=lags[lo:hi]-line['c0']-line['c1']*times[lo:hi]
+            fits[lo,hi]=(line,residual,float(abs(residual).sum()))
+        return fits[lo,hi]
     partitions=[(0,len(times))]
-    for _ in range(3):
-        candidates=[]
+    while len(partitions)<4:
+        best=None
         for part,(lo,hi) in enumerate(partitions):
-            original=_line(times[lo:hi],lags[lo:hi])
-            if original['mad']<=1e-10:
+            cost=piece(lo,hi)[2]
+            if cost<=0:
                 continue
-            for cut in range(lo+5,hi-4):
-                left=_line(times[lo:cut],lags[lo:cut]);right=_line(times[cut:hi],lags[cut:hi])
-                residual=np.concatenate([lags[lo:cut]-left['c0']-left['c1']*times[lo:cut],
-                                         lags[cut:hi]-right['c0']-right['c1']*times[cut:hi]])
-                mad=float(np.median(abs(residual-np.median(residual))))
-                if mad<original['mad']*.5:
-                    candidates.append((mad/original['mad'],part,cut))
-        if not candidates:
+            candidates=[(c,) for c in range(lo+5,hi-4)]
+            if len(partitions)<=2:
+                candidates.extend((a,b) for a in range(lo+5,hi-9) for b in range(a+5,hi-4))
+            for cuts in candidates:
+                bounds=(lo,)+cuts+(hi,)
+                pieces=[piece(a,b) for a,b in zip(bounds,bounds[1:])]
+                gain=(cost-sum(p[2] for p in pieces))/cost
+                if gain<.25 or (best is not None and gain<=best[0]):
+                    continue
+                limit=max(.2,4*_mad(np.concatenate([p[1] for p in pieces])))
+                at=[float((times[c-1]+times[c])/2) for c in cuts]
+                jumps=[r[0]['c0']-l[0]['c0']+(r[0]['c1']-l[0]['c1'])*t
+                       for l,r,t in zip(pieces,pieces[1:],at)]
+                if all(abs(jump)>=limit for jump in jumps):
+                    best=(gain,part,bounds,at,jumps,limit)
+        if best is None:
             break
-        _,part,cut=min(candidates)
-        lo,hi=partitions[part]
-        partitions[part:part+1]=[(lo,cut),(cut,hi)]
-    boundaries=[0.]+[float((times[hi-1]+times[hi])/2) for _,hi in partitions[:-1]]+[duration]
-    residual=[]
+        gain,part,bounds,at,jumps,limit=best
+        base['split_search'].append(dict(gain=gain,cuts=at,steps=jumps,step_limit=limit))
+        partitions[part:part+1]=list(zip(bounds,bounds[1:]))
+    boundaries=[min(0.,float(times[0]))]+[float((times[hi-1]+times[hi])/2) for _,hi in partitions[:-1]]+[max(duration,float(times[-1])+1e-6)]
     for index,(lo,hi) in enumerate(partitions):
-        fit=_line(times[lo:hi],lags[lo:hi])
-        base['segments'].append(dict(start=boundaries[index],end=boundaries[index+1],**fit))
-        residual.extend(lags[lo:hi]-fit['c0']-fit['c1']*times[lo:hi])
-    residual=np.asarray(residual)
-    base['residual_mad']=float(np.median(abs(residual-np.median(residual))))
-    for left,right in zip(base['segments'],base['segments'][1:]):
-        at=right['start']
+        base['segments'].append(dict(start=boundaries[index],end=boundaries[index+1],**piece(lo,hi)[0]))
+    for index,(left,right) in enumerate(zip(base['segments'],base['segments'][1:])):
+        at=right['start'];cut=partitions[index][1]
         base['breakpoints'].append(dict(seconds=at,coarse_seconds=at,
+            coarse_reference_seconds=(good[cut-1]['t_mid_seconds']+good[cut]['t_mid_seconds'])/2,
+            adjacent_window_centers=[float(times[cut-1]),float(times[cut])],
+            uncertainty_seconds=[at-10,at+10],
             step_seconds=(right['c0']+right['c1']*at)-(left['c0']+left['c1']*at)))
-    base['valid']=base['residual_mad']<=.08 and all(s['mad']<=.08 for s in base['segments'])
-    base['reason']='valid' if base['valid'] else 'residual_mad_exceeds_0_08'
+    _fit_gate(base,np.concatenate([piece(lo,hi)[1] for lo,hi in partitions]))
     return base
 
 
 def refine_breakpoints(fit,reference,other,hz=5.):
     for point,left,right in zip(fit['breakpoints'],fit['segments'],fit['segments'][1:]):
-        center=point['coarse_seconds'];start=max(0.,center-120);end=min(fit['duration'],center+120)
+        center=point['coarse_seconds']
+        reference_center=point.get('coarse_reference_seconds',center)
+        start=max(0.,reference_center-120);end=min(fit['duration'],reference_center+120)
         rows=window_lags(reference[round(start*hz):round(end*hz)],other[round(start*hz):round(end*hz)],
                          hz,20,10,start)
-        good=[r for r in rows if r['valid']]
+        if fit.get('time_domain')=='base':
+            for row in rows:
+                if row['valid']:
+                    row['b_mid_seconds']=row['t_mid_seconds']+row['lag_seconds']
+        good=sorted((r for r in rows if r['valid']),key=_window_time)
         candidates=[]
-        coarse=[r for r in fit['windows'] if r['valid'] and left['start']<=r['t_mid_seconds']<right['end']]
+        coarse=[r for r in fit['windows'] if r['valid'] and left['start']<=_window_time(r)<right['end']]
         for a,b in zip(good,good[1:]):
-            cut=(a['t_mid_seconds']+b['t_mid_seconds'])/2
+            cut=(_window_time(a)+_window_time(b))/2
             if not left['start']<cut<right['end']:
                 continue
-            if min(sum(r['t_mid_seconds']<cut for r in coarse),sum(r['t_mid_seconds']>=cut for r in coarse))<5:
+            if min(sum(_window_time(r)<cut for r in coarse),sum(_window_time(r)>=cut for r in coarse))<5:
                 continue
-            errors=[abs(r['lag_seconds']-(s['c0']+s['c1']*r['t_mid_seconds']))
-                    for r in good for s in [left if r['t_mid_seconds']<cut else right]]
+            groups=[[r for r in good if (_window_time(r)<cut)==before] for before in (True,False)]
+            if any(len(group)<2 for group in groups):
+                continue
+            errors=[]
+            for group in groups:
+                t=np.array([_window_time(r) for r in group]);y=np.array([r['lag_seconds'] for r in group])
+                line=_line(t,y)
+                errors.extend(abs(y-line['c0']-line['c1']*t))
             candidates.append((sum(errors),abs(cut-center),cut))
         point['refinement_windows']=rows
         if candidates:
@@ -148,17 +192,16 @@ def refine_breakpoints(fit,reference,other,hz=5.):
             point['refined']=True
         else:
             point['refined']=False
+        point['uncertainty_seconds']=[point['seconds']-10,point['seconds']+10]
     if fit['breakpoints']:
         residual=[]
         for segment in fit['segments']:
-            rows=[r for r in fit['windows'] if r['valid'] and segment['start']<=r['t_mid_seconds']<segment['end']]
-            t=np.array([r['t_mid_seconds'] for r in rows]);y=np.array([r['lag_seconds'] for r in rows])
+            rows=sorted((r for r in fit['windows'] if r['valid'] and segment['start']<=_window_time(r)<segment['end']),key=_window_time)
+            t=np.array([_window_time(r) for r in rows]);y=np.array([r['lag_seconds'] for r in rows])
             segment.update(_line(t,y))
             residual.extend(y-segment['c0']-segment['c1']*t)
         residual=np.asarray(residual)
-        fit['residual_mad']=float(np.median(abs(residual-np.median(residual))))
-        fit['valid']=fit['residual_mad']<=.08 and all(s['mad']<=.08 for s in fit['segments'])
-        fit['reason']='valid' if fit['valid'] else 'refined_residual_mad_exceeds_0_08'
+        _fit_gate(fit,residual)
         for point,left,right in zip(fit['breakpoints'],fit['segments'],fit['segments'][1:]):
             at=point['seconds']
             point['step_seconds']=(right['c0']-left['c0'])+(right['c1']-left['c1'])*at
@@ -168,6 +211,15 @@ def corrected_time(base,calibration):
     if not calibration.get('valid'):
         raise ValueError('Camera cannot be calibrated: '+calibration.get('reason','invalid fit'))
     origin=calibration['origin']
+    if calibration.get('time_domain')=='base':
+        relative=base-origin
+        segment=next((s for s in calibration['segments'] if s['start']<=relative<s['end']),None)
+        if segment is None:
+            segment=calibration['segments'][0 if relative<calibration['segments'][0]['start'] else -1]
+        result=base-segment['c0']-segment['c1']*relative
+        if not np.isfinite(result) or segment['c1']>=1:
+            raise ValueError('Explicit calibration requires finite increasing segments')
+        return float(result)
     def evaluate(value):
         relative=value-origin
         segment=next((s for s in calibration['segments'] if s['start']<=relative<s['end']),None)
@@ -201,7 +253,7 @@ def select_signals(cells):
     return signals,selection
 
 
-def clock_sample(k,count,t0,step,camera,read):
+def clock_sample(k,count,t0,step,camera,read,base_at):
     attempts=[]
     for candidate in (k,k-1,k+1,k-2,k+2):
         if not 0<=candidate<count:
@@ -209,15 +261,18 @@ def clock_sample(k,count,t0,step,camera,read):
         reading=read(candidate);attempts.append(dict(k=candidate,reading=reading))
         if reading is not None:
             target=t0+candidate*step
-            delta=float(reading['wall_time']-target)
+            base=float(base_at(candidate));delta=base-float(reading['wall_time'])
+            lower,upper=(-1.5,2.5) if camera=='cam_e' else (-.5,1.5)
             return dict(k=k,used_k=candidate,camera=camera,evaluable=True,reading=reading,
-                        t_k=target,delta_seconds=delta,passed=abs(delta)<=(2 if camera=='cam_e' else 1),attempts=attempts)
+                        t_k=target,base_time=base,delta_seconds=delta,
+                        reading_minus_grid_seconds=float(reading['wall_time']-target),
+                        passed=lower<=delta<upper,attempts=attempts)
     return dict(k=k,used_k=None,camera=camera,evaluable=False,passed=False,attempts=attempts)
 
 
 def clock_summary(rows):
     fraction=sum(r['evaluable'] for r in rows)/len(rows) if rows else 0.
-    distribution={}
+    distribution={};grid_distribution={}
     for camera in sorted({r['camera'] for r in rows}):
         selected=[r for r in rows if r['camera']==camera]
         measured=[r for r in selected if r['evaluable']]
@@ -228,15 +283,21 @@ def clock_summary(rows):
             signed_median_seconds=float(np.median(values)) if len(values) else None,
             signed_maximum_seconds=float(values.max()) if len(values) else None,
             absolute_p90_seconds=float(np.quantile(abs(values),.9)) if len(values) else None)
+        grid_values=[r['reading_minus_grid_seconds'] for r in measured]
+        grid_distribution[camera]=dict(minimum_seconds=min(grid_values) if grid_values else None,
+            median_seconds=float(np.median(grid_values)) if grid_values else None,
+            maximum_seconds=max(grid_values) if grid_values else None)
     return dict(evaluable_fraction=fraction,evaluable_passed=fraction>=.9,
                 passed=fraction>=.9 and all(r['passed'] for r in rows if r['evaluable']),
-                delta_distribution=distribution)
+                delta_definition='source base_X(pts) minus integer OSD reading',
+                delta_distribution=distribution,reading_minus_grid_distribution=grid_distribution)
 
 
 def implementation_hash():
     root=Path(__file__).parent
     return hashlib.sha256(b''.join((root/name).read_bytes() for name in
-        ('sync_calibrate.py','sample_cache.py','sync_check.py','timemap.py','video_source.py','proxies.py'))).hexdigest()
+        ('sync_calibrate.py','sample_cache.py','sampling_fingerprint.py','keyframes.py',
+         'sync_check.py','timemap.py','video_source.py','proxies.py','calibrated_frames.py'))).hexdigest()
 
 
 def sample_camera(mapping,camera,root,grid,fingerprint):
@@ -271,11 +332,13 @@ def sample_camera(mapping,camera,root,grid,fingerprint):
         frames.close()
 
 
-def run(path,out_root,samples_root,reuse_samples=False):
+def run(path,out_root,samples_root,reuse_samples=False,keyframes_root=None,sampling_provenance=None):
     from .proxies import make_grid
     from .timemap import assemble_session
+    from .keyframes import source_keyframes,step_mask
+    from .sampling_fingerprint import sampling_hash
     mapping=json.loads(Path(path).read_text(encoding='utf-8'))
-    if mapping['version']!=2 or any(r['status']!='valid' for r in mapping['files']):
+    if mapping['version']!=2 or any(r['status']!='valid' or 'calibration' in r for r in mapping['files']):
         raise ValueError('Every source requires a valid v2 base map')
     target=Path(out_root)/(mapping['session']+'.json')
     if reuse_samples and target.exists():
@@ -286,35 +349,46 @@ def run(path,out_root,samples_root,reuse_samples=False):
             raise ValueError('Source changed since mapping: '+row['source'])
     grid=make_grid(mapping['overlap'],allow_internal_gaps=True)
     root=Path(samples_root)/mapping['session']
-    fingerprint=dict(mapping_sha256=hash_file(path),implementation_sha256=implementation_hash(),grid=grid)
-    cells={};evidence={}
+    fingerprint=dict(mapping_sha256=hash_file(path),implementation_sha256=implementation_hash(),
+                     sampling_sha256=sampling_hash()[0],grid=grid)
+    receipts=json.loads(Path(sampling_provenance).read_text(encoding='utf-8')) if sampling_provenance else {}
+    keys=source_keyframes(mapping['files'],keyframes_root or Path(out_root)/'keyframes')
+    cells={};evidence={};masked={}
     for camera in ('cam_b','cam_a','cam_e'):
         camera_fingerprint=dict(fingerprint,camera=camera)
         if reuse_samples:
             sidecar=read_sample_cache(root,camera,camera_fingerprint,
-                                     [r['source'] for r in mapping['files'] if r['camera']==camera])
+                                     [r['source'] for r in mapping['files'] if r['camera']==camera],
+                                     receipts.get(mapping['session'],{}).get(camera))
         else:
             sidecar=sample_camera(mapping,camera,root,grid,camera_fingerprint)
         evidence[camera]=dict(fingerprint=sidecar['fingerprint'],pixels_sha256=sidecar['sha256'],
                               sidecar_sha256=hash_file(root/(camera+'.json')),reused=bool(reuse_samples))
+        mask=step_mask(sidecar['frames'],keys)
+        masked[camera]=dict(masked_steps=int(mask.sum()),total_steps=len(mask)-1,
+                           masked_fraction=float(mask[1:].mean()))
         cells[camera]=motion_cells(np.load(root/(camera+'.npy'),mmap_mode='r'),
-                                  np.array([r['gap'] for r in sidecar['frames']]))
+                                  np.array([r['gap'] for r in sidecar['frames']]),mask)
     signals,selection=select_signals(cells)
     calibrations={}
     for camera in ('cam_a','cam_e'):
         windows=window_lags(signals['cam_b'],signals[camera])
+        for window in windows:
+            if window['valid']:
+                window['b_mid_seconds']=window['t_mid_seconds']+window['lag_seconds']
         fit=fit_calibration(windows,(grid['N']-1)*grid['step'])
+        fit['time_domain']='base'
         refine_breakpoints(fit,signals['cam_b'],signals[camera])
-        fit.update(origin=grid['t0']+grid['step'],selection=selection[camera],fingerprint=fingerprint)
+        fit.update(origin=grid['t0'],selection=selection[camera],fingerprint=fingerprint)
         calibrations[camera]=fit
         if fit['valid']:
             for row in mapping['files']:
                 if row['camera']==camera:
                     row['calibration']=fit
     result=assemble_session(mapping['session'],mapping['files'])
-    result.update(calibration=calibrations,calibrated=all(f['valid'] for f in calibrations.values()),
+    result.update(version=3,calibration=calibrations,calibrated=all(f['valid'] for f in calibrations.values()),
                   reference_camera='cam_b',base_mapping_sha256=hash_file(path),implementation_sha256=implementation_hash(),
-                  sampling_evidence=evidence)
+                  sampling_evidence=evidence,keyframe_masks=masked)
     atomic_json(target,result)
     print(mapping['session'],json.dumps({k:{f:v[f] for f in ('valid','reason','valid_windows','segments','breakpoints')}
                                        for k,v in calibrations.items()}),flush=True)
@@ -329,10 +403,14 @@ def main(argv=None):
     parser.add_argument('--session',required=True)
     parser.add_argument('--reuse-samples',action='store_true',
                         help='Refit verified grayscale evidence into a fresh map without decoding or rewriting samples.')
+    parser.add_argument('--keyframes-root',type=Path,help='Packet-only keyframe cache outside the repository.')
+    parser.add_argument('--sampling-provenance',type=Path,
+                        help='Verified legacy sampling receipts; never replaces the sampling-hash comparison.')
     args=parser.parse_args(argv)
     import psutil
     psutil.Process().nice(psutil.BELOW_NORMAL_PRIORITY_CLASS if hasattr(psutil,'BELOW_NORMAL_PRIORITY_CLASS') else 10)
-    result=run(args.timemaps/(args.session+'.json'),args.out_root,args.samples_root,args.reuse_samples)
+    result=run(args.timemaps/(args.session+'.json'),args.out_root,args.samples_root,args.reuse_samples,
+               args.keyframes_root,args.sampling_provenance)
     return int(not result['calibrated'])
 
 

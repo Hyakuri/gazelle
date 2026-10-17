@@ -201,13 +201,31 @@ def sample_file(path,camera,step=10.,window=2.25,source_factory=VideoSource,read
                     readings=auxiliary,windows=windows,decoded_samples=decoded,recognized_samples=recognized)
 
 
+def coverage_intervals(row):
+    fit=row.get('calibration')
+    if not fit or fit.get('time_domain')!='base':
+        return [(map_file_time(row,s['pts_start'],s.get('frame_start')),
+                 map_file_time(row,s['pts_end'],s.get('frame_end'))) for s in row['segments']]
+    from .calibrated_frames import segment_time
+    intervals=[]
+    for native in row['segments']:
+        lo=native['a']+native['b']*native['pts_start']
+        hi=native['a']+native['b']*native['pts_end']
+        bounds=[lo]+[fit['origin']+p['seconds'] for p in fit['breakpoints'] if lo<fit['origin']+p['seconds']<hi]+[hi]
+        for a,b in zip(bounds,bounds[1:]):
+            midpoint=(a+b)/2-fit['origin']
+            segment=next((s for s in fit['segments'] if s['start']<=midpoint<s['end']),
+                         fit['segments'][0 if midpoint<fit['segments'][0]['start'] else -1])
+            intervals.append((segment_time(a,segment,fit['origin']),segment_time(b,segment,fit['origin'])))
+    return intervals
+
+
 def assemble_session(session,files):
     cameras={}
     for camera in ('cam_a','cam_b','cam_e'):
         selected=[f for f in files if f['camera']==camera and 'segments' in f]
         selected.sort(key=lambda f:map_file_time(f,f['segments'][0]['pts_start'],f['segments'][0].get('frame_start')))
-        intervals=[(map_file_time(f,s['pts_start'],s.get('frame_start')),
-                    map_file_time(f,s['pts_end'],s.get('frame_end'))) for f in selected for s in f['segments']]
+        intervals=[interval for f in selected for interval in coverage_intervals(f)]
         merged=_merge(intervals)
         cameras[camera]=dict(files=[f['source'] for f in selected],coverage=merged,
                              gaps=[dict(start=b,end=c,seconds=c-b) for (_,b),(c,_) in zip(merged,merged[1:])])

@@ -39,6 +39,10 @@ def sample_session(session,gaps,rng,per_session=4,seconds=60,excluded=()):
     strata=2 if total/hz<45*60 else per_session
     prefix=[0]
     for gap in gaps:prefix.append(prefix[-1]+bool(gap))
+    uncertain=session.get('sync_uncertain',[False]*total)
+    if len(uncertain)!=total:raise ValueError('Invalid sync uncertainty grid')
+    uncertainty_prefix=[0]
+    for value in uncertain:uncertainty_prefix.append(uncertainty_prefix[-1]+bool(value))
     rows=[]
     for index in range(strata):
         low=index*total//strata;high=(index+1)*total//strata-count
@@ -48,11 +52,13 @@ def sample_session(session,gaps,rng,per_session=4,seconds=60,excluded=()):
             start=rng.randint(low,high)
             gap_seconds=(prefix[start+count]-prefix[start])/hz
             overlaps=any(start<b and a<start+count for a,b in excluded)
-            attempts.append(dict(attempt=attempt,start_frame=start,gap_seconds=gap_seconds,pilot_overlap=overlaps))
-            if gap_seconds<=2 and not overlaps:
+            uncertain_steps=uncertainty_prefix[start+count]-uncertainty_prefix[start]
+            attempts.append(dict(attempt=attempt,start_frame=start,gap_seconds=gap_seconds,pilot_overlap=overlaps,
+                                 sync_uncertain_steps=uncertain_steps))
+            if gap_seconds<=2 and not overlaps and uncertain_steps==0:
                 break
         else:
-            raise ValueError('Gap/pilot redraw limit reached in {} stratum {}'.format(session['session'],index))
+            raise ValueError('Gap/pilot/sync uncertainty redraw limit reached in {} stratum {}'.format(session['session'],index))
         row=_segment(session,start,count,'{}_s{:02d}'.format(session['session'],index+1),attempts=attempts)
         row['stratum']=dict(index=index,start_frame=low,end_frame_exclusive=(index+1)*total//strata)
         rows.append(row)
@@ -96,7 +102,7 @@ def read_session(path):
     grid=session['grid']
     if grid.get('step_hz')!=5 or abs(grid.get('step',0)-.2)>1e-9:
         raise ValueError('This annotation protocol requires 5 Hz proxies')
-    gaps=[False]*grid['N'];cameras={}
+    gaps=[False]*grid['N'];uncertain=[False]*grid['N'];cameras={}
     for camera,role in ROLES.items():
         data=session['cameras'][camera]
         video=source_path(path.parent,data['video'])
@@ -109,9 +115,11 @@ def read_session(path):
         if digest!=data['sha256'] or digest!=rows['video_sha256']:
             raise ValueError('Proxy hash differs from session or sidecar')
         gaps=[old or new['gap'] for old,new in zip(gaps,rows['frames'])]
+        uncertain=[old or new.get('sync_uncertain',False) for old,new in zip(uncertain,rows['frames'])]
         cameras[camera]=dict(role=role,path=str(video),sha256=digest,
                              sidecar_path=str(sidecar),sidecar_sha256=hash_file(sidecar))
     session['cameras']=cameras
+    session['sync_uncertain']=uncertain
     return session,gaps
 
 
@@ -133,13 +141,15 @@ def plan(proxies_root,seed=20261015,per_session=4,seconds=60,sessions=DEFAULT_SE
         first=round(offset);count=round(60*grid['step_hz'])
         excluded=[]
         if 0<=first and first+count<=grid['N'] and abs(offset-first)<1e-4:
+            if any(session.get('sync_uncertain',[])[first:first+count]):
+                raise ValueError('Fixed pilot intersects sync uncertainty; coordinator review required')
             excluded=[(first,first+count)]
             pilots.append(_segment(session,first,count,session['session']+'_pilot',pilot=True,
-                                   attempts=[dict(attempt=0,start_frame=first,gap_seconds=sum(gaps[first:first+count])/grid['step_hz'])]))
+                                   attempts=[dict(attempt=0,start_frame=first,gap_seconds=sum(gaps[first:first+count])/grid['step_hz'],sync_uncertain_steps=0)]))
         segments.extend(sample_session(session,gaps,random.Random(seed+int(session['session'])),per_session,seconds,excluded))
     if len(pilots)!=1:raise ValueError('Exactly one session must cover the fixed pilot clock interval')
     manifest=dict(version=2,seed=seed,sessions=sorted(sessions),session_seed_rule='seed + int(session)',method='stratified-uniform-grid',per_session=per_session,
-                  segment_seconds=seconds,max_redraws=10,max_gap_seconds=2,
+                  segment_seconds=seconds,max_redraws=10,max_gap_seconds=2,max_sync_uncertain_steps=0,
                   segments=pilots+segments,created_at=datetime.now(timezone.utc).isoformat())
     return validate_manifest(manifest)
 

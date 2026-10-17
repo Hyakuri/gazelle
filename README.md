@@ -364,8 +364,16 @@ decoded/OCR evidence in a different output root, retaining its original implemen
 `sync_calibrate --reuse-samples` refits verified grayscale caches without decoding source
 video. Use a fresh output map; the old sampling fingerprint and current fitting fingerprint
 are recorded separately, and the original samples remain unchanged.
-The two clock-correction iterations require local linear solution error within 1 ms,
-computed as equation residual divided by `abs(1+c1)`.
+Reuse compares the actual sampling implementation hash; a mismatch is rejected. Packet-only
+keyframe scans mask motion steps crossing a source keyframe or source-file boundary;
+validation also masks proxy keyframes and uses `INTER_AREA` thumbnails. v3 fits use
+`T(b) = b - L(b)` in each camera's base time, an L1 step search with ≥25% gain,
+and explicit overlap exclusion. Cut uncertainty (±10 s) and gaps/overlaps carry
+`sync_uncertain`; annotation sampling redraws those segments within the same stratum.
+Residual results are passed, failed, or `insufficient_evidence` (<10 windows or <30% coverage).
+A–B/E–B must pass; A–E may lack evidence, with closure inference reported. Clock checks use
+`d = base_X(pts) - reading`: A/B −0.5 ≤ d <1.5 s, E −1.5 ≤ d <2.5 s.
+Only after all seven sessions pass may directories be switched with dated backups and datasets rebuilt.
 
 Local research data tools build a read-only source inventory and losslessly
 remux AVI empty packets. Run `python -m tools.workdata.inventory` and

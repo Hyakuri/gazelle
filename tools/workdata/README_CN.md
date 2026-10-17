@@ -34,7 +34,7 @@ OpenCV 开头和中间各 30 帧；尾部从估计末尾前 60 帧定位，最�
 ```powershell
 python -m tools.workdata.osd_clock --image C:\path\outside-repository\clock.png
 python -m tools.workdata.timemap --inventory "$data\inventory\inventory.json" --remux-root "$data\remux" --out-root "$data\timemaps_v2_base"
-python -m tools.workdata.sync_calibrate --timemaps "$data\timemaps_v2_base" --out-root "$data\timemaps_v2" --samples-root "$data\sync_samples_v2" --session 20260828
+python -m tools.workdata.sync_calibrate --timemaps "$data\timemaps_v2_base" --out-root "$data\timemaps_v3" --samples-root "$data\sync_samples_v2" --session 20260828
 python -m tools.workdata.sync_check --timemaps "$data\timemaps_v2" --out-root "$data\sync_checks" --session 20260828
 ```
 
@@ -63,16 +63,25 @@ v2 每个文件用 Theil–Sen 初值及降权最小二乘稳健拟合 `wall = a
 6×12 格帧差均值取 log1p，缺口保留缺失。B 用整帧信号，A/E 选与 B 在任意滞后下相关最高的六格。
 60 s 窗、60 s 步长、±10 s 搜索，`corr(B[t], X[t+L])` 的正 L 表示 X 同一事件晚出现。
 抛物线插值给出亚步滞后；有效窗 r ≥0.5、突出度 ≥0.1 且不在搜索边界。
-Theil–Sen 拟合偏移和漂移，要求 ≥10 窗、跨度 ≥30%、MAD ≤0.08 s；最多三个台阶，
-分割后 MAD 至少减半、两侧各 ≥5 窗，再用附近 20 s 窗/10 s 步长细化。
-最终 `t = base_X(pts) - L(t)` 用两次不动点迭代，未在 1 ms 内收敛即失败。
-两次迭代后的值以原方程残差除以 `abs(1+c1)` 检验相对于局部线性解的误差，
-最后一次更新幅度不作为最终误差；局部方程奇异时失败，0.4 s 正台阶无解回归保持失败。
-无人或静止时段不能提供校准窗；不能校准时记录原因，不能生成 v2 代理。
+Theil–Sen 要求 ≥10 窗、跨度 ≥30%、每段 ≥5 窗、全局 MAD ≤0.08 s、|残差|>0.2 s 的窗 ≤10%。
+始终搜索一刀或同段两刀，总计 ≤3 切点；取 L1 降幅最大且 ≥25% 的候选，
+每个台阶必须 ≥max(0.2 s, 4×候选残差 MAD)。切点 ±120 s 用 20 s 窗/10 s 步长细化，取两侧 L1 最小。
+v3 把窗中心改为自身基础时间 b=t+L，显式计算 `T(b) = b - L(b)`。
+负台阶保留缺口；正台阶排除切点前 T≥实际切点后首帧 T 的帧，保证可选时间严格递增。
+切点 ±10 s 和缺口/重叠范围的网格步标为 `sync_uncertain`。
+旧 v2 读取仍保留两次迭代的方程残差 / `abs(1+c1)` 保护。
+无人或静止时段不能提供校准窗；不能校准时记录原因，不能生成校准代理。
+
+源文件关键帧包标记扫描到 EOF，只解复用、不解码；E 使用重封装文件。
+`--keyframes-root` 缓存绑定源 SHA、大小、mtime。换源文件或存在 previous_pts < p ≤ current_pts
+的关键帧时，该差分步记缺失；缺口继续缺失。验证另屏蔽代理自身关键帧，报告每机比例。
+验证用 `INTER_AREA` 生成 96×54 灰度缩略图，校准保留 PyAV reformat。
 
 仅修复拟合时，可以在上述 `sync_calibrate` 命令追加 `--reuse-samples`，并指定新的
 `--out-root`（例如 `timemaps_v2_refit`），输出映射须尚不存在。此模式只读复用灰度样本，
 检查基础映射哈希、网格、源文件大小/修改时间、像素 SHA、96×54 uint8 形状、逐步来源及完整解码记录。
+必须比较实际采样实现哈希的值；选帧/缩略图实现改变即拒绝。旧缓存可提供独立核实代码来源的
+`--sampling-provenance`，绑定原旁注 SHA、像素 SHA、原实现与相同的采样 SHA，不能放行不匹配。
 `sampling_evidence` 分别记录原采样指纹、像素和旁注 SHA；当前拟合实现另记，不改旧旁注。
 不重新解码源视频、运行模型、GPU、FFmpeg 或网络；不能用于绕过采样逻辑发生变化后的重新采样。
 
@@ -83,8 +92,8 @@ Theil–Sen 拟合偏移和漂移，要求 ≥10 窗、跨度 ≥30%、MAD ≤0.
 ## 5 Hz 代理视频
 
 ```powershell
-python -m tools.workdata.proxies --timemaps "$data\timemaps_v2" --out-root "$data\proxies" --session 20260828 --allow-internal-gaps
-python -m tools.workdata.sync_validate --proxies "$data\proxies" --out-root "$data\sync_validation" --session 20260828 --clock-samples C:\path\outside-repository\check_proxy_clocks.json
+python -m tools.workdata.proxies --timemaps "$data\timemaps_v3" --out-root "$data\proxies_v3_pending" --session 20260828 --allow-internal-gaps
+python -m tools.workdata.sync_validate --proxies "$data\proxies" --timemaps "$data\timemaps_v3" --keyframes-root "$data\keyframes_v3" --out-root "$data\sync_validation" --session 20260828 --clock-samples C:\path\outside-repository\check_proxy_clocks.json
 ```
 
 默认 `--step-hz 5 --size 1920 1080`，三个角色文件为 `proxy_front.mp4`（cam_b）、
@@ -103,13 +112,19 @@ python -m tools.workdata.sync_validate --proxies "$data\proxies" --out-root "$da
 
 共同覆盖有内部缺口时默认报错。r2 流程显式加 `--allow-internal-gaps`：
 保留总体起止的固定网格，记录 `coverage_gaps` 与 `gap_policy=nearest_with_gap_flag_provisional`，
-沿用最近帧规则，不丢弃区间或拼接压缩时间。重新生成前将旧代理和试用集改名为日期备份，保留到验收。
+沿用最近帧规则，不丢弃区间或拼接压缩时间。七会话全部通过前旧代理/试用集保持原路径，之后才改名备份并切换。
 
 `sync_validate` 在新代理上测 A–B/E–B/A–E：有效窗 ≥90% 的 |L| ≤0.2 s，中位 |L| ≤0.1 s，
 会话中点 |c0| ≤0.1 s、|c1| ≤0.1 s/小时。时钟抽查复用 TASK-134 已保存的固定 k，
-缺读依次试 k−1/k+1/k−2/k+2；仍缺失记不可评估，可评估比例须 ≥90%，A/B ±1 s、E ±2 s。
+缺读依次试 k−1/k+1/k−2/k+2；仍缺失记不可评估，可评估比例须 ≥90%。
+用所选源帧自身基础映射算 `d = base_X(pts) - reading`，整秒 OSD 读数下理想 d∈[0,1)。
+A/B −0.5 ≤ d <1.5 s，E −1.5 ≤ d <2.5 s；`reading_minus_grid_distribution` 另报读数减网格时间。
 时钟 `delta_distribution` 按摄像机报告差值的有符号最小值/中位数/最大值及绝对值 p90，包含超限样本；
 全缺失时统计值为 null，并分别记录可评估、不可评估和通过计数。
-报告保留失败与各类非测量窗，不能靠删窗口通过。每会话自动选三个联合运动起点，导出 ±1 s、
-逐 0.2 s 的 B/A/E 条图供人工复核。输出仅在数据根，不上传人物图像。
-校准代理存在后重建 `roi_r2_trial`，正式 ROI 已完成则同时生成 `roi_r2`；正式标注等待独立同步验收。
+报告分通过、未通过、`insufficient_evidence`（有效窗 <10 或覆盖 <30%）；A–B/E–B 必须通过，
+A–E 可证据不足但须报告闭合推算。逐窗/整体闭合差 (A−B)−(E−B)−(A−E) 与端点最大偏差仅报告、不设新门槛。
+保留失败与各类非测量窗，不能靠删窗口通过。每会话优先从 A/E 所选作业者格选三个运动起点，
+每切点 ±10 s 内另选一个事件，导出 ±1 s、逐 0.2 s 的 B/A/E 条图；回读缩略图与验证缓存逐像素核对，不同则失败。
+对已有代理比较 v3/v2 全时长滞后，每机均 ≤0.05 s 则保留 v2 代理及原 SHA，否则重建并记录来源。
+七会话全通过才切换目录、重建 `roi_r2_trial` 和已完成 ROI 的 `roi_r2`；不生成正式 labels。
+含 `sync_uncertain` 步的片段在同层重抽，记录每次尝试；正式标注等待独立同步验收。

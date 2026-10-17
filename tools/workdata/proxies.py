@@ -62,6 +62,7 @@ def validate_sidecar(rows, grid):
                 or not isinstance(row['source'], str) or not row['source']
                 or not math.isfinite(row['pts']) or not math.isfinite(row['delta_seconds'])
                 or type(row['gap']) is not bool
+                or ('sync_uncertain' in row and type(row['sync_uncertain']) is not bool)
                 or row['gap'] != has_sampling_gap(row['delta_seconds'],grid['step'],row['t_k'])):
             raise ValueError('Invalid sidecar row at index {}'.format(k))
 
@@ -148,7 +149,14 @@ def generate_camera(files, grid, size, target, sidecar, fingerprint, camera, ffm
     os.close(descriptor)
     temporary=Path(name)
     counts=[]; rows=[]; started=time.monotonic()
-    frames=full_mapped_frames(files,counts)
+    from .calibrated_frames import calibrated_frames,uncertain_ranges,is_uncertain
+    fit=files[0].get('calibration')
+    v3=fit is not None and fit.get('time_domain')=='base'
+    ranges=uncertain_ranges(fit) if v3 else []
+    selection_audit={}
+    base_files=[{k:v for k,v in row.items() if k!='calibration'} for row in files] if v3 else files
+    frames=full_mapped_frames(base_files,counts)
+    if v3:frames=calibrated_frames(frames,fit,ranges,selection_audit)
     times=(grid['t0']+k*grid['step'] for k in range(grid['N']))
     try:
         with tempfile.TemporaryFile() as errors:
@@ -159,6 +167,7 @@ def generate_camera(files, grid, size, target, sidecar, fingerprint, camera, ffm
                     pixels=row['frame'].reformat(width=size[0],height=size[1],format='bgr24').to_ndarray()
                     process.stdin.write(pixels.tobytes())
                     rows.append({key:row[key] for key in ('k','t_k','source','pts','delta_seconds','gap')})
+                    if v3:rows[-1]['sync_uncertain']=is_uncertain(row['t_k'],ranges)
                     if len(rows)%1500==0:
                         print('{} {}/{} proxy frames'.format(camera,len(rows),grid['N']),flush=True)
                 process.stdin.close()
@@ -175,10 +184,14 @@ def generate_camera(files, grid, size, target, sidecar, fingerprint, camera, ffm
         # nearest_frames stops at the final grid point; audit the remaining source frames too.
         for _ in frames:
             pass
+        if v3:
+            for row in rows:row['sync_uncertain']=is_uncertain(row['t_k'],ranges)
         validate_sidecar(rows,grid)
         payload=dict(version=1,camera=camera,role=ROLES[camera],grid=grid,
                      fingerprint=fingerprint,frames=rows,source_decode=counts,
                      gap_count=sum(row['gap'] for row in rows),elapsed_seconds=time.monotonic()-started)
+        if v3:payload.update(sync_uncertain_ranges=ranges,selection_audit=selection_audit,
+                             sync_uncertain_count=sum(r['sync_uncertain'] for r in rows))
         return publish_proxy(temporary,target,sidecar,payload,grid,size,ffprobe)
     finally:
         frames.close()
@@ -219,7 +232,7 @@ def run(path,out_root,hz=5.,size=(1920,1080),force=False,ffmpeg='ffmpeg',ffprobe
     dirty=bool(subprocess.run(git+['status','--porcelain','--','tools/workdata'],cwd=repository,
                               capture_output=True,text=True,check=True).stdout.strip())
     implementation=hashlib.sha256(b''.join((Path(__file__).parent/name).read_bytes() for name in
-                                 ('proxies.py','sync_check.py','sync_calibrate.py','video_source.py','timemap.py'))).hexdigest()
+                                 ('proxies.py','calibrated_frames.py','sync_check.py','sync_calibrate.py','video_source.py','timemap.py'))).hexdigest()
     version=dict(timemap_sha256=hash_file(path),implementation_sha256=implementation,grid=grid,size=list(size))
     cameras={}; started=time.monotonic()
     for camera,role in ROLES.items():

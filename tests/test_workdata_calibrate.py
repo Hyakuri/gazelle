@@ -135,7 +135,7 @@ class CalibrationTest(unittest.TestCase):
             root=Path(directory);target=root/'cam_e.npy';sidecar=root/'cam_e.json'
             np.save(target,np.zeros((3,54,96),dtype=np.uint8))
             grid=dict(t0=10.,N=3,step=.2,step_hz=5.)
-            fingerprint=dict(mapping_sha256='1'*64,implementation_sha256='2'*64,grid=grid,camera='cam_e')
+            fingerprint=dict(mapping_sha256='1'*64,implementation_sha256='2'*64,sampling_sha256='s'*64,grid=grid,camera='cam_e')
             saved=dict(fingerprint=fingerprint,grid=grid,sha256=hash_file(target),
                 frames=[dict(k=k,t_k=10.+k*.2,source='source.mp4',pts=k*.2,delta_seconds=0.,gap=False) for k in range(3)],
                 source_decode=[dict(source='source.mp4',decoded_frames=12,reached_eof=True)])
@@ -168,6 +168,7 @@ class CalibrationTest(unittest.TestCase):
     def test_calibration_refit_preserves_samples_and_checks_sources_before_reuse(self):
         from tools.workdata.common import hash_file
         from tools.workdata.sync_calibrate import run
+        from tools.workdata.sampling_fingerprint import sampling_hash
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory);samples=root/'samples/session';samples.mkdir(parents=True)
             files=[];original={}
@@ -184,12 +185,13 @@ class CalibrationTest(unittest.TestCase):
                 np.save(target,np.zeros((3,54,96),dtype=np.uint8))
                 sidecar.write_text(json.dumps(dict(grid=grid,sha256=hash_file(target),
                     fingerprint=dict(mapping_sha256=hash_file(mapping),implementation_sha256='original-code',
-                                     grid=grid,camera=camera),
+                                     sampling_sha256=sampling_hash()[0],grid=grid,camera=camera),
                     frames=[dict(k=k,t_k=10.+k*.2,source=row['source'],pts=k*.2,delta_seconds=0.,gap=False) for k in range(3)],
                     source_decode=[dict(source=row['source'],decoded_frames=12,reached_eof=True)])))
                 original[target]=target.read_bytes();original[sidecar]=sidecar.read_bytes()
             windows=[dict(t_mid_seconds=t,lag_seconds=0.,valid=True) for t in np.linspace(.02,.38,10)]
             with patch('tools.workdata.sync_calibrate.sample_camera',side_effect=AssertionError('must not decode')), \
+                 patch('tools.workdata.keyframes.source_keyframes',return_value={r['source']:[] for r in files}), \
                  patch('tools.workdata.sync_calibrate.window_lags',return_value=windows), \
                  patch('tools.workdata.timemap.assemble_session',return_value=dict(session='session')):
                 result=run(mapping,root/'new',root/'samples',reuse_samples=True)
@@ -215,11 +217,11 @@ class CalibrationTest(unittest.TestCase):
         def read(k):
             attempts.append(k)
             return {'wall_time':10.2} if k==6 else None
-        row = clock_sample(5,20,9.,.2,'cam_a',read)
+        row = clock_sample(5,20,9.,.2,'cam_a',read,lambda k:9.+k*.2)
         self.assertEqual(attempts,[5,4,6])
         self.assertEqual(row['used_k'],6)
         self.assertTrue(row['passed'])
-        missing = clock_sample(5,20,9.,.2,'cam_a',lambda k:None)
+        missing = clock_sample(5,20,9.,.2,'cam_a',lambda k:None,lambda k:9.+k*.2)
         self.assertFalse(missing['evaluable'])
         summary = clock_summary([row]*8+[missing])
         self.assertFalse(summary['evaluable_passed'])
@@ -231,7 +233,7 @@ class CalibrationTest(unittest.TestCase):
         self.assertTrue(all(r['valid'] for r in rows))
 
     def test_clock_distribution_includes_failures_and_keeps_missing_absent(self):
-        rows=[dict(camera='cam_e',evaluable=True,delta_seconds=value,passed=abs(value)<=2)
+        rows=[dict(camera='cam_e',evaluable=True,delta_seconds=value,reading_minus_grid_seconds=-value,passed=-1.5<=value<2.5)
               for value in (-2.,.5,2.5)]
         rows += [dict(camera='cam_e',evaluable=False,passed=False),
                  dict(camera='cam_a',evaluable=False,passed=False)]
@@ -239,7 +241,7 @@ class CalibrationTest(unittest.TestCase):
         distribution=summary['delta_distribution']
         self.assertEqual(distribution['cam_e']['evaluable'],3)
         self.assertEqual(distribution['cam_e']['unevaluable'],1)
-        self.assertEqual(distribution['cam_e']['passed'],2)
+        self.assertEqual(distribution['cam_e']['passed'],1)
         self.assertEqual(distribution['cam_e']['signed_minimum_seconds'],-2.)
         self.assertEqual(distribution['cam_e']['signed_median_seconds'],.5)
         self.assertEqual(distribution['cam_e']['signed_maximum_seconds'],2.5)

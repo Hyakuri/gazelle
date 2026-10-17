@@ -12,6 +12,19 @@ from tests.test_validation_roi import document
 
 
 class SamplingTest(unittest.TestCase):
+    def test_uncertain_segment_is_redrawn_within_same_stratum_and_audited(self):
+        session=dict(session='short',grid=dict(t0=100.,N=9000,step_hz=5.,step=.2),
+                     cameras={},time_map_version=3,time_map_sha256='a'*64,sync_uncertain=[False]*9000)
+        session['sync_uncertain'][250]=True
+        class Draws:
+            values=iter([100,500,5000])
+            def randint(self,a,b):return next(self.values)
+        rows=sample_session(session,[False]*9000,Draws())
+        self.assertEqual(rows[0]['start_frame'],500)
+        self.assertEqual(rows[0]['attempts'][0]['sync_uncertain_steps'],1)
+        self.assertEqual(rows[0]['attempts'][1]['sync_uncertain_steps'],0)
+        self.assertEqual(rows[0]['stratum']['index'],0)
+
     def test_session_seeds_ignore_other_sessions_redraws_and_exclude_pilot(self):
         dates=['20260821','20260911']
         def read(path):

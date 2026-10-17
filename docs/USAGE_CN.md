@@ -604,7 +604,7 @@ python -m tools.validation.render_roi_reference --regions-path "$data\roi\roi_re
 ```powershell
 python -m tools.workdata.osd_clock --image C:\path\outside-repository\clock.png
 python -m tools.workdata.timemap --inventory "$data\inventory\inventory.json" --remux-root "$data\remux" --out-root "$data\timemaps_v2_base"
-python -m tools.workdata.sync_calibrate --timemaps "$data\timemaps_v2_base" --out-root "$data\timemaps_v2" --samples-root "$data\sync_samples_v2" --session 20260828
+python -m tools.workdata.sync_calibrate --timemaps "$data\timemaps_v2_base" --out-root "$data\timemaps_v3" --samples-root "$data\sync_samples_v2" --session 20260828
 python -m tools.workdata.sync_check --timemaps "$data\timemaps_v2" --out-root "$data\sync_checks" --session 20260828
 ```
 
@@ -615,9 +615,13 @@ python -m tools.workdata.sync_check --timemaps "$data\timemaps_v2" --out-root "$
 
 同步协议 r2 以前方摄像机 B 为基准。A/E 使用 5 Hz、96×54 灰度运动信号，跨全部滞后选择六格，
 以 60 s 窗口和 ±10 s 搜索测量滞后。有效窗要求 r ≥0.5、突出度 ≥0.1、峰不在边界。
-Theil–Sen 拟合要求 ≥10 窗、跨度 ≥30%、MAD ≤0.08 s；有证据的台阶用 20 s 窗细化。
-最终时间求解 `t = base_X(pts) - L(t)`，含义是 B 的画面时钟轴，不是校准 UTC。
-校准需要作业者有可见动作，无人或静止时段不能单独校准。无法校准的摄像机明确失败，不能生成 v2 代理。
+Theil–Sen 拟合要求 ≥10 窗、跨度 ≥30%、每段 ≥5 窗、MAD ≤0.08 s、超出 0.2 s 的残差不超过 10%。
+始终搜索每段一刀/两刀（总计 ≤3）：L1 代价下降 ≥25%，每个台阶 ≥max(0.2 s, 4×候选 MAD)。
+在切点 ±120 s 内用 20 s 窗/10 s 步长，以两侧 L1 最小细化。v3 用自身基础中心 b=t+L 拟合，
+显式计算 `T(b) = b - L(b)`；含义是 B 的画面时钟轴，不是校准 UTC。
+负台阶保留缺口；正台阶排除 T 不小于实际切点后首帧 T 的切点前帧，使可选时间严格递增。
+切点 ±10 s 与缺口/重叠范围在旁注标为 `sync_uncertain`。
+校准需要作业者有可见动作，无人或静止时段不能单独校准。无法校准的摄像机明确失败，不能生成校准代理。
 可选旧诊断 `sync_check` 保留三个 120 s、10 Hz 窗，单独报告边界峰和不突出峰，要求有效峰且 |lag| ≤0.5 s；
 它不替代 r2 残差验收。缓存绑定映射与采样实现哈希。
 `timemap --sample-cache <旧-v2-root>` 把先前解码/OCR 证据重新拟合到不同的 `--out-root`。
@@ -629,18 +633,22 @@ Theil–Sen 拟合要求 ≥10 窗、跨度 ≥30%、MAD ≤0.08 s；有证据�
 python -m tools.workdata.sync_calibrate --timemaps "$data\timemaps_v2_base" --out-root "$data\timemaps_v2_refit" --samples-root "$data\sync_samples_v2" --session 20260828 --reuse-samples
 ```
 
-此模式仅使用 CPU，核对基础映射哈希、网格、源 size/mtime、像素 SHA-256、96×54 uint8 形状、
+此模式仅使用 CPU，比较实际采样实现哈希，并核对基础映射哈希、网格、源 size/mtime、像素 SHA-256、96×54 uint8 形状、
 逐步来源与完整源解码记录，不解码源视频、不推理、不使用 GPU、FFmpeg 或网络。
 输出映射须尚不存在；原样本只读，`sampling_evidence` 保留其原指纹与文件哈希，并另记当前拟合实现。
-时钟修正仍迭代两次，要求相对于局部线性解的误差不超过 1 ms：以原方程残差除以 `abs(1+c1)`。
-局部方程奇异时失败，0.4 s 正台阶无解回归仍明确失败。复用仅用于拟合修复，不用于采样变更。
+源关键帧扫描只解复用到 EOF，按源 SHA、大小、mtime 缓存（`--keyframes-root`）。
+换源文件或存在 previous_pts < p ≤ current_pts 的关键帧时，运动步记缺失；缺口继续缺失。
+验证另外屏蔽代理关键帧，报告各机屏蔽比例；96×54 灰度缩略图用 `INTER_AREA`，校准保留 PyAV reformat。
+采样与拟合分开记录指纹；旧缓存须提供独立核实来源的 `--sampling-provenance` 凭据，绑定原旁注/像素 SHA
+与相同采样哈希，不能放行哈希不一致。复用仅用于拟合修复，不用于采样变更。
+旧 v2 读取保留两次迭代及方程残差 / `abs(1+c1)` 的保护。
 详见[中文工具指南](../tools/workdata/README_CN.md)。
 
 代理生成沿用外部 `$data`：
 
 ```powershell
-python -m tools.workdata.proxies --timemaps "$data\timemaps_v2" --out-root "$data\proxies" --session 20260828 --allow-internal-gaps
-python -m tools.workdata.sync_validate --proxies "$data\proxies" --out-root "$data\sync_validation" --session 20260828 --clock-samples C:\path\outside-repository\check_proxy_clocks.json
+python -m tools.workdata.proxies --timemaps "$data\timemaps_v3" --out-root "$data\proxies_v3_pending" --session 20260828 --allow-internal-gaps
+python -m tools.workdata.sync_validate --proxies "$data\proxies" --timemaps "$data\timemaps_v3" --keyframes-root "$data\keyframes_v3" --out-root "$data\sync_validation" --session 20260828 --clock-samples C:\path\outside-repository\check_proxy_clocks.json
 ```
 
 默认 `--step-hz 5 --size 1920 1080`、CRF 20、yuv420p、恒定帧率、不含音频。
@@ -651,14 +659,20 @@ python -m tools.workdata.sync_validate --proxies "$data\proxies" --out-root "$da
 旁注记录最近源帧、原生 PTS、时间差；超过网格半步长的差异标记为缺口。
 
 共同覆盖包含多个区间时默认拒绝；显式 `--allow-internal-gaps` 保留整体起止间
-连续时钟网格，记录全部覆盖缺口与最近帧缺口标记，不压缩时间。重新生成前把旧代理和试用集改名为带日期备份。
+连续时钟网格，记录全部覆盖缺口与最近帧缺口标记，不压缩时间。七会话全部通过前保留旧代理原路径，之后改名备份并切换。
 `sync_validate` 复用已有固定 k，只对缺失读数依次补读 k−1/k+1/k−2/k+2；仍缺失记不可评估。
 `delta_distribution` 按摄像机记录可评估/不可评估/通过计数、差值的有符号最小值/中位数/最大值和绝对值 p90。
 超限差值照常纳入；没有可评估读数时统计值为 null。
-每会话可评估比例须 ≥90%。时钟容差 A/B ±1 s、E ±2 s。残差检查 A–B、E–B、A–E：
+每会话可评估比例须 ≥90%。时钟使用所选源帧自身基础映射，`d = base_X(pts) - reading`（整秒读数），
+A/B −0.5 ≤ d <1.5 s，E −1.5 ≤ d <2.5 s。`reading_minus_grid_distribution` 另报读数减网格时间作为符号旁证。
+残差检查 A–B、E–B、A–E：
 有效窗 ≥90% 在 ±0.2 s 内、中位 |lag| ≤0.1 s、会话中点 |offset| ≤0.1 s、|drift| ≤0.1 s/小时。
-所有失败保留，不删除窗口求通过。每会话三张 ±1 s 事件条图供独立目视核对。
-有校准代理后才重新生成试用集和已完成 ROI 的正式集，正式标注等待同步独立验收。详见
+所有失败保留，不删除窗口求通过。类别为通过、未通过、`insufficient_evidence`（<10 窗或覆盖 <30%）。
+A–B/E–B 必须通过；A–E 可证据不足，但须报告闭合推算。逐窗/整体 (A−B)−(E−B)−(A−E) 与端点最大偏差只报告、不设新门槛。
+每会话三张作业者运动 ±1 s 条图，每个切点 ±10 s 内另选一张；回读缩略图须与验证缓存逐像素相同。
+已有代理逐会话比较 v3/v2 全时长滞后：所有机位差 ≤0.05 s 时保留 v2 代理及原 SHA，否则重建，并记录来源。
+仅七会话全通过后重建试用集和已完成 ROI 的正式集；含 `sync_uncertain` 的片段在同层重抽、逐次记录。
+不自动生成正式 labels。正式标注等待同步独立验收。详见
 [中文工具指南](../tools/workdata/README_CN.md)。
 
 三视角标注在仓库根目录、Gazelle-next 环境中运行：
