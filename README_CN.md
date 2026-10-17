@@ -349,6 +349,8 @@ python main.py `
 固定时钟样本，并导出事件条图供人工复核。两者只使用 CPU，输出留在仓库外，不使用模型、GPU 或网络。
 校准需要作业者有可见动作；无人或静止时段不能提供校准窗口。旧代理与旧数据集保留为带日期的备份，
 正式标注须等待同步审查。
+仅修复拟合时，可用 `timemap --sample-cache <旧-v2-root>` 在不同输出根中复用已核实的解码/OCR 证据，
+保留原采样实现与文件哈希。
 
 本地研究数据工具可生成只读源清单并无损重封装 AVI 空包。从仓库根目录运行
 `python -m tools.workdata.inventory` 和 `python -m tools.workdata.remux`，读取源视频、

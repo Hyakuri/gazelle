@@ -352,6 +352,8 @@ exports event strips for human review. Both run on CPU, write only external data
 and use no models, GPU or network. Calibration needs visible worker motion;
 empty or stationary periods cannot supply calibration windows. Preserve previous
 proxies and datasets as dated backups. Formal annotation waits for synchronization review.
+For a fitting-only repair, `timemap --sample-cache <previous-v2-root>` can reuse verified
+decoded/OCR evidence in a different output root, retaining its original implementation and file hashes.
 
 Local research data tools build a read-only source inventory and losslessly
 remux AVI empty packets. Run `python -m tools.workdata.inventory` and

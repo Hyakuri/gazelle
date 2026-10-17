@@ -503,6 +503,7 @@ class UsageDocumentationTest(unittest.TestCase):
                           'tools.workdata.osd_clock', 'tools.workdata.timemap',
                           'tools.workdata.sync_check', 'tools.workdata.sync_calibrate',
                           'tools.workdata.sync_validate', 'tools.workdata.proxies',
+                          '--sample-cache',
                           '--allow-internal-gaps', '../tools/workdata/README_CN.md'):
                 self.assertIn(token, text, str(path))
 

@@ -637,6 +637,10 @@ remain explicit failures and cannot generate v2 proxies. The optional legacy `sy
 keeps three 120 s, 10 Hz diagnostic windows, reports boundary/non-prominent peaks separately,
 and requires a valid peak with |lag| ≤0.5 s. It is not the r2 residual acceptance gate.
 Caches bind mapping and sampling implementation hashes. See the [Chinese guide](../tools/workdata/README_CN.md).
+`timemap --sample-cache <previous-v2-root>` refits previously decoded/OCR evidence into a
+different `--out-root`. Source/media signatures, camera identity and sampling settings must match;
+the old sample hash and implementation fingerprint are retained. It performs no video decoding
+or OCR and never labels older samples as newly measured. Equal consecutive PTS are not regressions.
 
 Proxy generation, using the same external `$data`:
 

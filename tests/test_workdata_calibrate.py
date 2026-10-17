@@ -1,4 +1,8 @@
 import unittest
+import json
+import tempfile
+from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 
@@ -6,11 +10,38 @@ from tools.workdata.sync_calibrate import (
     lag_peak, window_lags, fit_calibration, corrected_time, motion_cells,
     clock_sample, clock_summary, select_signals, refine_breakpoints,
 )
-from tools.workdata.timemap import fit_time_map, detect_pts_runs, map_time
+from tools.workdata.timemap import fit_time_map, detect_pts_runs, map_time, run as run_timemap
 from tools.workdata.sync_validate import residual_summary, event_indices
 
 
 class CalibrationTest(unittest.TestCase):
+    def test_refit_reuses_signed_sample_evidence_without_decoding_or_overwriting(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);source=root/'source';source.mkdir()
+            media=source/'sample.mp4';media.write_bytes(b'fake video')
+            stat=media.stat();session='20260821'
+            entry=dict(session=session,relative_path='sample.mp4',size_bytes=stat.st_size,mtime_ns=stat.st_mtime_ns,
+                       sha256='original-sha',physical_camera='cam_a',needs_remux=False)
+            inventory=root/'inventory.json';inventory.write_text(json.dumps(dict(root=str(source),files=[entry])))
+            cache=root/'old/anchors'/session/'sample.json';cache.parent.mkdir(parents=True)
+            evidence=dict(version=2,fingerprint=dict(source_sha256='original-sha',media_size=stat.st_size,
+                          media_mtime_ns=stat.st_mtime_ns,step=10.,window=2.25,implementation_sha256='original-code'),
+                sampled=dict(camera='cam_a',pts_start=0.,pts_end=20.,windows=3,decoded_samples=5,recognized_samples=5,
+                             anchors=[dict(pts=t,wall_time=1000+t,frame_index=i+1) for i,t in enumerate((0.,10.,20.))],
+                             pts_runs=[dict(pts_start=0.,pts_end=0.,frame_start=0,frame_end=0),
+                                       dict(pts_start=0.,pts_end=20.,frame_start=1,frame_end=3)]))
+            cache.write_text(json.dumps(evidence));before=cache.read_bytes()
+            with patch('tools.workdata.timemap.sample_file',side_effect=AssertionError('must not decode')):
+                result=run_timemap(inventory,root/'remux',root/'new',sample_cache=root/'old')
+            row=result[0]['files'][0]
+            self.assertEqual(row['status'],'valid')
+            self.assertEqual(len(row['segments']),1)
+            self.assertEqual(row['fingerprint']['sampled_implementation_sha256'],'original-code')
+            self.assertEqual(cache.read_bytes(),before)
+            evidence['fingerprint']['media_size']+=1;cache.write_text(json.dumps(evidence))
+            result=run_timemap(inventory,root/'remux',root/'rejected',sample_cache=root/'old')
+            self.assertEqual(result[0]['files'][0]['status'],'failed')
+
     def test_coherent_clock_offsets_and_ramps_do_not_create_segments(self):
         x = np.arange(300) * 10.
         y = 1000 + .998 * x
