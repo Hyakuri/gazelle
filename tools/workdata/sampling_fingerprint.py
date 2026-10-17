@@ -18,7 +18,7 @@ COMPONENTS={
     'sync_calibrate.py':('sample_camera',),
     'proxies.py':('full_mapped_frames','make_grid'),
     'sync_check.py':('nearest_frames','has_sampling_gap'),
-    'timemap.py':('map_time',),
+    'timemap.py':('map_time','map_file_time'),
     'video_source.py':('VideoSource',),
 }
 

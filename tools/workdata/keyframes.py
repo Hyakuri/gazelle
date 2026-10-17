@@ -44,8 +44,13 @@ def scan_keyframes(path,cache_root,source_sha256):
 
 
 def source_keyframes(files,cache_root):
-    return {row['source']:scan_keyframes(row['media_path'],cache_root,
-            row['fingerprint']['source_sha256'])['pts'] for row in files}
+    result={}
+    for row in files:
+        stat=Path(row['media_path']).stat()
+        if (stat.st_size,stat.st_mtime_ns)!=(row['fingerprint']['media_size'],row['fingerprint']['media_mtime_ns']):
+            raise ValueError('Source changed since mapping: '+row['source'])
+        result[row['source']]=scan_keyframes(row['media_path'],cache_root,row['fingerprint']['source_sha256'])['pts']
+    return result
 
 
 def step_mask(rows,keys):

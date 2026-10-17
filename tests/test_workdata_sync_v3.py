@@ -17,6 +17,39 @@ def windows(values):
 
 
 class SynchronizationV3Test(unittest.TestCase):
+    def test_sampling_fingerprint_covers_base_wrapper_but_not_motion_fitting(self):
+        from tools.workdata.sampling_fingerprint import COMPONENTS, sampling_hash
+
+        root = Path(__file__).resolve().parents[1] / 'tools' / 'workdata'
+        sources = {name: (root / name).read_text(encoding='utf-8') for name in COMPONENTS}
+        original = sampling_hash(sources)[0]
+        changed = dict(sources)
+        changed['timemap.py'] = changed['timemap.py'].replace(
+            '    return base\n', '    return base + 1.\n', 1)
+        self.assertNotEqual(original, sampling_hash(changed)[0])
+        changed = dict(sources)
+        changed['sync_calibrate.py'] = changed['sync_calibrate.py'].replace(
+            'return np.log1p(cells)', 'return np.zeros_like(cells)', 1)
+        self.assertEqual(original, sampling_hash(changed)[0])
+
+    def test_source_keyframes_reject_changed_media_before_cache_lookup(self):
+        from tools.workdata.keyframes import source_keyframes
+
+        with tempfile.TemporaryDirectory() as directory:
+            media = Path(directory) / 'source.mp4'
+            media.write_bytes(b'original')
+            stat = media.stat()
+            row = dict(source='source', media_path=str(media), fingerprint=dict(
+                media_size=stat.st_size, media_mtime_ns=stat.st_mtime_ns,
+                source_sha256='mapped-sha'))
+            with patch('tools.workdata.keyframes.scan_keyframes', return_value=dict(pts=[0.])) as scan:
+                self.assertEqual(source_keyframes([row], directory), {'source': [0.]})
+                scan.reset_mock()
+                media.write_bytes(b'changed media')
+                with self.assertRaisesRegex(ValueError, 'Source changed since mapping'):
+                    source_keyframes([row], directory)
+                scan.assert_not_called()
+
     def test_validation_run_consumes_actual_map_schema_and_masks_proxy_packets(self):
         from tools.workdata.sync_validate import run
         from tools.workdata.proxies import ROLES
