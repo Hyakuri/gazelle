@@ -244,6 +244,10 @@ runtime 在延迟导入 ByteTrack 时仅过滤 upstream `trackers` 的 `target=N
 
 ### 独立 Head Observation Schema
 
+MediaPipe 视频第 0 帧及每条新轨迹首帧立即输出观测头部，`tracking.provisional=true`、age 为 1。
+两帧索引内确认且 IoU ≥0.20 时关联同一个公开 ID。临时头部不建立短遮挡桥接；
+图像模式、已确认头部与 `tracked_only` 使用 `tracking.provisional=false`。
+
 `gazelle.runtime.perception.outputs` 提供 `head_frame_to_json_dict(...)`，用于序列化单个独立 provider 结果。图片 pipeline 使用 `write_head_observations_json(output_path, **frame_kwargs)` 创建父目录，并写入恰好一个带缩进且末尾换行的 JSON 文档。视频 pipeline 会把每个序列化 provider 结果写成一行紧凑的 `head_observations.jsonl`。record 恰好包含 `frame_index`、`timestamp_ms`、`status`、`width`、`height`、`provider`、`timings_ms` 和 `people` 字段。结果存在 head 时 `status` 为 `"ok"`，否则为 `"no_head"`。`timings_ms` 保留 provider 的 timing 名称及有限的毫秒数值。
 
 每个人包含 `person_id`、`head_bbox_normalized` 和 `confidence`。rich MediaPipe perception 还会包含保守建议 `gaze_eligible`、实际逐帧推理决定 `gazelle_selected`、可选 rejection `gaze_status`、具名 pose-head keypoint，以及可用的两条 reference ray。face reference 使用 Face Landmarker pose 与 face keypoint；pose reference 由可靠的 Pose Landmarker nose/eye 或 nose/ear geometry 独立估计。两者都是无标定 2D reference，并非真实 eye gaze。

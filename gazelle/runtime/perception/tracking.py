@@ -14,8 +14,11 @@ from gazelle.runtime.perception.contracts import (
     HeadPerceptionState,
     HeadViewState,
 )
+from gazelle.runtime.perception.fusion import _bbox_iou
 
 
+# A raw -1 row with confidence >= activation is a spawn only while activation
+# equals high_conf_det_threshold (0.50) and minimum_consecutive_frames is 1.
 _TRACKER_CONFIGURATION = {
     "track_activation_threshold": 0.50,
     "high_conf_det_threshold": 0.50,
@@ -36,6 +39,7 @@ class TrackedHeadCandidate:
     person_id: int
     candidate: HeadCandidate
     track_age_frames: int
+    provisional: bool = False
 
 
 @dataclass(frozen=True)
@@ -123,6 +127,7 @@ class ByteTrackHeadTracker:
         self._public_id_by_raw_id = {}
         self._reserved_public_ids = set()
         self._next_public_id = 0
+        self._pending_spawns = {}
         self._last_frame_index: Optional[int] = None
         self._last_timestamp_ms: Optional[float] = None
         self._closed = False
@@ -216,7 +221,10 @@ class ByteTrackHeadTracker:
         candidates: Tuple[HeadCandidate, ...],
         *,
         frame_index: int,
+        candidate_boxes,
     ):
+        pending = {person_id: value for person_id, value in self._pending_spawns.items()
+                   if frame_index - value[1] <= 2}
         if not candidates:
             empty_output_error = (
                 "Invalid tracker output for empty candidate frame: expected "
@@ -248,6 +256,7 @@ class ByteTrackHeadTracker:
                 dict(self._public_id_by_raw_id),
                 set(self._reserved_public_ids),
                 self._next_public_id,
+                pending,
             )
         try:
             tracker_ids = tuple(tracked.tracker_id)
@@ -277,10 +286,12 @@ class ByteTrackHeadTracker:
                 raise RuntimeError("Invalid tracker output: duplicate candidate index")
             seen_candidates.add(candidate_index)
             if raw_person_id is None:
-                continue
-            if raw_person_id in seen_people:
+                if candidates[candidate_index].confidence < _TRACKER_CONFIGURATION["track_activation_threshold"]:
+                    continue
+            elif raw_person_id in seen_people:
                 raise RuntimeError("Invalid tracker output: duplicate person ID")
-            seen_people.add(raw_person_id)
+            else:
+                seen_people.add(raw_person_id)
             parsed_rows.append((candidate_index, raw_person_id))
 
         next_first_frames = dict(self._first_frame_by_person)
@@ -288,15 +299,34 @@ class ByteTrackHeadTracker:
         next_reserved_ids = set(self._reserved_public_ids)
         next_public_id = self._next_public_id
         mapped = []
-        for candidate_index, raw_person_id in sorted(parsed_rows):
-            person_id = next_public_ids.get(raw_person_id)
-            if person_id is None:
-                while next_public_id in next_reserved_ids:
-                    next_public_id += 1
-                person_id = next_public_id
+        used = set()
+
+        def allocate():
+            nonlocal next_public_id
+            while next_public_id in next_reserved_ids:
                 next_public_id += 1
-                next_public_ids[raw_person_id] = person_id
-                next_reserved_ids.add(person_id)
+            person_id = next_public_id
+            next_public_id += 1
+            next_reserved_ids.add(person_id)
+            return person_id
+
+        def link(rows):
+            edges = []
+            for candidate_index, _ in rows:
+                for person_id, (box, _) in pending.items():
+                    if person_id in used:
+                        continue
+                    iou = _bbox_iou(candidate_boxes[candidate_index], box)
+                    if iou >= _TRACKER_CONFIGURATION["minimum_iou_threshold"]:
+                        edges.append((-iou, person_id, candidate_index))
+            linked = {}
+            for _, person_id, candidate_index in sorted(edges):
+                if person_id not in used and candidate_index not in linked:
+                    linked[candidate_index] = person_id
+                    used.add(person_id)
+            return linked
+
+        def append(candidate_index, person_id, provisional):
             first_frame = next_first_frames.setdefault(person_id, frame_index)
             mapped.append(
                 (
@@ -305,16 +335,38 @@ class ByteTrackHeadTracker:
                         person_id=person_id,
                         candidate=candidates[candidate_index],
                         track_age_frames=frame_index - first_frame + 1,
+                        provisional=provisional,
                     ),
                 )
             )
-        result = tuple(item for _, item in mapped)
+
+        known = sorted(row for row in parsed_rows if row[1] is not None and row[1] in next_public_ids)
+        confirmed = sorted(row for row in parsed_rows if row[1] is not None and row[1] not in next_public_ids)
+        spawns = sorted(row for row in parsed_rows if row[1] is None)
+        for candidate_index, raw_person_id in known:
+            person_id = next_public_ids[raw_person_id]
+            used.add(person_id)
+            append(candidate_index, person_id, False)
+        linked = link(confirmed)
+        for candidate_index, raw_person_id in confirmed:
+            person_id = linked[candidate_index] if candidate_index in linked else allocate()
+            used.add(person_id)
+            next_public_ids[raw_person_id] = person_id
+            pending.pop(person_id, None)
+            append(candidate_index, person_id, False)
+        linked = link(spawns)
+        for candidate_index, _ in spawns:
+            person_id = linked[candidate_index] if candidate_index in linked else allocate()
+            pending[person_id] = (tuple(float(v) for v in candidate_boxes[candidate_index]), frame_index)
+            append(candidate_index, person_id, True)
+        result = tuple(item for _, item in sorted(mapped))
         return (
             result,
             next_first_frames,
             next_public_ids,
             next_reserved_ids,
             next_public_id,
+            pending,
         )
 
     @staticmethod
@@ -341,6 +393,7 @@ class ByteTrackHeadTracker:
         self._tracker = None
         self._first_frame_by_person.clear()
         self._public_id_by_raw_id.clear()
+        self._pending_spawns.clear()
         if tracker is None:
             return
         try:
@@ -383,10 +436,12 @@ class ByteTrackHeadTracker:
                 next_public_ids,
                 next_reserved_ids,
                 next_public_id,
+                next_pending_spawns,
             ) = self._map_tracked_candidates(
                 tracked,
                 candidates,
                 frame_index=frame_index,
+                candidate_boxes=detections.xyxy,
             )
         except Exception as exc:
             self._invalidate_tracker(exc)
@@ -395,6 +450,7 @@ class ByteTrackHeadTracker:
         self._public_id_by_raw_id = next_public_ids
         self._reserved_public_ids = next_reserved_ids
         self._next_public_id = next_public_id
+        self._pending_spawns = next_pending_spawns
         self._last_frame_index = frame_index
         self._last_timestamp_ms = timestamp_ms
         return result
@@ -406,6 +462,7 @@ class ByteTrackHeadTracker:
         self._first_frame_by_person.clear()
         self._public_id_by_raw_id.clear()
         self._reserved_public_ids.clear()
+        self._pending_spawns.clear()
         self._next_public_id = 0
         self._last_frame_index = None
         self._last_timestamp_ms = None
@@ -433,6 +490,7 @@ class ByteTrackHeadTracker:
         self._first_frame_by_person.clear()
         self._public_id_by_raw_id.clear()
         self._reserved_public_ids.clear()
+        self._pending_spawns.clear()
         self._next_public_id = 0
         self._last_frame_index = None
         self._last_timestamp_ms = None
@@ -474,6 +532,7 @@ class ShortOcclusionBridge:
             view_state=candidate.view_state,
             observed=candidate.observed,
             track_age_frames=tracked.track_age_frames,
+            provisional=tracked.provisional,
             face_keypoints=candidate.face_keypoints,
             pose_head_landmarks=candidate.pose_head_landmarks,
             pose_head_keypoints=candidate.pose_head_keypoints,
@@ -519,6 +578,8 @@ class ShortOcclusionBridge:
             name="track_age_frames",
         )
         candidate = tracked.candidate
+        if type(tracked.provisional) is not bool:
+            raise ValueError("provisional must be a bool")
         if not isinstance(candidate, HeadCandidate):
             raise ValueError("tracked candidate must contain a HeadCandidate")
         confidence = _confidence(candidate.confidence)
@@ -536,6 +597,7 @@ class ShortOcclusionBridge:
             person_id=person_id,
             candidate=staged_candidate,
             track_age_frames=track_age_frames,
+            provisional=tracked.provisional,
         )
         state = _BridgeState(
             head_bbox=head_bbox,
@@ -571,7 +633,8 @@ class ShortOcclusionBridge:
         next_states = dict(self._states)
         perceptions = []
         for person_id, staged_tracked, state in staged:
-            next_states[person_id] = state
+            if not staged_tracked.provisional:
+                next_states[person_id] = state
             perceptions.append(self._observed_perception(staged_tracked))
 
         for person_id in sorted(tuple(next_states)):

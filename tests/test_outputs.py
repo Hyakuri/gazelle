@@ -82,6 +82,19 @@ def make_rich_head_result():
 
 
 class OutputsTest(unittest.TestCase):
+    def test_tracking_provisional_is_always_a_boolean_for_all_perception_states(self):
+        base=make_rich_head_result()
+        for provisional,state,observed in ((False,HeadPerceptionState.FACE_ONLY,True),
+                                            (True,HeadPerceptionState.FACE_ONLY,True),
+                                            (False,HeadPerceptionState.TRACKED_ONLY,False)):
+            perception=replace(base.perceptions[0],provisional=provisional,state=state,observed=observed)
+            record=head_frame_to_json_dict(frame_index=0,timestamp_ms=0,image_width=640,image_height=480,
+                                          provider='mediapipe',result=replace(base,perceptions=(perception,)))
+            self.assertIs(record['people'][0]['tracking']['provisional'],provisional)
+        with self.assertRaises(ValueError):
+            head_frame_to_json_dict(frame_index=0,timestamp_ms=0,image_width=640,image_height=480,
+                                    provider='mediapipe',result=replace(base,perceptions=(replace(base.perceptions[0],provisional=1),)))
+
     def test_head_frame_serializes_named_pose_keypoints_reference_rays_and_eligibility(self):
         landmark = NormalizedLandmark(x=0.5, y=0.4, visibility=0.9)
         ray = ReferenceRay2D(
@@ -200,7 +213,7 @@ class OutputsTest(unittest.TestCase):
         self.assertEqual(person["state"], "face_pose")
         self.assertEqual(person["view_state"], "frontal")
         self.assertTrue(person["observed"])
-        self.assertEqual(person["tracking"], {"track_age_frames": 12, "missed_frames": 1, "missed_ms": 33.3})
+        self.assertEqual(person["tracking"], {"provisional": False, "track_age_frames": 12, "missed_frames": 1, "missed_ms": 33.3})
         self.assertEqual(person["face_keypoints"][1], {"x": 0.4, "y": 0.5, "visibility": 0.6})
         self.assertEqual(person["pose_head_landmarks"][0], {"x": 0.6, "y": 0.7, "presence": 0.8})
         self.assertEqual(person["facial_transformation_matrix"], [[1.0, 2.0], [3.0, 4.0]])

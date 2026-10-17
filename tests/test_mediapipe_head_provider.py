@@ -180,6 +180,7 @@ class MediaPipeHeadProviderTest(unittest.TestCase):
         self.assertEqual(result.heads[0].bbox, (0.0, 0.1, 1.0, 0.6))
         self.assertEqual(result.perceptions[0].face_bbox, (0.0, 0.15, 0.8, 0.5))
         self.assertEqual(len(result.perceptions[0].face_landmarks), 478)
+        self.assertFalse(result.perceptions[0].provisional)
         self.assertEqual(result.timings_ms["face_detector"], 1.25)
         self.assertTrue(math.isfinite(result.timings_ms["fusion"]))
 

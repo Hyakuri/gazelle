@@ -369,6 +369,7 @@ class UsageDocumentationTest(unittest.TestCase):
             "observed",
             "tracking",
             "track_age_frames",
+            "tracking.provisional",
             "missed_frames",
             "missed_ms",
             "face_bbox_normalized",

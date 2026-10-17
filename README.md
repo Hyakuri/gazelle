@@ -238,6 +238,11 @@ The runtime narrowly filters the upstream `trackers` `target=None` deprecation w
 
 ### Independent Head Observation Schema
 
+MediaPipe video frame 0 and each new track's first frame emit the observed head with
+`tracking.provisional=true` and age 1. Confirmation with IoU ≥0.20 within two frame
+indices links to the same public ID. Provisional heads do not seed the short-occlusion
+bridge; image mode, confirmed heads and `tracked_only` use `tracking.provisional=false`.
+
 `gazelle.runtime.perception.outputs` provides `head_frame_to_json_dict(...)` for one independent provider result. The image pipeline uses `write_head_observations_json(output_path, **frame_kwargs)` to create parent directories and write exactly one indented JSON document with a trailing newline. The video pipeline writes every serialized provider result as one compact `head_observations.jsonl` row. The record has exactly `frame_index`, `timestamp_ms`, `status`, `width`, `height`, `provider`, `timings_ms`, and `people` fields. `status` is `"ok"` when the result has heads and `"no_head"` otherwise. `timings_ms` retains provider timing names and finite millisecond values.
 
 Each person has `person_id`, `head_bbox_normalized`, and `confidence`. Head boxes are normalized to `[0, 1]` and retain the runtime bbox tuple ordering. Rich MediaPipe perceptions additionally include conservative recommendation `gaze_eligible`, actual per-frame inference decision `gazelle_selected`, optional rejection `gaze_status`, applicable face bbox, `state`, `view_state`, `observed`, `tracking`, face keypoints, filtered pose-head landmarks, named pose-head keypoints, facial transformation matrix, yaw/pitch/roll head-pose evidence, and either available reference ray. The face reference uses Face Landmarker pose plus face keypoints; the pose reference is independently estimated from reliable Pose Landmarker nose/eye or nose/ear geometry. Both are uncalibrated 2D references, not eye-gaze measurements.

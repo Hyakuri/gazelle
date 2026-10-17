@@ -351,7 +351,7 @@ MediaPipe rich people retain those fields and add:
 | `gaze_eligible` | Required | boolean | Conservative recommendation from the perception policy; current face state and perception/face-ray confidence values of at least `0.50` are required. Diagnostic selectors do not mutate it. |
 | `gazelle_selected` | Required | boolean | Actual per-frame decision made by `--gazelle-head-mode`. It is always `false` on `frame_step`-skipped video frames. |
 | `gaze_status` | Conditional | enum string | Pre-inference rejection reason: `unavailable_occluded`, `tracked_no_gaze`, or `rejected_low_quality`. |
-| `tracking` | Required | object | Contains Required integer `track_age_frames`, Required integer `missed_frames`, and Required finite-number `missed_ms`. |
+| `tracking` | Required | object | Contains Required boolean `provisional`, Required integer `track_age_frames`, Required integer `missed_frames`, and Required finite-number `missed_ms`. |
 | `face_bbox_normalized` | Conditional | number `[4]` | Current face bbox in `(xmin, ymin, xmax, ymax)` order, clipped to `[0, 1]`. |
 | `face_keypoints` | Conditional | landmark array | Face-detector keypoints when present. |
 | `pose_head_landmarks` | Conditional | landmark array | Pose-derived head/shoulder landmarks when present. |
@@ -371,6 +371,12 @@ Landmark, matrix, and head-pose value shapes:
 | landmark `visibility`, `presence` | Conditional | finite number | Provider values emitted when present; no range is enforced. |
 | `facial_transformation_matrix` rows | Conditional | nested finite-number arrays | MediaPipe commonly supplies `4 x 4`, but the serializer preserves supplied row lengths; rows after the first three may have any supplied length. |
 | `head_pose.yaw_deg`, `pitch_deg`, `roll_deg` | Required inside Conditional `head_pose` | finite number | Euler-like head-pose angles in degrees. |
+
+Video frame 0 and the first frame of each new track now emit the observed head immediately,
+with `tracking.provisional=true` and age 1. Confirmation within two frame indices links by IoU
+to the same `person_id`; age counts from the original spawn. Provisional observations do not
+create or refresh bridge state, so a one-frame detection cannot create a stale ghost.
+Image mode, confirmed observations and `tracked_only` always use `tracking.provisional=false`.
 
 `track_age_frames` is the track age, while `missed_frames` and `missed_ms` count consecutive bridge reuse since the last current observation. `tracked_only` therefore represents a stale bridged box, not a fresh detection. It is excluded by the default `eligible` selector, but explicit `tracked_only` or `all` diagnostic selection may send it to Gazelle only while that bridge track is active. In single-person mode, post-bridge arbitration keeps at most one identity and prunes displaced stale bridge state.
 

@@ -349,7 +349,7 @@ MediaPipe rich people 保留以上 field，并增加：
 | `gaze_eligible` | Required | boolean | perception policy 给出的保守建议；要求 current face state 且 perception/face-ray confidence 均至少为 `0.50`。诊断 selector 不会修改它。 |
 | `gazelle_selected` | Required | boolean | `--gazelle-head-mode` 做出的实际逐帧推理决定。被 `frame_step` 跳过的视频帧中始终为 `false`。 |
 | `gaze_status` | Conditional | enum string | 推理前 rejection reason：`unavailable_occluded`、`tracked_no_gaze` 或 `rejected_low_quality`。 |
-| `tracking` | Required | object | 包含 Required integer `track_age_frames`、Required integer `missed_frames`、Required finite-number `missed_ms`。 |
+| `tracking` | Required | object | 包含 Required boolean `provisional`、Required integer `track_age_frames`、Required integer `missed_frames`、Required finite-number `missed_ms`。 |
 | `face_bbox_normalized` | Conditional | number `[4]` | 当前 face bbox，顺序 `(xmin, ymin, xmax, ymax)`，clipping 到 `[0, 1]`。 |
 | `face_keypoints` | Conditional | landmark array | 存在时的 face-detector keypoint。 |
 | `pose_head_landmarks` | Conditional | landmark array | 存在时由 pose 得到的 head/shoulder landmark。 |
@@ -369,6 +369,11 @@ Landmark、matrix、head-pose value shape：
 | landmark `visibility`, `presence` | Conditional | finite number | 有值时输出 provider value；不强制 range。 |
 | `facial_transformation_matrix` rows | Conditional | nested finite-number arrays | MediaPipe 通常提供 `4 x 4`，但 serializer preserves supplied row lengths；前三行之后的 row 可保留任意 supplied length。 |
 | `head_pose.yaw_deg`, `pitch_deg`, `roll_deg` | Required inside Conditional `head_pose` | finite number | 单位 degree 的 Euler-like head-pose angle。 |
+
+视频第 0 帧与每条新轨迹首帧立即输出实际观测头部，`tracking.provisional=true`、age 为 1。
+两帧索引内的确认按 IoU 关联并沿用同一 `person_id`，age 从原 spawn 帧计算。
+临时观测不创建或刷新桥接状态，因此一帧误检不会产生 stale 幽灵框。
+图像模式、已确认观测和 `tracked_only` 始终为 `tracking.provisional=false`。
 
 `track_age_frames` 是 track age；`missed_frames`、`missed_ms` 表示上次当前 observation 后连续 bridge reuse 的帧数和时间。因此 `tracked_only` 是 stale bridged box，不是 fresh detection。默认 `eligible` selector 会排除它；只有在 bridge track 仍 active 时，显式 `tracked_only` 或 `all` 诊断 selector 才能把它送入 Gazelle。单人模式在 bridge 后最多保留一个 identity，并裁掉被新 observation 替换的 stale bridge state。
 

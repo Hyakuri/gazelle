@@ -150,6 +150,7 @@ def _perception_to_json_dict(
         "gaze_eligible": _exact_bool(perception.gaze_eligible, "gaze_eligible"),
         "gazelle_selected": _exact_bool(gazelle_selected, "gazelle_selected"),
         "tracking": {
+            "provisional": _exact_bool(perception.provisional, "tracking.provisional"),
             "track_age_frames": _exact_int(perception.track_age_frames, "track_age_frames"),
             "missed_frames": _exact_int(perception.missed_frames, "missed_frames"),
             "missed_ms": _finite_float(perception.missed_ms, "missed_ms"),
