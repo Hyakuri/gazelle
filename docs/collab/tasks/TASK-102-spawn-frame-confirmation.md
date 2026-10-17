@@ -1,6 +1,6 @@
 # TASK-102：新轨迹首帧立即确认（决策 D2）
 
-状态：ready-for-review（2026-10-17，待 Claude 与用户独立验收）
+状态：changes-requested（2026-10-17 第 3 轮审查：必须修复 1 项，见 §3）
 创建：2026-10-15（Asia/Tokyo）　协调者：Claude　实现者：Codex　验收：用户（独立 checkout）
 问题来源：GZ-03（登记表 C007、C011）。设计：[2026-10-15 规范 §3](../../superpowers/specs/2026-10-15-face-pose-association-and-track-confirmation-design.md)。
 授权：用户 2026-10-15 批准 D2 按 Claude 的推荐执行。
@@ -144,10 +144,34 @@ git status --short
 
 ## 3. 审查结论（Claude 追加）
 
-- 审查目标（SHA 范围）：
-- 独立复跑结果：
-- 发现：
-- 结论：
+### 2026-10-17 第 3 轮审查（Claude）
+
+- **审查目标**：`35a0a3a`（实现）与 `bc77f0f`（报告），在 HEAD `f0c4311` 上审查。
+- **独立复跑结果**：
+  - 完整离线门 643 tests，0 skip。
+  - 一份只读代码审查（子代理）：聚焦测试 181 项通过，含真实 trackers 2.6.1 的集成测试；另用真实 ByteTrack 做了探针。
+  - Claude 亲自核对了代码（`provider.py:177-181`）和 Codex 两组真实 smoke 的逐帧输出。
+- **已核实**：
+  - 四类行的判据与上游 2.6.1 语义一致：高低分以 `>=` 划分，spawn 返回 −1，置信度达到激活阈值才建轨迹。
+  - pending 窗口 ≤ 2 帧；贪心一对一关联，排序键为（−IoU, pid, cidx）；年龄从 spawn 帧计；输出顺序与 ID 规则不变。
+  - 桥接不为 provisional 创建或刷新状态；`tracking.provisional` 始终为布尔值；四份文档一致。
+- **必须修复**：
+  1. **单人模式下，provisional 头会删掉已确认轨迹的桥接状态。**
+     - 机制：`arbitrate_perceptions` 把任何观测行（包括 provisional）排在 `tracked_only` 之前。当 `max_heads == 1` 时，`retain_person_ids` 只保留被选中的那一个 ID。一帧的新 spawn 胜出后，已确认轨迹的桥接就被丢弃。
+     - 子代理用真实 ByteTrack 复现：P0 在 f0–f4 可见、f5–f8 漏检，f5 出现一帧 spawn。修改前 f5–f8 都是 P0/tracked_only；修改后 f5 是 provisional，f6–f8 变成 `no_head`。
+     - Codex 的 smoke A 中，`tracked_only` 由 3 行变为 0 行，原因相同。
+     - 这违背规范“provisional 不影响桥接”的本意，而且发生在作业数据最常用的单人保守模式里。
+     - 要求：provisional 头胜出时，不得删除已确认轨迹的桥接状态；只有胜出者是已确认轨迹时才修剪。
+     - 测试：用上面的场景，修改后 f6–f8 恢复为 P0/tracked_only。
+- **应修**：
+  2. **文档**：在四份文档中写明以下两点。
+     - provisional 头可以被选中送入 Gazelle：诊断模式 `all` 下即使只有姿态也会被选中；保守模式下若有有效面部射线也会被选中。
+     - 只出现一帧、之后未确认的 spawn 会增加不同 `person_id` 的数量。smoke A 由 2 个增至 4 个，B 由 2 个增至 3 个，新增的几乎都是未确认的一帧 spawn。下游统计身份时应先排除 `tracking.provisional` 为 true 的行。
+  3. 小项：
+     - 关联测试只用了相同的框，证明不了 IoU 优先于候选顺序；子代理用真实 ByteTrack 交换候选顺序，关联正确。
+     - 新测试的代码风格比文件其余部分紧凑。
+     - 报告中“新版未确认轨迹漏检后可能更早被清理”与 2.6.1 不符：spawn 的计数从 1 开始，能撑过一帧漏检。这不影响结果。
+- **结论**：**changes-requested**（必须修复 1 项）。按“第 2 轮修复”在本文件追加报告，排入第 4 轮。TASK-101 继续等本任务通过。
 
 ## 4. 验收记录（用户反馈后由 Claude 填写）
 

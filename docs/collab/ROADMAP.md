@@ -1,6 +1,6 @@
 # Gazelle 开发与优化路线图
 
-维护者：Claude（协调者）。最近更新：2026-10-15（Asia/Tokyo），按你当天确认的目标与[作业数据分析](analysis/2026-10-15-workdata-analysis.md)重排。
+维护者：Claude（协调者）。最近更新：2026-10-17（Asia/Tokyo），第 3 轮审查后更新阶段 2 的任务表与 D13、D17、D18。初版于 2026-10-15，按你当天确认的目标与[作业数据分析](analysis/2026-10-15-workdata-analysis.md)排定。
 依据：[项目目标](PROJECT_GOALS_CN.md)、[代码库分析](analysis/2026-10-14-codebase-analysis.md)、[问题登记表](analysis/2026-10-14-issue-register.md)、[验收证据](evidence/2026-10-14-destination-acceptance.md)。
 执行规则见 [COLLABORATION_PLAN_CN.md](COLLABORATION_PLAN_CN.md)；当前轮到谁、做哪一项，以 [STATE.md](STATE.md) 为准。
 
@@ -37,16 +37,20 @@
 | 2 | [TASK-135](tasks/TASK-135-round1-followups.md) 第 1 轮审查的后续加固 | accepted | GZ-07、GZ-21 | S–M | CPU，重新校验重封装 |
 | 2 | [TASK-133](tasks/TASK-133-osd-clock-time-maps.md) 画面时钟识别、时间映射与同步检验 | 部分通过（时间映射由 TASK-139 取代） | 同步、GZ-22、GZ-26 | L | CPU |
 | 2 | [TASK-134](tasks/TASK-134-synchronized-proxies.md) 5 Hz 同步代理视频 | accepted（生成机制；代理由 TASK-139 重新生成） | 同步 | M | CPU，数小时 |
-| 2 | [TASK-121](tasks/TASK-121-validation-annotation-toolkit.md) 多视角同步片段的区域标注工具（D12 r2） | changes-requested（TASK-138） | F2、GZ-27 | L | CPU |
-| 你 | 用区域标记工具画出区域，约 10 分钟 | **现在可以开始** | — | — | — |
-| 你 | 决定 D18：同步协议 r2 | 待决定 | GZ-26 | — | — |
-| 3 | [TASK-138](tasks/TASK-138-annotation-and-roi-followups.md) 标注与区域工具的后续修复 | ready（本轮第一项） | GZ-27 | M | CPU，浏览器实测 |
-| 3 | [TASK-136](tasks/TASK-136-gazelle-device-preprocessing.md) Gazelle 输入预处理移到推理设备 | ready（D17 已同意） | GZ-25 | S–M | 是，CUDA smoke |
-| 3 | [TASK-139](tasks/TASK-139-content-calibrated-sync.md) 同步协议 r2：以前方摄像机为基准的画面内容校准 | proposed（待 D18） | GZ-26 | L | CPU，约 6 小时后台 |
-| 3 | [TASK-102](tasks/TASK-102-spawn-frame-confirmation.md) 新轨迹首帧立即确认（D2） | ready | GZ-03 | M | 是 |
-| 3 | [TASK-002](tasks/TASK-002-face-ray-sign-alignment.md) 面部射线与 roll 符号对齐 | ready | GZ-02 | M | 是 |
-| 3 | [TASK-101](tasks/TASK-101-face-pose-association.md) 人脸与姿态关联修正（D1） | blocked（等 TASK-102） | GZ-01 | L | 是 |
-| 你 | 标注 26 段，约 2 小时 | 待前置（TASK-138、TASK-139 与正式区域） | — | — | — |
+| 2 | [TASK-121](tasks/TASK-121-validation-annotation-toolkit.md) 多视角同步片段的区域标注工具（D12 r2） | accepted（连同 TASK-138） | F2、GZ-27 | L | CPU |
+| 你 | 用区域标记工具画出区域 | 完成（2026-10-17） | — | — | — |
+| 你 | 决定 D18：同步协议 r2 | 已批准（2026-10-17） | GZ-26 | — | — |
+| 3 | [TASK-138](tasks/TASK-138-annotation-and-roi-followups.md) 标注与区域工具的后续修复 | accepted | GZ-27 | M | CPU，浏览器实测 |
+| 3 | [TASK-136](tasks/TASK-136-gazelle-device-preprocessing.md) Gazelle 输入预处理移到推理设备 | accepted | GZ-25 | S–M | 是，CUDA smoke |
+| 3 | [TASK-139](tasks/TASK-139-content-calibrated-sync.md) 同步协议 r2：以前方摄像机为基准的画面内容校准 | 部分通过（余项由 TASK-140 完成） | GZ-26 | L | CPU，约 6 小时后台 |
+| 3 | [TASK-102](tasks/TASK-102-spawn-frame-confirmation.md) 新轨迹首帧立即确认（D2） | changes-requested（第 4 轮修复） | GZ-03、GZ-30 | M | 是 |
+| 3 | [TASK-002](tasks/TASK-002-face-ray-sign-alignment.md) 面部射线与 roll 符号对齐 | accepted | GZ-02 | M | 是 |
+| 4 | [TASK-140](tasks/TASK-140-sync-validation-and-steps.md) 同步协议 r2 的验证与分段修订 | ready（本轮第一项） | GZ-26、GZ-29 | L | CPU，约 2 小时后台 |
+| 4 | [TASK-124](tasks/TASK-124-annotation-hardening.md) 标注工具加固 | ready | GZ-27 后续 | S | CPU，浏览器实测 |
+| 4 | [TASK-102](tasks/TASK-102-spawn-frame-confirmation.md) 第 2 轮修复 | changes-requested | GZ-30 | S | 是 |
+| 4 | [TASK-101](tasks/TASK-101-face-pose-association.md) 人脸与姿态关联修正（D1） | blocked（等 TASK-102） | GZ-01 | L | 是 |
+| 待定 | 参考射线改为像素各向同性方向 | proposed（第 3 阶段特征提取前） | GZ-28 | S–M | 是 |
+| 你 | 标注 26 段，约 2 小时 | 待前置（TASK-140、TASK-124 通过与正式数据集） | — | — | — |
 | — | 阶段 2 验收：离线门、作业数据真实 smoke、同步精度、修复前后对比 | 未开始 | — | — | Claude 执行 |
 
 - TASK-131 排在最前：读取器不修好，任何作业数据都无法可靠处理。
@@ -97,11 +101,11 @@
 | D10 | 单机门控默认值（F1） | **暂停**：新目标下门控只影响特征；比较并入 TASK-143，在此之前不改 CLI 默认值 |
 | D11 | 主体身份长期稳定（F4） | 待决，第 3、5 阶段一并考虑 |
 | D12 | 目标场景验证集（F2） | **已批准 r2**：作业数据的连续片段区域标注，撤回 sample2 |
-| D13 | 分析时间轴 | **已批准**：画面时钟上的 5 Hz，1080p 同步代理 |
+| D13 | 分析时间轴 | **已批准**：5 Hz、1080p 同步代理。2026-10-17 经 D18 修订为“以前方摄像机 B 的画面时钟为基准、内容校准后的 5 Hz”；网格、分辨率与片段长度不变 |
 | D14 | 区域类别与标注方式 | **已批准**：连续 60 秒片段，按变化点标注；类别由你在全局摄像机画面上画出的区域生成 |
 | D15 | 融合方法 | **已批准**：逐时间步特征、可解释分类器、HMM 时序平滑，按录制日期留一评估；几何标定留作后续 |
 | D16 | 切换到新环境 `Gazelle-next`（Python 3.14、PyTorch 2.14、MediaPipe 1.1.1 等） | **你已决定（2026-10-17）**：尽早切换；现有 `Gazelle` 原样保留作回退，项目改用 `Gazelle-next`。仓库侧由 TASK-137 完成。依据：[环境评估](evidence/2026-10-17-env-next-evaluation.md) |
-| D17 | Gazelle 输入预处理移到推理设备（TASK-136） | **你已同意（2026-10-17）**：第 3 轮实施（排在 TASK-138 之后，以便先修复正式标注的阻塞问题）。管线实测 4K 每次调用由约 99 ms 降到 36 至 41 ms，输出等价 |
-| D18 | 同步协议 r2：以前方摄像机 B 为基准，右侧 A 与全局 E 用画面运动校准偏移与漂移（TASK-139） | **待你决定，推荐批准。** 依据：[同步分析](evidence/2026-10-17-sync-analysis.md)，三机画面时钟各差最多约 3 秒，运动测量离散 0.02 至 0.07 秒。批准后 D13 的时间轴定义改为“以 B 的画面时钟为基准、内容校准后的 5 Hz” |
+| D17 | Gazelle 输入预处理移到推理设备（TASK-136） | **你已同意（2026-10-17），已完成**：TASK-136 在第 3 轮实施并通过审查。Claude 的 CUDA 对照中，4K 推理中位数由 106.5 至 121.0 ms 降到 42.7 ms，输出等价 |
+| D18 | 同步协议 r2：以前方摄像机 B 为基准，右侧 A 与全局 E 用画面运动校准偏移与漂移（TASK-139、TASK-140） | **你已批准（2026-10-17）**，原话为“D18 批准，按你的推荐进行。”D13 的时间轴已相应修订。依据：[同步分析](evidence/2026-10-17-sync-analysis.md)、[第 3 轮同步验证复核](evidence/2026-10-17-sync-validation-r3.md)。复核结果：18 段新代理的 A–B、E–B 残差中位数为 0.02 至 0.08 秒 |
 | P-merge | PR #2 至 #5 堆叠链 | 你已决定：项目达到目标功能后集中梳理合并 |
 | P-pr | 阶段分支 draft PR | 你已批准 |
