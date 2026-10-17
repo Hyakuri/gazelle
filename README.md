@@ -355,7 +355,8 @@ Synchronization r2 uses front camera B as the reference. `tools.workdata.sync_ca
 fits A/E motion offsets, drift and supported steps after a v2 native-PTS base map;
 `tools.workdata.sync_validate` measures residual lag, checks fixed clock samples and
 exports event strips for human review. Both run on CPU, write only external data,
-and use no models, GPU or network. Calibration needs visible worker motion;
+and use no models, GPU or network. Per-camera clock differences are summarized in
+`delta_distribution`; missing reads stay missing. Calibration needs visible worker motion;
 empty or stationary periods cannot supply calibration windows. Preserve previous
 proxies and datasets as dated backups. Formal annotation waits for synchronization review.
 For a fitting-only repair, `timemap --sample-cache <previous-v2-root>` can reuse verified

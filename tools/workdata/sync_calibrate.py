@@ -211,8 +211,20 @@ def clock_sample(k,count,t0,step,camera,read):
 
 def clock_summary(rows):
     fraction=sum(r['evaluable'] for r in rows)/len(rows) if rows else 0.
+    distribution={}
+    for camera in sorted({r['camera'] for r in rows}):
+        selected=[r for r in rows if r['camera']==camera]
+        measured=[r for r in selected if r['evaluable']]
+        values=np.array([r['delta_seconds'] for r in measured],dtype=float)
+        distribution[camera]=dict(evaluable=len(measured),unevaluable=len(selected)-len(measured),
+            passed=sum(r['passed'] for r in measured),
+            signed_minimum_seconds=float(values.min()) if len(values) else None,
+            signed_median_seconds=float(np.median(values)) if len(values) else None,
+            signed_maximum_seconds=float(values.max()) if len(values) else None,
+            absolute_p90_seconds=float(np.quantile(abs(values),.9)) if len(values) else None)
     return dict(evaluable_fraction=fraction,evaluable_passed=fraction>=.9,
-                passed=fraction>=.9 and all(r['passed'] for r in rows if r['evaluable']))
+                passed=fraction>=.9 and all(r['passed'] for r in rows if r['evaluable']),
+                delta_distribution=distribution)
 
 
 def implementation_hash():

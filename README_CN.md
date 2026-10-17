@@ -352,6 +352,7 @@ python main.py `
 同步协议 r2 以前方摄像机 B 为基准。`tools.workdata.sync_calibrate` 在 v2 原生 PTS 基础映射后，
 用画面运动拟合 A/E 的偏移、漂移及有证据的台阶；`tools.workdata.sync_validate` 检查残差滞后、
 固定时钟样本，并导出事件条图供人工复核。两者只使用 CPU，输出留在仓库外，不使用模型、GPU 或网络。
+`delta_distribution` 按摄像机汇总时钟差值分布，缺失读数保持缺失。
 校准需要作业者有可见动作；无人或静止时段不能提供校准窗口。旧代理与旧数据集保留为带日期的备份，
 正式标注须等待同步审查。
 仅修复拟合时，可用 `timemap --sample-cache <旧-v2-root>` 在不同输出根中复用已核实的解码/OCR 证据，

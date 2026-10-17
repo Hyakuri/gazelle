@@ -670,6 +670,9 @@ across the entire range and records every coverage gap and nearest-frame gap fla
 it does not compress time. Preserve old proxies and trial datasets as dated backups before
 regeneration. `sync_validate` reuses the saved fixed k indices, tries k−1/k+1/k−2/k+2
 only for missing clock reads, and records unevaluable samples (≥90% must be evaluable).
+`delta_distribution` groups evaluable/unevaluable/pass counts, signed minimum/median/maximum
+and absolute p90 clock differences by camera. Failed differences remain included;
+statistics are null when no readings are evaluable.
 Clock tolerances are A/B ±1 s and E ±2 s. Residual checks cover A–B, E–B and A–E:
 ≥90% of valid windows within ±0.2 s, median |lag| ≤0.1 s, midpoint |offset| ≤0.1 s,
 and |drift| ≤0.1 s/hour. All failures remain in reports; no window is removed to pass.

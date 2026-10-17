@@ -131,6 +131,24 @@ class CalibrationTest(unittest.TestCase):
         self.assertEqual([r['t_mid_seconds'] for r in rows],[30,90,150])
         self.assertTrue(all(r['valid'] for r in rows))
 
+    def test_clock_distribution_includes_failures_and_keeps_missing_absent(self):
+        rows=[dict(camera='cam_e',evaluable=True,delta_seconds=value,passed=abs(value)<=2)
+              for value in (-2.,.5,2.5)]
+        rows += [dict(camera='cam_e',evaluable=False,passed=False),
+                 dict(camera='cam_a',evaluable=False,passed=False)]
+        summary=clock_summary(rows)
+        distribution=summary['delta_distribution']
+        self.assertEqual(distribution['cam_e']['evaluable'],3)
+        self.assertEqual(distribution['cam_e']['unevaluable'],1)
+        self.assertEqual(distribution['cam_e']['passed'],2)
+        self.assertEqual(distribution['cam_e']['signed_minimum_seconds'],-2.)
+        self.assertEqual(distribution['cam_e']['signed_median_seconds'],.5)
+        self.assertEqual(distribution['cam_e']['signed_maximum_seconds'],2.5)
+        self.assertAlmostEqual(distribution['cam_e']['absolute_p90_seconds'],2.4)
+        self.assertIsNone(distribution['cam_a']['signed_median_seconds'])
+        self.assertIsNone(distribution['cam_a']['absolute_p90_seconds'])
+        self.assertFalse(summary['passed'])
+
     def test_cell_selection_follows_motion_at_nonzero_lag(self):
         rng=np.random.default_rng(2)
         reference=rng.normal(size=1000)
