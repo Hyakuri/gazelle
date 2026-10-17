@@ -109,6 +109,38 @@ def _frame_to_pil_rgb(frame) -> Image.Image:
     raise TypeError("Unsupported RGB frame type: {}".format(type(frame).__name__))
 
 
+def _preprocess_rgb_on_device(frame, transform, device):
+    import numpy as np
+    from torchvision import transforms
+
+    if not isinstance(transform, transforms.Compose) or len(transform.transforms) != 3:
+        return None
+    to_tensor, normalize, resize = transform.transforms
+    if not (
+        isinstance(to_tensor, transforms.ToTensor)
+        and isinstance(normalize, transforms.Normalize)
+        and isinstance(resize, transforms.Resize)
+    ):
+        return None
+    if isinstance(frame, Image.Image) and frame.mode == "RGB":
+        array = np.array(frame)
+    elif (
+        isinstance(frame, np.ndarray)
+        and frame.dtype == np.uint8
+        and frame.ndim == 3
+        and frame.shape[2] == 3
+    ):
+        array = np.ascontiguousarray(frame)
+        if not array.flags.writeable:
+            array = array.copy()
+    else:
+        return None
+
+    tensor = torch.from_numpy(array).to(device).permute(2, 0, 1).contiguous()
+    tensor = tensor.to(dtype=torch.get_default_dtype()).div(255)
+    return resize(normalize(tensor))
+
+
 def _heatmap_peak(heatmap: torch.Tensor) -> Tuple[Tuple[float, float], float]:
     if heatmap.ndim != 2:
         raise ValueError("Gazelle heatmap must be a 2D tensor")
@@ -217,8 +249,9 @@ class GazellePredictor:
             return []
 
         prepared_heads, model_bboxes = prepare_head_bboxes(heads)
-        pil_frame = _frame_to_pil_rgb(frame)
-        image_tensor = self.transform(pil_frame)
+        image_tensor = _preprocess_rgb_on_device(frame, self.transform, self.device)
+        if image_tensor is None:
+            image_tensor = self.transform(_frame_to_pil_rgb(frame))
         if not torch.is_tensor(image_tensor):
             raise TypeError("Gazelle transform must return a torch.Tensor")
         if image_tensor.ndim != 3:

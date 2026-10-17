@@ -171,7 +171,7 @@ class UsageDocumentationTest(unittest.TestCase):
                 )
 
     def test_guides_have_matching_numbered_section_structure(self):
-        expected = list(range(1, 16))
+        expected = list(range(1, 17))
         self.assertEqual(expected, self._numbered_sections(ENGLISH_GUIDE))
         self.assertEqual(expected, self._numbered_sections(CHINESE_GUIDE))
 
@@ -369,6 +369,12 @@ class UsageDocumentationTest(unittest.TestCase):
             "observed",
             "tracking",
             "track_age_frames",
+            "tracking.provisional",
+            "tracking.provisional=true",
+            "--gazelle-head-mode all",
+            "yaw_right",
+            "pitch_down",
+            "roll_clockwise",
             "missed_frames",
             "missed_ms",
             "face_bbox_normalized",
@@ -469,6 +475,10 @@ class UsageDocumentationTest(unittest.TestCase):
                 "output_fps",
                 "frames_read",
                 "frames_written",
+                "container_frame_count",
+                "frames_required",
+                "decode_complete",
+                "timestamp_sources",
             ],
         }
         for guide_path in (ENGLISH_GUIDE, CHINESE_GUIDE):
@@ -478,6 +488,61 @@ class UsageDocumentationTest(unittest.TestCase):
                 for scope in ("image", "video")
             }
             self.assertEqual(expected, actual)
+
+    def test_video_decode_and_timestamp_contract_is_documented(self):
+        for path in (ENGLISH_README, CHINESE_README, ENGLISH_GUIDE, CHINESE_GUIDE):
+            text = self._read(path)
+            for token in ("container_frame_count", "frames_required", "decode_complete", "timestamp_sources", "noise=drop",
+                          "max(prev_out + 1000 / fps, p + 1)", "outside-repository", "rendered.mp4"):
+                self.assertIn(token, text, str(path))
+        for path in (ENGLISH_GUIDE, CHINESE_GUIDE):
+            rows = self._run_config_addition_rows(path)
+            for scope, name, kind, _ in rows:
+                if name in ('container_frame_count', 'frames_required', 'decode_complete'):
+                    self.assertIn('(nullable)', kind)
+
+    def test_workdata_tool_entry_points_are_documented(self):
+        for path in (ENGLISH_GUIDE, CHINESE_GUIDE):
+            text = self._section(path, 15)
+            for token in ('tools.workdata.inventory', 'tools.workdata.remux',
+                          'tools.workdata.osd_clock', 'tools.workdata.timemap',
+                          'tools.workdata.sync_check', 'tools.workdata.sync_calibrate',
+                          'tools.workdata.sync_validate', 'tools.workdata.proxies',
+                          '--sample-cache', '--reuse-samples', 'delta_distribution', 'abs(1+c1)',
+                          '--keyframes-root','--sampling-provenance','INTER_AREA','insufficient_evidence',
+                          'sync_uncertain','T(b) = b - L(b)','d = base_X(pts) - reading',
+                          '--allow-internal-gaps', '../tools/workdata/README_CN.md'):
+                self.assertIn(token, text, str(path))
+
+    def test_region_tool_entry_points_are_documented(self):
+        for path in (ENGLISH_GUIDE, CHINESE_GUIDE):
+            text = self._read(path)
+            for token in ('tools.validation.extract_roi_candidates', 'tools.validation.roi_server',
+                          'tools.validation.roi_regions', 'tools.validation.render_roi_reference',
+                          '../tools/validation/ROI_GUIDE_CN.md', '127.0.0.1'):
+                self.assertIn(token, text, str(path))
+
+    def test_annotation_tool_entry_points_are_documented(self):
+        for path in (ENGLISH_GUIDE, CHINESE_GUIDE):
+            text = self._section(path, 15)
+            for token in ('tools.validation.sample_segments', 'tools.validation.extract_frames',
+                          'tools.validation.annotate_server', 'tools.validation.labels validate',
+                          '--labels-path', '--allow-incomplete', 'roi_r2_trial',
+                          '../tools/validation/ANNOTATION_GUIDE_CN.md'):
+                self.assertIn(token, text, str(path))
+        for path in (ENGLISH_README,ENGLISH_GUIDE):
+            self.assertIn('viewed only means displayed',self._read(path))
+        for path in (CHINESE_README,CHINESE_GUIDE):
+            self.assertIn('“已看”只表示显示过',self._read(path))
+        for path in (ENGLISH_README, CHINESE_README, ENGLISH_GUIDE, CHINESE_GUIDE):
+            text = self._read(path)
+            for token in ('roi_regions.complete.json', 'cell_other', 'away', 'absent', 'unknown', '1–6', '1–9',
+                          'viewed_ranges', 'finished_at', '--segment', '--sessions', 'export_root', '0.5%'):
+                self.assertIn(token, text, str(path))
+
+    def test_argument_validation_precedes_overwrite_in_both_guides(self):
+        for path in (ENGLISH_GUIDE, CHINESE_GUIDE):
+            self.assertIn('before any `--overwrite` deletion', self._read(path))
 
     def test_facial_transformation_matrix_contract_is_precise(self):
         required = (
@@ -555,10 +620,27 @@ class UsageDocumentationTest(unittest.TestCase):
 
     def test_public_validation_commands_use_activated_python(self):
         for guide_path in (ENGLISH_GUIDE, CHINESE_GUIDE):
-            section = self._section(guide_path, 15)
-            self.assertIn("conda activate Gazelle", section)
+            section = self._section(guide_path, 16)
+            self.assertIn("conda activate Gazelle-next", section)
             self.assertIn("python -m unittest tests.test_usage_docs -v", section)
             self.assertNotRegex(section, re.compile(r"[A-Za-z]:\\Users\\"))
+
+    def test_current_environment_and_rollback_are_documented_consistently(self):
+        definition = self._read(REPOSITORY_ROOT / "environment.yml")
+        self.assertIn("name: Gazelle-next", definition)
+        self.assertIn("python=3.14", definition)
+        pins = re.findall(r"^\s+- ([\w-]+)==(\S+)$", definition, re.MULTILINE)
+        self.assertEqual(15, len(pins))
+        for path in (ENGLISH_README, CHINESE_README, ENGLISH_GUIDE, CHINESE_GUIDE):
+            document = self._read(path)
+            for token in ("conda activate Gazelle-next", "environment_py311.yml",
+                          "environment_1.0.yml", "conda activate Gazelle`",
+                          "scaled_dot_product_attention", "torchaudio", "xformers",
+                          "ultralytics", "pydeprecate", "defusedxml", "polars",
+                          "polars-runtime-32", "nvidia-ml-py"):
+                self.assertIn(token, document, str(path))
+            for package, version in pins:
+                self.assertIn(f"{package}=={version}", document, str(path))
 
 
 if __name__ == "__main__":

@@ -161,6 +161,87 @@ def make_tracker(fake_tracker=None, source_fps=24.0):
 
 
 class ByteTrackHeadTrackerTest(unittest.TestCase):
+    def test_spawn_confirmation_and_one_missed_frame_keep_public_identity(self):
+        for confirmation in (1,2):
+            with self.subTest(confirmation=confirmation):
+                fake=FakeTracker()
+                fake.output_builder=lambda d: tracked_output(d,(-1 if len(fake.updates)==1 else 77,)) if len(d.xyxy) else FakeDetections.empty()
+                adapter,_,_=make_tracker(fake)
+                first=adapter.update((candidate(),),frame_index=0,timestamp_ms=0,image_width=640,image_height=480)[0]
+                self.assertTrue(first.provisional)
+                self.assertEqual((first.person_id,first.track_age_frames),(0,1))
+                if confirmation==2:
+                    self.assertEqual(adapter.update((),frame_index=1,timestamp_ms=33,image_width=640,image_height=480),())
+                second=adapter.update((candidate(),),frame_index=confirmation,timestamp_ms=confirmation*33,
+                                      image_width=640,image_height=480)[0]
+                self.assertFalse(second.provisional)
+                self.assertEqual((second.person_id,second.track_age_frames),(0,confirmation+1))
+
+    def test_two_spawns_link_one_to_one_with_deterministic_ties(self):
+        fake=FakeTracker()
+        fake.output_builder=lambda d:tracked_output(d,(-1,-1) if len(fake.updates)==1 else (92,91),(1,0))
+        adapter,_,_=make_tracker(fake)
+        first=adapter.update((candidate(0),candidate(1)),frame_index=0,timestamp_ms=0,image_width=100,image_height=100)
+        second=adapter.update((candidate(0),candidate(1)),frame_index=1,timestamp_ms=33,image_width=100,image_height=100)
+        self.assertEqual([r.person_id for r in first],[0,1])
+        self.assertEqual([r.person_id for r in second],[0,1])
+        self.assertTrue(all(r.provisional for r in first))
+        self.assertTrue(all(not r.provisional for r in second))
+
+    def test_expired_or_far_pending_spawn_is_not_linked(self):
+        for frame,bbox in ((3,(.1,.2,.3,.4)),(1,(.7,.7,.9,.9))):
+            fake=FakeTracker()
+            fake.output_builder=lambda d:tracked_output(d,(-1 if len(fake.updates)==1 else 77,))
+            adapter,_,_=make_tracker(fake)
+            adapter.update((candidate(),),frame_index=0,timestamp_ms=0,image_width=100,image_height=100)
+            row=adapter.update((candidate(bbox=bbox),),frame_index=frame,timestamp_ms=frame*33,
+                               image_width=100,image_height=100)[0]
+            self.assertEqual(row.person_id,1)
+            self.assertEqual(row.track_age_frames,1)
+
+    def test_pending_iou_association_precedes_reversed_candidate_order(self):
+        fake = FakeTracker()
+        fake.output_builder = lambda d: tracked_output(
+            d, (-1, -1) if len(fake.updates) == 1 else (92, 91), (1, 0)
+        )
+        adapter, _, _ = make_tracker(fake)
+        left = candidate(0, bbox=(.1, .2, .3, .4))
+        right = candidate(1, bbox=(.6, .2, .8, .4))
+        first = adapter.update((left, right), frame_index=0, timestamp_ms=0,
+                               image_width=100, image_height=100)
+        second = adapter.update((right, left), frame_index=1, timestamp_ms=33,
+                                image_width=100, image_height=100)
+        self.assertEqual([row.person_id for row in first], [0, 1])
+        self.assertEqual([row.person_id for row in second], [1, 0])
+        self.assertTrue(all(not row.provisional for row in second))
+
+    def test_respawn_reuses_pending_without_restarting_age_or_creating_bridge(self):
+        adapter,_,_=make_tracker(FakeTracker(lambda d:tracked_output(d,(-1,))))
+        bridge=ShortOcclusionBridge()
+        first=adapter.update((candidate(),),frame_index=0,timestamp_ms=0,image_width=100,image_height=100)
+        self.assertTrue(bridge.update(first,timestamp_ms=0)[0].provisional)
+        self.assertEqual(bridge.update((),timestamp_ms=33),())
+        second=adapter.update((candidate(),),frame_index=2,timestamp_ms=66,image_width=100,image_height=100)
+        self.assertEqual((second[0].person_id,second[0].track_age_frames),(0,3))
+        self.assertTrue(second[0].provisional)
+        adapter.reset()
+        self.assertEqual(adapter._pending_spawns,{})
+        adapter.close()
+        self.assertEqual(adapter._pending_spawns,{})
+
+    def test_real_bytetrack_spawn_then_confirmation_when_installed(self):
+        import importlib.util
+        if importlib.util.find_spec('trackers') is None:
+            self.skipTest('Optional trackers package unavailable')
+        adapter=ByteTrackHeadTracker(30.)
+        try:
+            rows=[adapter.update((candidate(),),frame_index=i,timestamp_ms=i*1000/30,
+                                 image_width=640,image_height=480)[0] for i in range(2)]
+            self.assertEqual([r.person_id for r in rows],[0,0])
+            self.assertEqual([r.provisional for r in rows],[True,False])
+        finally:
+            adapter.close()
+
     def test_rejects_invalid_source_fps(self):
         for value in (
             True,
@@ -367,7 +448,7 @@ class ByteTrackHeadTrackerTest(unittest.TestCase):
         self.assertEqual(tuple(item.person_id for item in result), (0, 1))
         self.assertEqual(tuple(item.candidate for item in result), candidates)
 
-    def test_filters_untracked_sentinel_and_returns_stable_candidates(self):
+    def test_filters_low_score_sentinel_and_returns_stable_candidates(self):
         def mixed_output(detections):
             return FakeDetections(
                 xyxy=detections.xyxy[[1, 3, 2, 0]],
@@ -380,7 +461,7 @@ class ByteTrackHeadTrackerTest(unittest.TestCase):
             )
 
         adapter, _, _ = make_tracker(FakeTracker(mixed_output))
-        candidates = (candidate(0), candidate(1), candidate(2), candidate(3))
+        candidates = (candidate(0), candidate(1,confidence=.49), candidate(2), candidate(3,confidence=.1))
 
         result = adapter.update(
             candidates,
@@ -636,7 +717,7 @@ class ByteTrackHeadTrackerTest(unittest.TestCase):
         self.assertEqual(after_reset.person_id, 0)
         self.assertEqual(after_reset.track_age_frames, 1)
 
-    def test_untracked_sentinel_never_consumes_public_id(self):
+    def test_low_score_untracked_sentinel_never_consumes_public_id(self):
         tracker = None
 
         def output(detections):
@@ -647,7 +728,7 @@ class ByteTrackHeadTrackerTest(unittest.TestCase):
         adapter, _, _ = make_tracker(tracker)
 
         untracked = adapter.update(
-            (candidate(),),
+            (candidate(confidence=.49),),
             frame_index=0,
             timestamp_ms=0.0,
             image_width=100,

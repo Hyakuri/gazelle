@@ -3,10 +3,13 @@ import sys
 import tempfile
 import types
 import unittest
+import warnings
 from pathlib import Path
 from unittest.mock import patch
 
 import torch
+import numpy as np
+from torchvision import transforms
 from PIL import Image
 
 from gazelle.runtime.contracts import HeadObservation
@@ -15,6 +18,7 @@ from gazelle.runtime.predictor import (
     _extract_gazelle_outputs,
     prepare_head_bboxes,
     resolve_torch_device,
+    _frame_to_pil_rgb,
 )
 
 
@@ -75,6 +79,110 @@ class FakeGazelleModel:
         if self.include_inout:
             output["inout"] = [torch.arange(people_count, dtype=torch.float32) / 10.0]
         return output
+
+
+class DevicePreprocessingTest(unittest.TestCase):
+    def standard(self):
+        return transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize([.485, .456, .406], [.229, .224, .225]),
+            transforms.Resize((448, 448)),
+        ])
+
+    def predictor(self, transform):
+        return GazellePredictor(
+            'gazelle_dinov2_vitb14_inout', FakeGazelleModel(), transform, device='cpu'
+        )
+
+    def run_frame(self, predictor, frame):
+        predictor.predict_frame(frame, [HeadObservation(person_id=1, bbox=None)])
+        return predictor.model.calls[-1]['images']
+
+    def test_standard_path_matches_pil_and_numpy_without_legacy_conversion(self):
+        rng = np.random.default_rng(136)
+        for height, width in ((37, 53), (480, 640)):
+            array = rng.integers(0, 256, size=(height, width, 3), dtype=np.uint8)
+            for frame in (array, Image.fromarray(array)):
+                with self.subTest(size=(height, width), type=type(frame).__name__):
+                    transform = self.standard()
+                    expected = transform(_frame_to_pil_rgb(frame)).unsqueeze(0)
+                    predictor = self.predictor(transform)
+                    before = np.array(frame)
+                    with patch('gazelle.runtime.predictor._frame_to_pil_rgb',
+                               side_effect=AssertionError('legacy path')):
+                        actual = self.run_frame(predictor, frame)
+                    self.assertLessEqual((actual - expected).abs().max().item(), 1e-5)
+                    self.assertEqual(tuple(actual.shape), (1, 3, 448, 448))
+                    self.assertEqual(actual.dtype, torch.float32)
+                    self.assertEqual(actual.device, predictor.device)
+                    np.testing.assert_array_equal(np.asarray(frame), before)
+
+    def test_strides_readonly_arrays_and_warnings(self):
+        frame = np.random.default_rng(136).integers(0, 256, (37, 53, 3), dtype=np.uint8)
+        readonly = frame.copy()
+        readonly.flags.writeable = False
+        old = torch.is_warn_always_enabled()
+        torch.set_warn_always(True)
+        try:
+            for value in (frame[:, ::-1], frame[..., ::-1], frame[::2], readonly, Image.fromarray(frame)):
+                transform = self.standard()
+                expected = transform(Image.fromarray(np.ascontiguousarray(value))).unsqueeze(0)
+                with warnings.catch_warnings(record=True) as caught:
+                    warnings.simplefilter('always')
+                    actual = self.run_frame(self.predictor(transform), value)
+                self.assertEqual(caught, [])
+                self.assertLessEqual((actual - expected).abs().max().item(), 1e-5)
+        finally:
+            torch.set_warn_always(old)
+
+    def test_transform_structure_and_replacement_fallback(self):
+        frame = Image.new('RGB', (53, 37))
+        standard = self.standard()
+        predictor = self.predictor(standard)
+        self.run_frame(predictor, frame)
+        fake = RecordingTransform()
+        predictor.transform = fake
+        self.run_frame(predictor, frame)
+        self.assertEqual(len(fake.calls), 1)
+        predictor.transform = standard
+        with patch('gazelle.runtime.predictor._frame_to_pil_rgb', side_effect=AssertionError('legacy path')):
+            self.run_frame(predictor, frame)
+        for transform in (transforms.Compose(standard.transforms[:-1]),
+                          transforms.Compose(standard.transforms + [transforms.Lambda(lambda x: x)]),
+                          transforms.Compose([standard.transforms[0], standard.transforms[2],
+                                              standard.transforms[1]]), fake):
+            with patch('gazelle.runtime.predictor._frame_to_pil_rgb', wraps=_frame_to_pil_rgb) as legacy:
+                self.run_frame(self.predictor(transform), frame)
+                legacy.assert_called_once_with(frame)
+
+    def test_non_rgb_and_non_uint8_inputs_keep_legacy_semantics(self):
+        array = np.random.default_rng(1).integers(0, 256, (37, 53, 3), dtype=np.uint8)
+        values = [Image.fromarray(array).convert('L'), Image.fromarray(array).convert('RGBA'),
+                  array.astype(np.float32) / 255, array.astype(np.uint16) * 2,
+                  torch.from_numpy(array).permute(2, 0, 1)]
+        for frame in values:
+            transform = self.standard()
+            expected = transform(_frame_to_pil_rgb(frame)).unsqueeze(0)
+            with patch('gazelle.runtime.predictor._frame_to_pil_rgb', wraps=_frame_to_pil_rgb) as legacy:
+                actual = self.run_frame(self.predictor(transform), frame)
+                legacy.assert_called_once()
+            self.assertTrue(torch.equal(actual, expected))
+
+    def test_default_dtype_and_transform_parameters_are_retained(self):
+        previous = torch.get_default_dtype()
+        try:
+            torch.set_default_dtype(torch.float64)
+            frame = Image.new('RGB', (53, 37), (20, 40, 80))
+            transform = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize([.1, .2, .3], [.4, .5, .6], inplace=True),
+                transforms.Resize((21, 19), antialias=False),
+            ])
+            actual = self.run_frame(self.predictor(transform), frame)
+            self.assertEqual(actual.dtype, torch.float64)
+            self.assertTrue(torch.equal(actual, transform(frame).unsqueeze(0)))
+        finally:
+            torch.set_default_dtype(previous)
 
 
 class GazellePredictorTest(unittest.TestCase):

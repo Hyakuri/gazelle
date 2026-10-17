@@ -248,7 +248,9 @@ def _matrix_to_head_pose(matrix) -> Optional[HeadPoseAngles]:
     return HeadPoseAngles(
         yaw_deg=math.degrees(yaw),
         pitch_deg=math.degrees(pitch),
-        roll_deg=math.degrees(roll),
+        # Design 2026-07-21 section 14: displayed y points down, so positive
+        # clockwise roll has the opposite sign to metric-space rotation.
+        roll_deg=-math.degrees(roll),
     )
 
 

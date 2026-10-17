@@ -1,4 +1,6 @@
 import unittest
+import math
+import numpy as np
 
 from gazelle.runtime.perception.contracts import (
     HeadPoseAngles,
@@ -11,6 +13,7 @@ from gazelle.runtime.perception.reference_rays import (
     estimate_face_pose_reference_ray,
     estimate_pose_head_reference_ray,
 )
+from gazelle.runtime.perception.mediapipe_backend import _matrix_to_head_pose
 
 
 def point(x, y, *, visibility=0.9, presence=0.9):
@@ -23,6 +26,39 @@ def point(x, y, *, visibility=0.9, presence=0.9):
 
 
 class ReferenceRayTest(unittest.TestCase):
+    def face_ray(self,angles):
+        return estimate_face_pose_reference_ray(head_bbox=(.2,.1,.8,.9),
+            face_keypoints=(point(.45,.4),point(.55,.4),point(.5,.5)),head_pose=angles,confidence=.9)
+
+    def test_matrix_projection_matches_display_direction_for_compound_rotations(self):
+        for yaw,pitch,roll in ((20,30,15),(-35,25,-40),(15,-20,45),(89,12,-17),(90,30,15),(-90,20,-10)):
+            with self.subTest(yaw=yaw,pitch=pitch,roll=roll):
+                y,p,r=map(math.radians,(yaw,pitch,roll))
+                rx=np.array([[1,0,0],[0,math.cos(p),-math.sin(p)],[0,math.sin(p),math.cos(p)]])
+                ry=np.array([[math.cos(y),0,math.sin(y)],[0,1,0],[-math.sin(y),0,math.cos(y)]])
+                rz=np.array([[math.cos(r),-math.sin(r),0],[math.sin(r),math.cos(r),0],[0,0,1]])
+                matrix=rz@ry@rx
+                angles=_matrix_to_head_pose(matrix)
+                ray=self.face_ray(angles)
+                expected=np.array([matrix[0,2],-matrix[1,2]])
+                expected/=np.linalg.norm(expected)
+                np.testing.assert_allclose(ray.direction,expected,atol=1e-6,rtol=0)
+                if abs(yaw)<90:
+                    self.assertAlmostEqual(angles.roll_deg,-roll)
+
+    def test_display_pitch_yaw_and_clockwise_roll_signs(self):
+        self.assertGreater(self.face_ray(HeadPoseAngles(0,30,0)).direction[1],0)
+        self.assertLess(self.face_ray(HeadPoseAngles(0,-30,0)).direction[1],0)
+        self.assertGreater(self.face_ray(HeadPoseAngles(30,0,0)).direction[0],0)
+        np.testing.assert_allclose(self.face_ray(HeadPoseAngles(30,0,90)).direction,(0,1),atol=1e-6)
+
+    def test_face_and_pose_downward_reference_signs_agree(self):
+        face=self.face_ray(HeadPoseAngles(0,30,0))
+        pose=estimate_pose_head_reference_ray(head_bbox=(.2,.1,.8,.9),confidence=.9,
+            keypoints=PoseHeadKeypoints(nose=point(.5,.55),left_eye=point(.45,.4),right_eye=point(.55,.4)))
+        self.assertGreater(face.direction[1],0)
+        self.assertGreater(pose.direction[1],0)
+
     def test_face_ray_uses_head_pose_and_face_keypoint_origin(self):
         ray = estimate_face_pose_reference_ray(
             head_bbox=(0.3, 0.2, 0.7, 0.8),

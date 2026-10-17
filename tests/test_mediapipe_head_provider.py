@@ -180,6 +180,7 @@ class MediaPipeHeadProviderTest(unittest.TestCase):
         self.assertEqual(result.heads[0].bbox, (0.0, 0.1, 1.0, 0.6))
         self.assertEqual(result.perceptions[0].face_bbox, (0.0, 0.15, 0.8, 0.5))
         self.assertEqual(len(result.perceptions[0].face_landmarks), 478)
+        self.assertFalse(result.perceptions[0].provisional)
         self.assertEqual(result.timings_ms["face_detector"], 1.25)
         self.assertTrue(math.isfinite(result.timings_ms["fusion"]))
 
@@ -263,6 +264,39 @@ class MediaPipeHeadProviderTest(unittest.TestCase):
         self.assertEqual(tuple(item.person_id for item in first.perceptions), (1,))
         self.assertEqual(tuple(item.person_id for item in replacement.perceptions), (2,))
         self.assertEqual(tuple(item.person_id for item in bridged.perceptions), (2,))
+
+    def test_single_person_provisional_winner_preserves_confirmed_bridge(self):
+        backend = FakeBackend([
+            SimpleNamespace(faces=(), poses=(), timings_ms={}) for _ in range(9)
+        ])
+        class SpawnTracker:
+            def update(self, candidates, *, frame_index, **kwargs):
+                if frame_index <= 4:
+                    return (TrackedHeadCandidate(0, candidates[0], frame_index + 1),)
+                if frame_index == 5:
+                    return (TrackedHeadCandidate(1, candidates[0], 1, provisional=True),)
+                return ()
+
+            def close(self):
+                pass
+
+        provider = MediaPipeHeadProvider.create(
+            make_config(max_heads=1), media_type="video", source_fps=30.0,
+            backend_factory=lambda config, *, media_type: backend,
+            tracker_factory=lambda source_fps: SpawnTracker(),
+        )
+        try:
+            with patch("gazelle.runtime.perception.provider.build_head_candidates",
+                       side_effect=[(make_candidate(),)] * 6 + [()] * 3):
+                results = [provider.get_frame_result("frame", i, i * 1000 / 30, 100, 80)
+                           for i in range(9)]
+            self.assertTrue(results[5].perceptions[0].provisional)
+            for result in results[6:]:
+                self.assertEqual([p.person_id for p in result.perceptions], [0])
+                self.assertEqual(result.perceptions[0].state, HeadPerceptionState.TRACKED_ONLY)
+                self.assertFalse(result.perceptions[0].provisional)
+        finally:
+            provider.close()
 
     def test_empty_fusion_result_is_empty_and_get_heads_remains_compatible(self):
         backend = FakeBackend(

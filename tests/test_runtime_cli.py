@@ -1,6 +1,9 @@
 from contextlib import redirect_stderr
 import io
+from pathlib import Path
 import sys
+import subprocess
+from tempfile import TemporaryDirectory
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -19,6 +22,113 @@ from gazelle.runtime.config import (
 
 
 class RuntimeCliTest(unittest.TestCase):
+    def test_truncated_video_cli_exits_nonzero_and_preserves_failure_record(self):
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'truncated.avi'
+            path.touch()
+            script = '''
+import sys
+from unittest.mock import patch
+from gazelle.runtime.cli import main
+from gazelle.runtime.perception.contracts import HeadFrameResult
+from tests.test_media import FakeCapture
+from tests.test_video_pipeline import FakeHeadProvider
+capture = FakeCapture([0], fps=30, frame_count=108219)
+provider = FakeHeadProvider(result_factory=lambda _: HeadFrameResult(heads=()))
+with patch('cv2.VideoCapture', return_value=capture), patch('gazelle.runtime.pipeline.build_head_provider_from_config', return_value=provider), patch('gazelle.runtime.pipeline._build_real_predictor', side_effect=AssertionError('unexpected model')):
+    raise SystemExit(main(['--input', sys.argv[1], '--output-dir', sys.argv[2], '--max-frames', '50']))
+'''
+            result = subprocess.run([sys.executable, '-c', script, str(path), tmp],
+                                    cwd=Path(__file__).resolve().parents[1], capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('Video decode truncated: read 1 frames, required 50, container reports 108219', result.stderr)
+            import json
+            payload = json.loads((Path(tmp) / 'truncated_gazelle/run_config.json').read_text())
+            self.assertIs(payload['decode_complete'], False)
+
+    def test_static_json_arguments_are_usage_errors_before_inference(self):
+        cases = (
+            (['--head-source', 'static'], '--bbox'),
+            (['--head-source', 'static', '--bbox', 'nan', '0', '1', '1'], '--bbox'),
+            (['--head-source', 'static', '--bbox', '0.6', '0.2', '0.3', '0.4'], '--bbox'),
+            (['--head-source', 'static', '--bbox', '1.2', '1.3', '1.5', '1.6'], '--bbox'),
+            (['--head-source', 'static', '--bbox', '0', '0', '1', '1', '--bbox', '0', '0', '1', '1', '--person-id', '1'], '--person-id'),
+            (['--head-source', 'json'], '--head-data'),
+            (['--head-source', 'json', '--head-data', 'missing-head-data-for-test.json'], '--head-data'),
+        )
+        for arguments, option in cases:
+            with self.subTest(arguments=arguments), TemporaryDirectory() as tmp, redirect_stderr(io.StringIO()) as stderr:
+                arguments = list(arguments)
+                if '--head-data' in arguments:
+                    arguments[-1] = str(Path(tmp) / 'missing.json')
+                with self.assertRaises(SystemExit) as error:
+                    parse_runtime_config(['--input', 'image.jpg'] + arguments)
+                self.assertEqual(error.exception.code, 2)
+                self.assertIn(option, stderr.getvalue())
+
+    def test_static_json_checks_only_apply_to_inference(self):
+        for option in ('--prepare-only', '--list-models'):
+            for source in ('static', 'json'):
+                for input_args in ([], ['--input', 'image.jpg']):
+                    with self.subTest(option=option, source=source, input=input_args):
+                        self.assertEqual(parse_runtime_config([option, '--head-source', source] + input_args).head_source, source)
+        for source in ('static', 'json'):
+            RuntimeConfig(head_source=source).validate()
+        for source in ('none', 'mediapipe'):
+            RuntimeConfig(input_path='x.png', head_source=source, bboxes=((float('nan'),),)).validate()
+
+    def test_programmatic_head_argument_validation(self):
+        for kwargs, option in ((dict(head_source='bogus'), '--head-source'),
+                               (dict(bbox_format='bogus'), '--bbox-format')):
+            with self.subTest(kwargs=kwargs), self.assertRaisesRegex(ValueError, option):
+                RuntimeConfig(**kwargs).validate()
+        for boxes in (None, (), ((True, 0, 1, 1),), ((0, 0, float('inf'), 1),), ((0, 0, 1),), (7,)):
+            with self.subTest(boxes=boxes), self.assertRaisesRegex(ValueError, '--bbox'):
+                RuntimeConfig(input_path='x.png', head_source='static', bboxes=boxes).validate()
+        for ids in ((), (True,), ('1',), (1, 2), 1):
+            with self.subTest(ids=ids), self.assertRaisesRegex(ValueError, '--person-id'):
+                RuntimeConfig(input_path='x.png', head_source='static', bboxes=((0, 0, 1, 1),), person_ids=ids).validate()
+        with self.assertRaisesRegex(ValueError, '--bbox'):
+            RuntimeConfig(input_path='x.png', head_source='static', bbox_format='pixel', bboxes=((30, 20, 10, 40),)).validate()
+
+    def test_static_validation_keeps_original_coordinates(self):
+        boxes = ((-0.1, 0.2, 1.1, 0.4),)
+        config = RuntimeConfig(input_path='x.png', head_source='static', bboxes=boxes).validate()
+        self.assertIs(config.bboxes, boxes)
+        self.assertEqual(config.bboxes, boxes)
+        config = parse_runtime_config(['--input', 'image.jpg', '--head-source', 'static',
+                                       '--bbox-format', 'pixel', '--bbox', '10', '20', '30', '40'])
+        self.assertEqual(config.bboxes, ((10, 20, 30, 40),))
+
+    def test_json_path_check_leaves_content_validation_to_provider(self):
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'heads.json'
+            path.write_text('intentionally invalid JSON', encoding='utf-8')
+            self.assertEqual(parse_runtime_config(['--input', 'x.png', '--head-source', 'json', '--head-data', str(path)]).head_data, str(path))
+            with self.assertRaisesRegex(ValueError, '--head-data'):
+                RuntimeConfig(input_path='x.png', head_source='json', head_data=tmp).validate()
+            with self.assertRaisesRegex(ValueError, '--head-data'):
+                RuntimeConfig(input_path='x.png', head_source='json', head_data=True).validate()
+
+    def test_overwrite_usage_errors_preserve_existing_results(self):
+        from PIL import Image
+        for head_args in (['--head-source', 'static'], ['--head-source', 'json', '--head-data', 'missing-head-data-for-test.json']):
+            with self.subTest(head_args=head_args), TemporaryDirectory() as tmp, redirect_stderr(io.StringIO()):
+                head_args = list(head_args)
+                if '--head-data' in head_args:
+                    head_args[-1] = str(Path(tmp) / 'missing.json')
+                image = Path(tmp) / 'frame.png'
+                Image.new('RGB', (4, 4)).save(image)
+                output = Path(tmp) / 'outputs'
+                previous = output / 'frame_gazelle/predictions.json'
+                previous.parent.mkdir(parents=True)
+                previous.write_text('old', encoding='utf-8')
+                with patch('gazelle.runtime.pipeline._build_real_predictor', side_effect=AssertionError('unexpected model')):
+                    with self.assertRaises(SystemExit) as error:
+                        main(['--input', str(image), '--output-dir', str(output), '--overwrite'] + head_args)
+                self.assertEqual(error.exception.code, 2)
+                self.assertEqual(previous.read_text(encoding='utf-8'), 'old')
+
     def test_face_mesh_help_describes_rendering_opt_in_not_saved_landmarks(self):
         help_text = build_parser().format_help()
 

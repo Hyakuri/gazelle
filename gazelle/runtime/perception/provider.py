@@ -175,7 +175,7 @@ class MediaPipeHeadProvider(HeadProvider):
         )
         perceptions = self._bridge.update(tracked, timestamp_ms=timestamp_ms)
         perceptions = arbitrate_perceptions(perceptions, max_heads=self._max_heads)
-        if self._max_heads == 1:
+        if self._max_heads == 1 and perceptions and not perceptions[0].provisional:
             self._bridge.retain_person_ids(
                 tuple(perception.person_id for perception in perceptions)
             )

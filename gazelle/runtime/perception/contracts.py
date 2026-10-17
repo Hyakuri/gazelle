@@ -127,6 +127,7 @@ class HeadPerception:
     pose_head_reference_ray: Optional[ReferenceRay2D] = None
     gaze_eligible: bool = True
     gaze_status: Optional[GazeStatus] = None
+    provisional: bool = False
 
 
 @dataclass(frozen=True)

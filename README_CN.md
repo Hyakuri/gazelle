@@ -3,6 +3,8 @@
 
 有关完整的 runtime 环境设置、全部 CLI 选项、输入/输出 schema 以及可运行的图像/视频工作流，请参阅[项目使用指南](docs/USAGE_CN.md)。
 
+迁移电脑或切换 agent 时，请先阅读[交接指南](docs/HANDOFF_CN.md)和[跨 Agent 协作流程](docs/AGENT_WORKFLOW_CN.md)。
+
 [English README](README.md)
 
 [Gaze-LLE: Gaze Target Estimation via Large-Scale Learned Encoders](https://arxiv.org/abs/2412.09586)
@@ -32,40 +34,35 @@
 
 ## 安装方式
 
-`environment.yml` 是当前推荐使用的 Gazelle 环境定义，记录了这次已经验证的 NumPy 2.4.6 依赖栈，包括 Python 3.11、PyTorch 2.6.0 + CUDA 12.6 wheels、xFormers 0.0.29.post3、MediaPipe 0.10.35，以及生产 ByteTrack 依赖 `trackers==2.5.0.post0`、`supervision==0.29.1`，并保留了本次验证事务中的 `ultralytics==8.4.104`。
+`environment.yml` 描述当前 `Gazelle-next` 环境：Python 3.14（实际验证为 3.14.8）、PyTorch 2.14.1 与 CUDA 13.0 wheels、MediaPipe 1.1.1、OpenCV 5.0。显式固定版本为 `torch==2.14.1+cu130`, `torchvision==0.29.1+cu130`, `timm==1.0.30`, `numpy==2.5.4`, `scipy==1.18.1`, `pandas==2.3.3`, `matplotlib==3.11.2`, `scikit-learn==1.9.1`, `pillow==12.3.0`, `opencv-python==5.0.0.93`, `opencv-contrib-python==5.0.0.93`, `mediapipe==1.1.1`, `trackers==2.6.1`, `supervision==0.30.9`, `av==19.0.1`。pandas 保留在 2.3 系列，因为数据预处理脚本尚未用 pandas 3.0 验证。
 
-`environment_1.0.yml` 保留了之前的 NumPy 1.26.4 配置，可用于回滚或对照。两个 YAML 文件里的环境名都声明为 `Gazelle`，因此同一时间只应创建一个名为 `Gazelle` 的环境。
+`environment_py311.yml` 逐字节保留上一版 Python 3.11 定义，仍声明 `name: Gazelle`；本机现有环境原样保留作回退。`environment_1.0.yml` 是更早的 NumPy 1.26.4 参考定义，也声明为 `Gazelle`；需要并行创建时应另起环境名。
 
-当前正常工作流仍然是激活已经验证过的 `Gazelle` 环境：
+显式依赖清单的变化如下：
+
+- 不再列出 `torchaudio`：仓库代码不使用，评估的依赖栈中没有配套 torch 2.14 的音频包。
+- 不再列出 `xformers`：评估过的 Windows 包与当前 torch 版本不配套，或缺少 CUDA operator。DINOv2 使用 PyTorch 的 `scaled_dot_product_attention`。
+- 不再列出 `ultralytics`：仓库代码不导入，YOLO 推理和导出未经验证。
+- `polars`、`polars-runtime-32`、`nvidia-ml-py` 随未使用的 Ultralytics 依赖组移除。
+- `pydeprecate` 与 `defusedxml` 不再显式固定版本，但仍作为 trackers/supervision 必需的间接依赖安装：`pydeprecate==0.13.0`、`defusedxml==0.7.1`。不能为了匹配清单中的省略而卸载它们。
+
+已有安装只需激活，不重新安装包：
 
 ```powershell
-conda activate Gazelle
-pip install -e .
+conda activate Gazelle-next
 ```
 
-如果是在全新机器上配置当前推荐环境，请使用 `environment.yml`：
+新机器获得创建环境授权后执行：
 
 ```powershell
 conda env create -f environment.yml
-conda activate Gazelle
+conda activate Gazelle-next
 pip install -e .
 ```
 
-如果你需要把旧版 NumPy 1.26.4 环境作为并行对照保留下来，请在创建 `environment_1.0.yml` 时显式覆盖环境名：
+创建会下载依赖并写入新的 `Gazelle-next` 环境，editable 安装也会修改环境；二者都不运行推理。从仓库根目录使用 `python main.py` 可直接运行源码。不要重新创建或 prune 已有环境。
 
-```powershell
-conda env create -f environment_1.0.yml --name Gazelle-1.0
-```
-
-激活 `Gazelle` 后，建议先运行以下命令验证 CLI，并准备默认本地模型缓存：
-
-```powershell
-python main.py --help
-python main.py --list-models
-python main.py --prepare-only --model gazelle_dinov2_vitb14_inout --cache-dir models
-```
-
-`--help` 和 `--list-models` 不会下载模型，也不会运行推理。`--prepare-only` 首次运行时可能下载 Gazelle checkpoint、DINOv2 PyTorch Hub 仓库和 DINOv2 权重；再次运行相同命令时应复用 `models/checkpoints` 和 `models/torch_hub` 中已有的缓存。
+回退时，本机保留了旧环境就直接 `conda activate Gazelle`；仅在旧环境不存在且获准重建时运行 `conda env create -f environment_py311.yml`。上游训练脚本仍需另行安装 `wandb`，本次切换不代表训练已验证。
 
 ## 预训练模型
 
@@ -188,6 +185,12 @@ python main.py `
 
 使用 `--overwrite` 时，runtime 会在写入新结果前清理对应图片的输出目录，因此旧的 heatmap 或 rendered image 不会残留。
 
+图片/视频推理时，仅凭参数可判断的 static/json 错误会在任何 `--overwrite` 删除前以 usage error
+（退出码 2）拒绝，包括缺失/无效的 static bbox、ID，以及缺失或非文件的 JSON 路径。
+bbox 校验不改写 `run_config.json` 中的原始坐标；pixel 裁剪仍需图像尺寸。
+删除仍发生在 provider、模型和资源准备之前，因此 JSON 内容、MediaPipe 资源、checkpoint 和
+设备可用性问题仍可能在旧结果删除后才失败。`--list-models` 与 `--prepare-only` 不要求 static bbox 或 JSON 路径。
+
 head 输入来源：
 
 - `--head-source none` 会创建一个单人 fallback head，bbox 为 `None`。
@@ -235,11 +238,24 @@ pose 选项会分别准备 `pose_landmarker_lite.task`、`pose_landmarker_full.t
 
 该集成刻意保持较小的模型边界：fusion/tracking 会生成有序 `HeadObservation` 和对齐的 `HeadPerception`。默认 `--gazelle-head-mode eligible` 只传入保守 eligible head。诊断 selector 可以改为一个或多个 state（`face_pose`、`face_only`、`pose_only`、`tracked_only`）或 view（`frontal`、`profile`、`back_or_occluded`、`unknown`）；`observed` 选择当前 observation，`all` 选择全部 active perception，多个 selector 采用 OR 语义。即使处于诊断模式，也不能恢复已经过期的 track，并且仍然要求通过 normalized non-`None` bbox 校验。face bbox、face mesh、face/pose keypoint、两条 head-pose reference ray、head pose 和 tracking state 永远不会加入 Gazelle tensor input。Gazelle 按选中的 person 顺序返回结果。
 
-当前 `environment.yml` 中声明的依赖集合已经用真实 MediaPipe 0.10.35、通过 `trackers==2.5.0.post0` 接入的生产 ByteTrack、Gazelle/DINOv2 CUDA 单图推理，以及一段短视频渲染流程完成验证。因此，本文档现在将这个 NumPy 2.4.6 环境视为当前分阶段 runtime 的推荐端到端配置。这里不宣称已经验证可选的 Ultralytics YOLO 模型推理或导出能力。
+2026-10-17 的环境评估已验证 `Gazelle-next` 的完整离线门、300 帧 static 与 MediaPipe/生产 ByteTrack CUDA 运行、解码帧比对，以及 mp4v/H.264 渲染。环境切换不代表精度提升，也不代表训练或 YOLO 已验证。当前环境的 smoke 使用本地缓存资源；MediaPipe 可能发送遥测，Torch Hub 可能探测 GitHub。
 
-runtime 会在延迟导入 ByteTrack 时精确过滤 upstream `trackers` 的 `target=None` 弃用 warning，其他 `FutureWarning` 仍会正常显示。常规 CUDA 图片/视频推理会先解析 checkpoint 而不构建 DINOv2，然后只构建一次启用 xFormers 的 predictor。如果可选 Triton 不存在，并且用户没有设置 xFormers Triton override，模型构建期间会临时使用官方 `XFORMERS_FORCE_DISABLE_TRITON=1` 开关；这只跳过无效的 Triton 探测，不会关闭其他 xFormers operator，也不会修改 Conda 环境。`--prepare-only` 为了 strict-load 校验仍会有意关闭 xFormers，因此该路径上仍可能看到 DINOv2 非致命的 xFormers-disabled/not-available 状态 warning。由于 DINOv2 会在首次 import 时缓存 backend 选择，长生命周期 Python 进程若随后请求不兼容的 CPU/prepare-only 与启用 xFormers 的 CUDA 构建，现在会明确失败，而不是静默复用错误 backend；切换 backend mode 时应启动新进程。
+runtime 在延迟导入 ByteTrack 时仅过滤 upstream `trackers` 的 `target=None` 弃用 warning，保留其他 warnings。checkpoint 解析不构建 DINOv2，推理只构建一次 predictor。当前 `Gazelle-next` 环境不安装 xFormers，DINOv2 使用 PyTorch 的 `scaled_dot_product_attention`。运行时保留对装有 xFormers 环境的兼容规则：CPU construction 和 `--prepare-only` 禁用它；CUDA 可在未设置 `XFORMERS_DISABLED` 时请求使用。可选 Triton 缺失且用户未设 override 时，`XFORMERS_FORCE_DISABLE_TRITON=1` 只跳过该探测，不禁用其他 xFormers operator，也不修改环境。strict load 时仍可能出现非致命的 xFormers-disabled/not-available 提示。DINOv2 缓存 backend 选择，因此 long-lived process 若要切换不兼容的 CPU/prepare-only 与启用 xFormers 的 CUDA mode，须启动新 process。
 
 ### 独立 Head Observation Schema
+
+`head_pose` 使用显示图像符号：正 yaw 向右、正 pitch 向下、正 roll 顺时针。
+面部参考射线是矩阵前向向量的归一化 `(r02, -r12)` 投影（x 向右、y 向下）。
+roll 与面部射线垂直符号不同于早期输出，下游应同步处理此修正。
+两条独立射线仍为未标定的 2D 头姿参考，不是测量得到的眼睛视线。
+
+MediaPipe 视频第 0 帧及每条新轨迹首帧立即输出观测头部，`tracking.provisional=true`、age 为 1。
+两帧索引内确认且 IoU ≥0.20 时关联同一个公开 ID。临时头部不建立短遮挡桥接；
+图像模式、已确认头部与 `tracked_only` 使用 `tracking.provisional=false`。
+单人模式中，临时头部胜出时保留已有的已确认轨迹桥接状态。
+临时头部可以进入 Gazelle：`--gazelle-head-mode all` 会选中只有姿态的头部，
+保守模式也会选中具有有效面部射线的头部。仅出现一帧且未确认的 spawn 会增加不同
+`person_id` 的数量；下游统计身份时应先排除 `tracking.provisional=true` 的行。
 
 `gazelle.runtime.perception.outputs` 提供 `head_frame_to_json_dict(...)`，用于序列化单个独立 provider 结果。图片 pipeline 使用 `write_head_observations_json(output_path, **frame_kwargs)` 创建父目录，并写入恰好一个带缩进且末尾换行的 JSON 文档。视频 pipeline 会把每个序列化 provider 结果写成一行紧凑的 `head_observations.jsonl`。record 恰好包含 `frame_index`、`timestamp_ms`、`status`、`width`、`height`、`provider`、`timings_ms` 和 `people` 字段。结果存在 head 时 `status` 为 `"ok"`，否则为 `"no_head"`。`timings_ms` 保留 provider 的 timing 名称及有限的毫秒数值。
 
@@ -316,7 +332,88 @@ python main.py `
   --overwrite
 ```
 
+### 研究数据工具
+
+本机标注工具抽取三视角 60 秒片段与逐步 JPEG，在 `127.0.0.1` 提供自动保存的浏览器界面。
+已完成的区域定义提供类别；省略 `--regions-path` 才生成默认类别试用数据集，显式指定未完成文件会报错。
+各会话独立使用 `seed + int(session)`，`--sessions` 默认只含七次已批准录制，正式片段不与 pilot 重叠。
+标注使用 version 2：`viewed_ranges` 记录实际显示的步，未看部分保留斜线纹理；全部看过且有类别后，
+点击“本段完成”才写入 `finished_at`。修改类别或他人区间会清除完成状态。
+修改较长片段的类别后，确认完成前请回放检查，因为“已看”只表示显示过。
+完成条件只认此前已保存的已看范围；同请求的新范围会保存，但不能用于本次确认。
+仅已看变化最多每秒保存一次，暂停/换段/完成/隐藏/关闭前立即写入；类别、他人区间、备注立即保存。
+`labels validate --segment ID` 只严格检查指定段，可重复给出。仅使用 CPU，不启动 FFmpeg
+可执行程序，不使用模型、GPU、下载或外部网络。入口见[用法](docs/USAGE_CN.md#15-研究数据工具)
+与[标注指南](tools/validation/ANNOTATION_GUIDE_CN.md)。
+
+`tools.workdata.proxies` 为每次录制生成三段 5 Hz、1920×1080 视频，
+附源帧旁注和全长解码计数。使用 CPU PyAV 与 FFmpeg/libx264，输出在仓库外，
+不使用模型、GPU 或网络。命令与内部覆盖缺口的显式规则见
+[研究数据工具](docs/USAGE_CN.md#15-研究数据工具)。
+
+时钟工具 `tools.workdata.osd_clock`、`tools.workdata.timemap` 与
+`tools.workdata.sync_check` 读取画面时钟、拟合原生视频 PTS 并检查运动对齐。
+它们使用 CPU/PyAV，映射与报告写在仓库外；不调用 FFmpeg 可执行程序、GPU、模型或网络。
+无法可靠识别的时钟保持缺失，同步检查失败需复核。
+
+同步协议 r2 以前方摄像机 B 为基准。`tools.workdata.sync_calibrate` 在 v2 原生 PTS 基础映射后，
+用画面运动拟合 A/E 的偏移、漂移及有证据的台阶；`tools.workdata.sync_validate` 检查残差滞后、
+固定时钟样本，并导出事件条图供人工复核。两者只使用 CPU，输出留在仓库外，不使用模型、GPU 或网络。
+`delta_distribution` 按摄像机汇总时钟差值分布，缺失读数保持缺失。
+校准需要作业者有可见动作；无人或静止时段不能提供校准窗口。旧代理与旧数据集保留为带日期的备份，
+正式标注须等待同步审查。
+仅修复拟合时，可用 `timemap --sample-cache <旧-v2-root>` 在不同输出根中复用已核实的解码/OCR 证据，
+保留原采样实现与文件哈希。
+`sync_calibrate --reuse-samples` 复用已校验的灰度缓存重新拟合，不重新解码源视频。
+须使用尚不存在的输出映射；分别记录原采样与当前拟合指纹，原样本保持不变。
+复用会比较实际采样实现哈希，不同则拒绝。只解复用的关键帧扫描用于屏蔽跨源关键帧或源文件的运动步；
+验证另外屏蔽代理自身关键帧，并用 `INTER_AREA` 缩略图。v3 在各机自身基础时间上显式计算
+`T(b) = b - L(b)`，用 L1 代价下降 ≥25% 的台阶搜索，并排除重叠帧。
+切点 ±10 s 与缺口/重叠范围标为 `sync_uncertain`，标注抽样在同层重抽这些片段。
+残差分为通过、未通过、`insufficient_evidence`（<10 窗或覆盖 <30%）；A–B/E–B 必须通过，
+A–E 可证据不足，但须报告闭合推算。时钟按 `d = base_X(pts) - reading` 检查：
+A/B −0.5 ≤ d <1.5 s，E −1.5 ≤ d <2.5 s。七会话全部通过后才改名备份、切换目录并重建数据集。
+
+本地研究数据工具可生成只读源清单并无损重封装 AVI 空包。从仓库根目录运行
+`python -m tools.workdata.inventory` 和 `python -m tools.workdata.remux`，读取源视频、
+将派生文件写到仓库外；调用 ffprobe/FFmpeg，仅使用 CPU，不使用 GPU、模型或网络。
+完整命令见 [USAGE 研究数据工具](docs/USAGE_CN.md) 与[中文工具指南](tools/workdata/README_CN.md)。
+
+全局摄像机区域工具可抽取候选帧，并在 `127.0.0.1` 提供自动保存、参考图与类别导出的浏览器编辑器。
+仓库根目录启动命令见[区域指南](tools/validation/ROI_GUIDE_CN.md) 和 [USAGE](docs/USAGE_CN.md)。
+图像与区域文件留在外部数据根；仅使用 CPU/OpenCV/Pillow，不调用 FFmpeg 可执行程序、模型、GPU 或外部网络。
+导出的标注类别保留区域颜色，供后续标注工具使用。
+先画目标区域，最后画工作区；重叠处点击选中最小区域，顶点始终显示在工作区上方。
+导出要求 1–6 个目标区域与恰好一个工作区。数字键按目标绘制顺序分配，之后为
+`cell_other`、`away`、`absent`（最多 1–9）；`unknown` 为 0。自动保存仍是草稿：
+成功导出才写入含时间与区域 SHA-256 的 `roi_regions.complete.json`；version 2 标记还绑定
+`export_root`、`roi_reference.png` 与 `classes.json` 的 SHA-256，抽样复制前核对二者。
+CLI 的 `--out-root` 指定导出目录；默认正式区域导出到 JSON 旁，其他文件名导出到 `<stem>_export/`。
+页面显示完成状态，面积小于画面 0.5% 的区域需确认。修改后需重新导出才算完成。
+
 ### 视频推理
+
+视频保留有效容器时间戳，对取整冲突做最小修补。缺失值指非有限值、负数，以及下标 2 起的零值；
+回退公式为 `max(prev_out + 1000 / fps, p + 1)`，取上一帧未取整输出加一个标称帧间隔、
+与上一帧取整后加 1 ms 两者中的较大值。下标 1 的零值现在记为 1 ms，不再按帧号推算。
+`run_config.json` 记录 `container_frame_count`、
+`frames_required`、`decode_complete` 和 `timestamp_sources`（`container`、
+`repaired`、`fps_fallback` 三类计数）。容器帧数为 N 时，容差
+T = max(2, ceil(0.005 * N))。`--max-frames` 不超过 N - T 时必须完整读出请求帧数；
+其余情况至少读出 max(0, N - T) 帧。未知容器帧数不检查。解码提前失败会以非零码退出，
+保留部分 JSONL 和失败配置。启用渲染时，`avc1` 跳过 H.264 终结，只留下 JSONL 和
+`run_config.json`；`mp4v` 还会留下不完整的 `rendered.mp4`。容器帧数未知时，
+`container_frame_count`、`frames_required`、`decode_complete` 为 null。
+
+含微小空包的 AVI 可从仓库根目录执行以下本地无损重封装（替换输入、输出路径）：
+
+```powershell
+ffmpeg -n -fflags +genpts -i "C:\path\to\read-only-source\input.avi" -map 0:v:0 -c:v copy -bsf:v "noise=drop=lt(size\,64)" "C:\path\outside-repository\remuxed.mp4"
+```
+
+命令调用 FFmpeg，写入新的视频流 MP4，不包含音频；保留原始输入并拒绝覆盖已有输出。
+不构造模型、不使用 CUDA、不联网、不下载。
+
 
 runtime 可以对本地视频文件进行逐帧离线推理：
 
@@ -424,10 +521,10 @@ perception 和 tracking 会在每个解码并写出的帧上恰好运行一次�
 
 ### 真实 smoke test
 
-真实图片 / 视频 smoke test 应在现有本地 Conda 环境 `Gazelle` 中运行：
+真实图片 / 视频 smoke test 应在现有本地 Conda 环境 `Gazelle-next` 中运行：
 
 ```powershell
-conda activate Gazelle
+conda activate Gazelle-next
 ```
 
 单图 smoke test：
@@ -458,7 +555,7 @@ python main.py `
   --overwrite
 ```
 
-这些命令会在每次图片运行中构建一次真实 Gazelle predictor 和 DINOv2 backbone，或在视频首个可用帧上构建一次，随后加载 Gazelle checkpoint、执行推理并写出输出目录。checkpoint 解析本身不会构建 DINOv2。如果 `models/checkpoints` 或 `models/torch_hub` 为空，首次运行可能下载 Gazelle checkpoint、DINOv2 PyTorch Hub 仓库和 DINOv2 权重；再次运行相同命令时应复用缓存。CPU smoke test 可以使用 `--device cpu`；在 CPU 上构建 DINOv2 时，runtime 会临时关闭 xFormers，避免本地 CUDA-only xFormers wheel 强制使用不支持的 CPU attention kernel。CUDA 构建会保持 xFormers 启用，并只在 Triton 不可用时跳过可选 Triton 探测。重复的 programmatic 构建可以复用该进程已经选择的 backend，但在不兼容的 CPU/prepare-only 与启用 xFormers 的 CUDA mode 之间切换时必须启动新进程。
+这些命令会在每次图片运行中构建一次真实 Gazelle predictor 和 DINOv2 backbone，或在视频首个可用帧上构建一次，随后加载 Gazelle checkpoint、执行推理并写出输出目录。checkpoint 解析本身不会构建 DINOv2。如果 `models/checkpoints` 或 `models/torch_hub` 为空，首次运行可能下载 Gazelle checkpoint、DINOv2 PyTorch Hub 仓库和 DINOv2 权重；再次运行相同命令时应复用缓存。CPU smoke 使用 `--device cpu`。当前 `Gazelle-next` 环境不安装 xFormers，DINOv2 使用 PyTorch 的 `scaled_dot_product_attention`。运行时保留对装有 xFormers 环境的兼容规则：CPU construction 和 `--prepare-only` 禁用它；CUDA 可在未设置 `XFORMERS_DISABLED` 时请求使用。可选 Triton 缺失且用户未设 override 时，`XFORMERS_FORCE_DISABLE_TRITON=1` 只跳过该探测，不禁用其他 xFormers operator，也不修改环境。strict load 时仍可能出现非致命的 xFormers-disabled/not-available 提示。DINOv2 缓存 backend 选择，因此 long-lived process 若要切换不兼容的 CPU/prepare-only 与启用 xFormers 的 CUDA mode，须启动新 process。
 
 ### 编程式单帧 Predictor
 
