@@ -9,12 +9,12 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 | stage | 阶段 2：作业数据可用、多机同步、正确性修复，建立区域标注 |
 | branch | `feature/stage2-correctness`（基于 PR #5 head `bbec056`） |
 | pr | [#6](https://github.com/Hyakuri/gazelle/pull/6)（draft）；正文来源 `docs/collab/STAGE2_PR_BODY.md` |
-| writer | codex |
-| next_actor | codex |
-| current_task | `docs/collab/tasks/TASK-139-content-calibrated-sync.md`（用户本轮已批准 D18，见 Q-010） |
-| after_current | `docs/collab/tasks/TASK-102-spawn-frame-confirmation.md`，然后 `docs/collab/tasks/TASK-002-face-ray-sign-alignment.md`，然后结束本轮并把 `next_actor` 改为 `claude` |
+| writer | none |
+| next_actor | claude |
+| current_task | `docs/collab/tasks/TASK-002-face-ray-sign-alignment.md`（已按 after_current 完成本轮最后一项；全轮报告待 Claude 审查） |
+| after_current | 无；第 3 轮结束，TASK-139 的 Q-012 与 TASK-002 的 Q-011 交 Claude 判断 |
 | environment | `Gazelle-next`：`C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe`（用户 2026-10-17 决定 D16）。现有 `Gazelle` 作为回退保留，不改动 |
-| last_pushed | `3242aed`（TASK-139 最终数值误差守卫；其后报告提交以实时 Git 为准） |
+| last_pushed | `a9e7676d0e8f778f72c41f30404923174e1c0d63`（全部实现及最终报告；其后仅本次 STATE 交接提交，以实时 Git HEAD 为准） |
 | last_accepted | `b527287`（2026-10-17 第 2 轮审查：此前全部提交已通过，包括 TASK-001、TASK-123 修复、TASK-135、TASK-137。其后的 TASK-133 只部分通过，TASK-134、TASK-121 的结论见下表） |
 | 更新 | 2026-10-17，Claude：第 2 轮审查完成；同步问题已查明，建议同步协议 r2（D18，待用户批准）。第 3 轮交 Codex，第一项为 TASK-138 |
 
@@ -28,6 +28,7 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 - 最终 guard 修复提交 `3242aed` 后，只读数值重放确认真实数据时间值不变；媒体保留 `d7431e0`/`bbcbc31` 原指纹，没有伪装为最终提交后重跑。12 个拟合全域误差保守上界 0.002502 ms，40 个端点重放最大误差 7.15e-7 s；说明见 TASK-139。
 - 普通沙盒预检与授权 yun Git/GitHub 例外分别记录；`Gazelle-next` 使用、原 Gazelle 保留。真实 CPU/GPU/MediaPipe、缓存/网络、FFmpeg 活动详见各任务，不用 mocks 代替实测。未安装、修改环境、下载新资源或上传媒体/标注/权重/缓存/凭据，源目录只读；20261016 未纳入。旧数据与忽略文件保留。
 - **Claude 接手**：先按稳定提交复跑与审查 A 级决定，处理 Q-012 的实际同步失败/分段与 OSD 定义，以及 Q-011 的真实样例问题；目视核对全部事件。TASK-101 继续 blocked，必须等 TASK-102 审查通过。`last_accepted` 保持 `b527287`，最终用户在独立 checkout 验收。
+- 最终双语 PR 报告：[TASK-139 与全轮交接](https://github.com/Hyakuri/gazelle/pull/6#issuecomment-6233132174)。代理/验证批已退出（exit 1，实际验收失败如上），父进程已确认不存在；数值/文件核对均已结束。未留下本任务后台计算。交接时跟踪文件 clean（本 STATE 交接提交后），既有忽略文件未清理。
 
 ## 第 2 轮审查结论（Claude，2026-10-17）
 
