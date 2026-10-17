@@ -252,6 +252,10 @@ roll 与面部射线垂直符号不同于早期输出，下游应同步处理此
 MediaPipe 视频第 0 帧及每条新轨迹首帧立即输出观测头部，`tracking.provisional=true`、age 为 1。
 两帧索引内确认且 IoU ≥0.20 时关联同一个公开 ID。临时头部不建立短遮挡桥接；
 图像模式、已确认头部与 `tracked_only` 使用 `tracking.provisional=false`。
+单人模式中，临时头部胜出时保留已有的已确认轨迹桥接状态。
+临时头部可以进入 Gazelle：`--gazelle-head-mode all` 会选中只有姿态的头部，
+保守模式也会选中具有有效面部射线的头部。仅出现一帧且未确认的 spawn 会增加不同
+`person_id` 的数量；下游统计身份时应先排除 `tracking.provisional=true` 的行。
 
 `gazelle.runtime.perception.outputs` 提供 `head_frame_to_json_dict(...)`，用于序列化单个独立 provider 结果。图片 pipeline 使用 `write_head_observations_json(output_path, **frame_kwargs)` 创建父目录，并写入恰好一个带缩进且末尾换行的 JSON 文档。视频 pipeline 会把每个序列化 provider 结果写成一行紧凑的 `head_observations.jsonl`。record 恰好包含 `frame_index`、`timestamp_ms`、`status`、`width`、`height`、`provider`、`timings_ms` 和 `people` 字段。结果存在 head 时 `status` 为 `"ok"`，否则为 `"no_head"`。`timings_ms` 保留 provider 的 timing 名称及有限的毫秒数值。
 

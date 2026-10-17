@@ -199,6 +199,22 @@ class ByteTrackHeadTrackerTest(unittest.TestCase):
             self.assertEqual(row.person_id,1)
             self.assertEqual(row.track_age_frames,1)
 
+    def test_pending_iou_association_precedes_reversed_candidate_order(self):
+        fake = FakeTracker()
+        fake.output_builder = lambda d: tracked_output(
+            d, (-1, -1) if len(fake.updates) == 1 else (92, 91), (1, 0)
+        )
+        adapter, _, _ = make_tracker(fake)
+        left = candidate(0, bbox=(.1, .2, .3, .4))
+        right = candidate(1, bbox=(.6, .2, .8, .4))
+        first = adapter.update((left, right), frame_index=0, timestamp_ms=0,
+                               image_width=100, image_height=100)
+        second = adapter.update((right, left), frame_index=1, timestamp_ms=33,
+                                image_width=100, image_height=100)
+        self.assertEqual([row.person_id for row in first], [0, 1])
+        self.assertEqual([row.person_id for row in second], [1, 0])
+        self.assertTrue(all(not row.provisional for row in second))
+
     def test_respawn_reuses_pending_without_restarting_age_or_creating_bridge(self):
         adapter,_,_=make_tracker(FakeTracker(lambda d:tracked_output(d,(-1,))))
         bridge=ShortOcclusionBridge()

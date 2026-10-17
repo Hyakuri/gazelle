@@ -377,6 +377,11 @@ with `tracking.provisional=true` and age 1. Confirmation within two frame indice
 to the same `person_id`; age counts from the original spawn. Provisional observations do not
 create or refresh bridge state, so a one-frame detection cannot create a stale ghost.
 Image mode, confirmed observations and `tracked_only` always use `tracking.provisional=false`.
+In single-person mode, a provisional winner preserves existing confirmed bridge state.
+Provisional heads can enter Gazelle: `--gazelle-head-mode all` selects pose-only heads,
+and conservative mode selects heads with a valid face ray. An unconfirmed one-frame spawn
+increases the number of distinct `person_id` values; downstream identity counts should
+first exclude rows with `tracking.provisional=true`.
 
 The face reference ray projects the matrix forward vector as `(r02, -r12)` into image
 coordinates (x right, y down). Positive yaw points right, positive pitch down, and positive
@@ -384,7 +389,7 @@ roll rotates clockwise. Serialized roll and the face ray's vertical direction fo
 signs; consumers of earlier opposite signs must update. Both rays remain uncalibrated 2D
 head-pose references, not eye-gaze measurements or calibrated 3D rays.
 
-`track_age_frames` is the track age, while `missed_frames` and `missed_ms` count consecutive bridge reuse since the last current observation. `tracked_only` therefore represents a stale bridged box, not a fresh detection. It is excluded by the default `eligible` selector, but explicit `tracked_only` or `all` diagnostic selection may send it to Gazelle only while that bridge track is active. In single-person mode, post-bridge arbitration keeps at most one identity and prunes displaced stale bridge state.
+`track_age_frames` is the track age, while `missed_frames` and `missed_ms` count consecutive bridge reuse since the last current observation. `tracked_only` therefore represents a stale bridged box, not a fresh detection. It is excluded by the default `eligible` selector, but explicit `tracked_only` or `all` diagnostic selection may send it to Gazelle only while that bridge track is active. In single-person mode, post-bridge arbitration outputs at most one identity and prunes other stale bridge state only when the winner is confirmed.
 
 ### Prediction records
 

@@ -142,6 +142,46 @@ git status --short
 
 **已实施、已静态检查、已实际运行；待 Claude 独立审查和用户独立 checkout 验收。**
 
+### 2026-10-18 第 2 轮修复（Codex）
+
+- 按 §3 修复 GZ-30：单人模式只有胜出 perception 已确认时才调用 `retain_person_ids`；provisional 胜出不修剪已有已确认桥接。未改变仲裁顺序、有效性、过期时间、Gazelle selector 或多人的行为。
+- 新增 P0/f0–f4、P1/provisional/f5、f6–f8 漏检回归；修改前实际失败（期望 P0、实际空），修改后 f6–f8 均为 P0/`tracked_only` 且 provisional=false。另新增不同 bbox、颠倒候选顺序的 IoU 关联测试，public ID 随 bbox 而非候选顺序关联；新测试使用展开的代码风格。
+- 四份用户文档及 usage 检查同步：provisional 在 `all` 下可选中 pose-only、保守模式有有效面部射线也可进入 Gazelle；一帧 spawn 增加 ID 数，下游身份统计先排除 `tracking.provisional=true`。修正单人桥接修剪说明。
+- 更正上一轮报告中的推断：已只读核对 trackers 2.6.1 的 `ByteTrackTracklet.__init__`，spawn 连续计数从 **1** 开始，能撑过一帧漏检。“新版未确认轨迹漏检后可能更早被清理”不成立，不作为本次实现依据。
+
+#### 检查与真实活动
+
+解释器仍为 `Gazelle-next`，字节码 `%TEMP%\gazelle-task-102-r2-pycache`；日志、诊断与媒体仅在仓库外 `gazelle_runs/task-102-r2/`。
+
+| 命令 | 结果 |
+| --- | --- |
+| 两个新增 method 的 red 检查 | 2 tests，桥接回归失败，IoU 测试通过；`regression-red.log` |
+| `python -m unittest tests.test_mediapipe_head_provider tests.test_head_tracking -v` | exit 0，64 tests / 6.278s / 0 skip |
+| `python -m compileall main.py gazelle tests tools` | exit 0 |
+| `python -m unittest discover -s tests -v` | exit 0，667 tests / 13.541s / 0 skip；包含同期 TASK-140 的来源变更拒绝检查 |
+| `python main.py --help`、`python main.py --list-models`、`git diff --check` | 均 exit 0 |
+| `python .../task-102-r2/smoke.py` | 子进程模型运行 exit 0 / 26.027s；外围“tracked_only 数应恢复”断言 exit 1，原因如下，保留原日志与断言 |
+| `ffprobe -v error -count_frames -show_streams -of json <rendered.mp4>` | exit 0，H.264、640×360、30 帧 |
+| `python .../task-102-r2/bridge_diagnostic.py` | exit 0，真实 MediaPipe 30 帧仲裁前诊断、真实 ByteTrack 的合成 P0/P1 回归均通过 |
+
+smoke A 复用原 30 帧 `sunny.mp4`，SHA-256 `d342b0ea8304d7bf46bc9276b6a22f50c420e4d349e6fad01c85a6075d74933a`。公共 argv 为 `--input <sunny.mp4> --output-dir <task-102-r2/A-after> --cache-dir <repo>/models --device cuda --head-source mediapipe --max-frames 30 --save-rendered --face-pose-ray --pose-head-ray --max-heads 1 --video-codec avc1`，通过已有 task-136 的离线审计 wrapper 调用。输入未重编码，旧对照未覆盖。
+
+- GPU 前检 4563/16376 MiB、利用率 4%；发生真实 Gazelle CUDA 推理、MediaPipe CPU 和 FFmpeg H.264 编码。30/30 observation/prediction 行及读写帧一致。Python audit 阻止一次 `urllib.Request`，随后 Torch Hub 缓存回退成功；未下载，缓存大小/mtime 无变化，未修改环境。MediaPipe 原生遥测不由此 Python audit 证明。后续 provider-only 诊断不构建 Gazelle、不编码视频，Python 网络事件为空。
+- 非致命输出：xFormers 可选路径不可用、MediaPipe 日志/feedback/alignment 提示、坏 MP4 离线回归提示、Git LF/CRLF 提示。没有把这些提示当成推理或测试失败。
+
+#### smoke A 预期差异与反证（交 Claude 判断）
+
+三份输出逐帧比较见 `comparison.json`。原始基线 A 的 `tracked_only=3`，上一轮 A 为 0，本次修复后仍为 **0**；no_head=0、不同 ID=4、provisional=4、预测 ok/no_gaze=15/15 均与上一轮相同。不能报告“smoke A 的 tracked_only 输出行恢复”。
+
+原因已用实际帧核实：原始基线 f6、f7、f13 的三个桥接输出，分别被 TASK-102 允许输出的 pose-only/face-only/pose-only provisional 头替代；下一帧有当前观测，没有“临时头之后继续无观测”的空帧。按现有仲裁顺序，修复不应把这些实际观测改回桥接输出。
+
+为区分输出仲裁与内部桥接丢失，额外运行真实 MediaPipe provider 并记录 bridge 返回值：本次 f7 在仲裁前同时含 P2/face_only/provisional 和 **P0/tracked_only**，f6、f7、f13 均未调用 retain。另在真实 trackers 2.6.1 上运行契约的 P0/f0–f4、远离 P0 的 P1/f5、f6–f8 空输入：原修剪行为为 3 个空结果，新行为为 **3 个 P0/tracked_only**。证据为 `bridge-diagnostic.json`，没有访问上游 tracker 私有字段。
+
+- A 级：最小条件修复；测试中使用展开布局；外部诊断区分仲裁前状态与公开输出。无范围外实现。
+- B 级：请求 Claude 以契约的 P0/P1 回归和真实 A 的仲裁前桥接状态验收 GZ-30；STATE 所写“smoke A 的 tracked_only 行恢复”与原 A 逐帧输入不符。未擅自改变 selector 或研究验收标准。TASK-101 继续等待本任务审查通过。
+- C 级：无。未运行本轮不要求的 B 重跑或作业视频补充 smoke。
+- **已实施、已静态检查、已实际运行；上述预期差异待 Claude 独立判断，用户独立 checkout 验收未完成。**
+
 ## 3. 审查结论（Claude 追加）
 
 ### 2026-10-17 第 3 轮审查（Claude）

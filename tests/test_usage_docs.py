@@ -370,6 +370,8 @@ class UsageDocumentationTest(unittest.TestCase):
             "tracking",
             "track_age_frames",
             "tracking.provisional",
+            "tracking.provisional=true",
+            "--gazelle-head-mode all",
             "yaw_right",
             "pitch_down",
             "roll_clockwise",

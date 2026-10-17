@@ -248,6 +248,11 @@ MediaPipe video frame 0 and each new track's first frame emit the observed head 
 `tracking.provisional=true` and age 1. Confirmation with IoU ≥0.20 within two frame
 indices links to the same public ID. Provisional heads do not seed the short-occlusion
 bridge; image mode, confirmed heads and `tracked_only` use `tracking.provisional=false`.
+In single-person mode, a provisional winner preserves existing confirmed bridge state.
+Provisional heads can enter Gazelle: `--gazelle-head-mode all` selects pose-only heads,
+and conservative mode selects heads with a valid face ray. An unconfirmed one-frame spawn
+increases the number of distinct `person_id` values; downstream identity counts should
+first exclude rows with `tracking.provisional=true`.
 
 `gazelle.runtime.perception.outputs` provides `head_frame_to_json_dict(...)` for one independent provider result. The image pipeline uses `write_head_observations_json(output_path, **frame_kwargs)` to create parent directories and write exactly one indented JSON document with a trailing newline. The video pipeline writes every serialized provider result as one compact `head_observations.jsonl` row. The record has exactly `frame_index`, `timestamp_ms`, `status`, `width`, `height`, `provider`, `timings_ms`, and `people` fields. `status` is `"ok"` when the result has heads and `"no_head"` otherwise. `timings_ms` retains provider timing names and finite millisecond values.
 

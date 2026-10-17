@@ -374,12 +374,16 @@ Landmark、matrix、head-pose value shape：
 两帧索引内的确认按 IoU 关联并沿用同一 `person_id`，age 从原 spawn 帧计算。
 临时观测不创建或刷新桥接状态，因此一帧误检不会产生 stale 幽灵框。
 图像模式、已确认观测和 `tracked_only` 始终为 `tracking.provisional=false`。
+单人模式中，临时头部胜出时保留已有的已确认轨迹桥接状态。
+临时头部可以进入 Gazelle：`--gazelle-head-mode all` 会选中只有姿态的头部，
+保守模式也会选中具有有效面部射线的头部。仅出现一帧且未确认的 spawn 会增加不同
+`person_id` 的数量；下游统计身份时应先排除 `tracking.provisional=true` 的行。
 
 面部参考射线把矩阵前向向量以 `(r02, -r12)` 投影到图像坐标（x 向右、y 向下）。
 正 yaw 向右、正 pitch 向下、正 roll 顺时针。序列化 roll 与面部射线垂直方向使用此约定，
 消费早期相反符号的下游需同步调整。两条射线仍是未标定的 2D 头姿参考，不是眼睛视线测量或校准 3D 射线。
 
-`track_age_frames` 是 track age；`missed_frames`、`missed_ms` 表示上次当前 observation 后连续 bridge reuse 的帧数和时间。因此 `tracked_only` 是 stale bridged box，不是 fresh detection。默认 `eligible` selector 会排除它；只有在 bridge track 仍 active 时，显式 `tracked_only` 或 `all` 诊断 selector 才能把它送入 Gazelle。单人模式在 bridge 后最多保留一个 identity，并裁掉被新 observation 替换的 stale bridge state。
+`track_age_frames` 是 track age；`missed_frames`、`missed_ms` 表示上次当前 observation 后连续 bridge reuse 的帧数和时间。因此 `tracked_only` 是 stale bridged box，不是 fresh detection。默认 `eligible` selector 会排除它；只有在 bridge track 仍 active 时，显式 `tracked_only` 或 `all` 诊断 selector 才能把它送入 Gazelle。单人模式在 bridge 后最多输出一个 identity，只有胜出者已确认时才裁掉其他 stale bridge state。
 
 ### Prediction records
 
