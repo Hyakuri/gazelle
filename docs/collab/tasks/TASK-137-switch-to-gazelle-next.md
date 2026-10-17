@@ -190,7 +190,20 @@ git status --short
 
 ## 3. 审查结论（Claude 追加）
 
-- 审查目标（SHA 范围）：
-- 独立复跑结果：
-- 发现：
-- 结论：
+### 2026-10-17 第 2 轮审查
+
+- **审查目标**：`8deeb42`（实现）与 `d138ddf`（报告），审查时 HEAD 为 `db5f29f`。
+- **独立复跑**：在 `db5f29f` 上运行完整离线门。
+  - 解释器 `Gazelle-next`，工作目录为真实仓库：607 项通过，0 skip。
+  - compileall、`--help`、`--list-models`、`git diff --check` 通过；工作区干净，仓库内无 `__pycache__`。
+  - 两个页面 harness 通过。本机 PATH 上没有 Node，使用的是 Codex 应用自带的 Node 24.14.0。
+  - 日志在 `gazelle_runs\claude-review-r2\`。
+- **核对结果**：
+  - `environment.yml` 的 15 个固定版本与 `importlib.metadata` 逐一相同。
+  - `environment_py311.yml` 与 `c5473bf` 的 `environment.yml` 是同一个 Git blob（`2fc8c0c`），逐字节相同；工作区差异只是 CRLF。
+  - AGENTS.md 的 diff 只涉及环境句子。
+  - 四份用户文档只在回退说明中出现旧环境名，pydeprecate 与 defusedxml 的说明正确。
+  - Codex 的三次真实 smoke 由 Claude 用自己的比较脚本复核：static 与 MediaPipe 两组与评估中的参照运行逐项相同，in/out 差 0，峰值、状态、头框与 `gaze_eligible` 全部一致。
+- **Q-006**：Codex 的判断正确。pydeprecate 0.13.0 与 defusedxml 0.7.1 是 trackers 2.6.1 与 supervision 0.30.9 的必需依赖，评估记录 §3.1 原来的说法有误，已更正。不显式固定它们可以接受。
+- **A 级决定**：全部认可。
+- **结论**：accepted。

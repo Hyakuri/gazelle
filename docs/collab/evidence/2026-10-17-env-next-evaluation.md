@@ -87,7 +87,7 @@ MediaPipe 合计耗时（`backend_total` 中位）：
 | --- | --- |
 | torchaudio | 仓库不使用；没有与 torch 2.14 配套的版本 |
 | ultralytics 及其依赖 polars、polars-runtime-32、nvidia-ml-py | 仓库代码不导入。README 写明它们只是当时依赖求解的一部分，YOLO 推理未经验证 |
-| pydeprecate、defusedxml | 旧版 supervision、trackers 的依赖，新版不再需要 |
+| pydeprecate、defusedxml（实际已安装，不属于本表） | **更正（2026-10-17，Q-006）**：原写“新版不再需要”有误。它们仍是 trackers 2.6.1 与 supervision 0.30.9 的必需依赖，候选环境中已作为间接依赖安装（pydeprecate 0.13.0、defusedxml 0.7.1），只是 `environment.yml` 不再显式固定，不能卸载 |
 | wandb | 不在 `environment.yml` 中，旧环境里是手动安装的；只有上游训练脚本使用。训练时按 README 另行安装 |
 
 pandas 选 2.3 系列最新版而不是 3.0。原因：3.0 是大版本，改变了字符串类型、写时复制等行为；`data_prep/` 的数据预处理脚本依赖 pandas，但这次无法用真实数据集验证它们。

@@ -173,3 +173,12 @@
 | 编号 | 级别 | 位置 | 问题 | 处理 |
 | --- | --- | --- | --- | --- |
 | GZ-25（新） | P2，性能 | `gazelle/runtime/predictor.py:214`（`predict_frame`）、`gazelle/backbone.py:47`（`get_transform`） | Gazelle 的输入预处理在 CPU 上对整帧做 ToTensor 与 Normalize，再缩放到 448×448。4K 管线实测每次调用约 81 ms（原环境）至 99 ms（`Gazelle-next`），其中预处理约 47 至 67 ms（探针测量）；耗时还受混合架构 CPU 调度影响。在完整管线中把预处理移到 GPU 后，实测降到 36 至 41 ms，输出等价。另外，读取器（`gazelle/runtime/media.py:179`）、MediaPipe 后端（`gazelle/runtime/perception/mediapipe_backend.py:359`）与预测器（`gazelle/runtime/predictor.py:80`）之间还有多次整帧复制 | 预处理移到推理设备：TASK-136（用户 2026-10-17 同意 D17，第 3 轮开头）。整帧复制问题需要改动读取器的帧类型，以后另议 |
+
+## 7. 2026-10-17 追加：第 2 轮审查中的发现
+
+依据：[同步分析](../evidence/2026-10-17-sync-analysis.md)；TASK-121、TASK-133 的第 2 轮审查结论。
+
+| 编号 | 级别 | 位置 | 问题 | 处理 |
+| --- | --- | --- | --- | --- |
+| GZ-26（新） | P0，同步 | `tools/workdata/timemap.py`、`tools/workdata/sync_check.py`、作业数据 | 三台摄像机的画面时钟各自设定。以前方 B 为基准，右侧 A 偏 −0.63 至 +2.83 秒，全局 E 偏 −0.95 至 +2.47 秒并有漂移。E 的显示时钟还有亚秒级跳变，而帧时间稳定。现行映射对 0.35 至 1 秒的跳变既不拟合也不分段，超过 1 秒的跳变则被切段，在 0925、1009 造成 0.7 至 1.0 秒错位；有效性规则无法失败 | 同步协议 r2：以 B 为基准、画面内容校准（D18，待用户批准），TASK-139 |
+| GZ-27（新） | P0，标注完整性 | `tools/validation/annotation_page.html`、`tools/validation/labels.py:162` | 数字键从当前步标到下一个变化点，没有后续变化点时标到片段末尾；服务端随即写入 `finished_at`，续标跳到下一段，严格校验也能通过。中途停下时，未看过的部分会被当作已完成 | TASK-138：记录已看范围，显式确认完成 |
