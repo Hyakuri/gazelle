@@ -423,7 +423,7 @@ class MediaPipeBackendTest(unittest.TestCase):
 
                 angles = result.faces[0].head_pose
                 self.assertIsNotNone(angles)
-                expected = {"yaw": (20.0, 0.0, 0.0), "pitch": (0.0, 20.0, 0.0), "roll": (0.0, 0.0, 20.0)}[axis]
+                expected = {"yaw": (20.0, 0.0, 0.0), "pitch": (0.0, 20.0, 0.0), "roll": (0.0, 0.0, -20.0)}[axis]
                 self.assertAlmostEqual(angles.yaw_deg, expected[0], delta=1e-5)
                 self.assertAlmostEqual(angles.pitch_deg, expected[1], delta=1e-5)
                 self.assertAlmostEqual(angles.roll_deg, expected[2], delta=1e-5)

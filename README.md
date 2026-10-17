@@ -238,6 +238,12 @@ The runtime narrowly filters the upstream `trackers` `target=None` deprecation w
 
 ### Independent Head Observation Schema
 
+`head_pose` uses displayed-image signs: positive yaw turns right, positive pitch down,
+and positive roll clockwise. The face reference ray is the normalized `(r02, -r12)`
+projection of the matrix forward vector (x right, y down). Roll and vertical face-ray
+signs differ from earlier outputs; downstream consumers must account for this correction.
+The two independent rays remain uncalibrated 2D head-pose references, not measured eye gaze.
+
 MediaPipe video frame 0 and each new track's first frame emit the observed head with
 `tracking.provisional=true` and age 1. Confirmation with IoU ≥0.20 within two frame
 indices links to the same public ID. Provisional heads do not seed the short-occlusion

@@ -355,7 +355,7 @@ MediaPipe rich people 保留以上 field，并增加：
 | `pose_head_landmarks` | Conditional | landmark array | 存在时由 pose 得到的 head/shoulder landmark。 |
 | `pose_head_keypoints` | Conditional | named landmark object | 可靠的 `nose`、eye、ear、mouth 和 shoulder point；不依赖 filtered landmark order。 |
 | `facial_transformation_matrix` | Conditional | nested finite-number arrays | serializer preserves supplied row lengths。MediaPipe adapter 要求 at least three rows，且 at least three values in each of the first three rows；它 does not enforce rectangularity。 |
-| `head_pose` | Conditional | object | finite degree 值 `yaw_deg`、`pitch_deg`、`roll_deg`。 |
+| `head_pose` | Conditional | object | finite degree 值 `yaw_deg`、`pitch_deg`、`roll_deg`；显示图像中正 yaw 向右、正 pitch 向下、正 roll 顺时针。 |
 | `face_pose_reference_ray` | Conditional | reference-ray object | 含 `source`、normalized origin/direction/endpoint、confidence、projection status 的 face reference。 |
 | `pose_head_reference_ray` | Conditional | reference-ray object | 使用相同 object shape 的独立 Pose Landmarker keypoint reference。 |
 | `face_landmarks` | Conditional | landmark array | 仅在数据可用且设置 `--save-face-landmarks` 时输出完整 face mesh。 |
@@ -368,12 +368,16 @@ Landmark、matrix、head-pose value shape：
 | landmark `z` | Conditional | finite number | relative depth，没有保证范围。 |
 | landmark `visibility`, `presence` | Conditional | finite number | 有值时输出 provider value；不强制 range。 |
 | `facial_transformation_matrix` rows | Conditional | nested finite-number arrays | MediaPipe 通常提供 `4 x 4`，但 serializer preserves supplied row lengths；前三行之后的 row 可保留任意 supplied length。 |
-| `head_pose.yaw_deg`, `pitch_deg`, `roll_deg` | Required inside Conditional `head_pose` | finite number | 单位 degree 的 Euler-like head-pose angle。 |
+| `head_pose.yaw_deg`, `pitch_deg`, `roll_deg` | Required inside Conditional `head_pose` | finite number | 单位 degree 的显示坐标角：`yaw_right`、`pitch_down`、`roll_clockwise`。 |
 
 视频第 0 帧与每条新轨迹首帧立即输出实际观测头部，`tracking.provisional=true`、age 为 1。
 两帧索引内的确认按 IoU 关联并沿用同一 `person_id`，age 从原 spawn 帧计算。
 临时观测不创建或刷新桥接状态，因此一帧误检不会产生 stale 幽灵框。
 图像模式、已确认观测和 `tracked_only` 始终为 `tracking.provisional=false`。
+
+面部参考射线把矩阵前向向量以 `(r02, -r12)` 投影到图像坐标（x 向右、y 向下）。
+正 yaw 向右、正 pitch 向下、正 roll 顺时针。序列化 roll 与面部射线垂直方向使用此约定，
+消费早期相反符号的下游需同步调整。两条射线仍是未标定的 2D 头姿参考，不是眼睛视线测量或校准 3D 射线。
 
 `track_age_frames` 是 track age；`missed_frames`、`missed_ms` 表示上次当前 observation 后连续 bridge reuse 的帧数和时间。因此 `tracked_only` 是 stale bridged box，不是 fresh detection。默认 `eligible` selector 会排除它；只有在 bridge track 仍 active 时，显式 `tracked_only` 或 `all` 诊断 selector 才能把它送入 Gazelle。单人模式在 bridge 后最多保留一个 identity，并裁掉被新 observation 替换的 stale bridge state。
 

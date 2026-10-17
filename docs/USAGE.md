@@ -357,7 +357,7 @@ MediaPipe rich people retain those fields and add:
 | `pose_head_landmarks` | Conditional | landmark array | Pose-derived head/shoulder landmarks when present. |
 | `pose_head_keypoints` | Conditional | named landmark object | Reliable named `nose`, eye, ear, mouth, and shoulder points retained independently of filtered landmark order. |
 | `facial_transformation_matrix` | Conditional | nested finite-number arrays | The serializer preserves supplied row lengths. The MediaPipe adapter requires at least three rows and at least three values in each of the first three rows; it does not enforce rectangularity. |
-| `head_pose` | Conditional | object | Finite degree values `yaw_deg`, `pitch_deg`, and `roll_deg`. |
+| `head_pose` | Conditional | object | Finite degree values `yaw_deg`, `pitch_deg`, and `roll_deg`; positive yaw right, positive pitch down, positive roll clockwise in the displayed image. |
 | `face_pose_reference_ray` | Conditional | reference-ray object | Face-keypoint/Face Landmarker ray with `source`, normalized origin/direction/endpoint, confidence, and projection status. |
 | `pose_head_reference_ray` | Conditional | reference-ray object | Independent Pose Landmarker keypoint ray using the same object shape. |
 | `face_landmarks` | Conditional | landmark array | Full face mesh only when available and `--save-face-landmarks` is set. |
@@ -370,13 +370,19 @@ Landmark, matrix, and head-pose value shapes:
 | landmark `z` | Conditional | finite number | Relative depth with no guaranteed range. |
 | landmark `visibility`, `presence` | Conditional | finite number | Provider values emitted when present; no range is enforced. |
 | `facial_transformation_matrix` rows | Conditional | nested finite-number arrays | MediaPipe commonly supplies `4 x 4`, but the serializer preserves supplied row lengths; rows after the first three may have any supplied length. |
-| `head_pose.yaw_deg`, `pitch_deg`, `roll_deg` | Required inside Conditional `head_pose` | finite number | Euler-like head-pose angles in degrees. |
+| `head_pose.yaw_deg`, `pitch_deg`, `roll_deg` | Required inside Conditional `head_pose` | finite number | Display-oriented angles in degrees: `yaw_right`, `pitch_down`, `roll_clockwise`. |
 
 Video frame 0 and the first frame of each new track now emit the observed head immediately,
 with `tracking.provisional=true` and age 1. Confirmation within two frame indices links by IoU
 to the same `person_id`; age counts from the original spawn. Provisional observations do not
 create or refresh bridge state, so a one-frame detection cannot create a stale ghost.
 Image mode, confirmed observations and `tracked_only` always use `tracking.provisional=false`.
+
+The face reference ray projects the matrix forward vector as `(r02, -r12)` into image
+coordinates (x right, y down). Positive yaw points right, positive pitch down, and positive
+roll rotates clockwise. Serialized roll and the face ray's vertical direction follow these
+signs; consumers of earlier opposite signs must update. Both rays remain uncalibrated 2D
+head-pose references, not eye-gaze measurements or calibrated 3D rays.
 
 `track_age_frames` is the track age, while `missed_frames` and `missed_ms` count consecutive bridge reuse since the last current observation. `tracked_only` therefore represents a stale bridged box, not a fresh detection. It is excluded by the default `eligible` selector, but explicit `tracked_only` or `all` diagnostic selection may send it to Gazelle only while that bridge track is active. In single-person mode, post-bridge arbitration keeps at most one identity and prunes displaced stale bridge state.
 

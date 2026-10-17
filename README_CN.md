@@ -244,6 +244,11 @@ runtime 在延迟导入 ByteTrack 时仅过滤 upstream `trackers` 的 `target=N
 
 ### 独立 Head Observation Schema
 
+`head_pose` 使用显示图像符号：正 yaw 向右、正 pitch 向下、正 roll 顺时针。
+面部参考射线是矩阵前向向量的归一化 `(r02, -r12)` 投影（x 向右、y 向下）。
+roll 与面部射线垂直符号不同于早期输出，下游应同步处理此修正。
+两条独立射线仍为未标定的 2D 头姿参考，不是测量得到的眼睛视线。
+
 MediaPipe 视频第 0 帧及每条新轨迹首帧立即输出观测头部，`tracking.provisional=true`、age 为 1。
 两帧索引内确认且 IoU ≥0.20 时关联同一个公开 ID。临时头部不建立短遮挡桥接；
 图像模式、已确认头部与 `tracked_only` 使用 `tracking.provisional=false`。
