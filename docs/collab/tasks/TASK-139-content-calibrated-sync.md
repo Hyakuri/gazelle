@@ -140,11 +140,41 @@ git status --short
 
 A 级修复：首轮扫描用 `pts<=previous` 把实际重复 PTS=0 误分成独立单帧段，20260903 多文件因此报不足 3 个锚点。以新测试复现后改为严格 `<`（相等不构成回退）；`--sample-cache` 在不同输出根复用完整扫描/OCR 证据，核对 source SHA、媒体 size/mtime、采样参数、摄像机和 PTS spans，并同时保存原采样实现哈希和当前拟合哈希。原失败扫描、anchors 和日志全部保留。实现提交 `47694e5`；来源追踪文档和回归提交 `06eb7e7`。当前完整离线门为 TASK-002 最终状态的 637 tests / 17.562s / 0 skip。
 
-后续调度脚本 `proxy_validation_batch.py` 等待全部校准进程结束，再只处理 calibrated=true 的会话，写入独立 `proxies_v2_pending` 和 `sync_validation_v2`。最多一个代理编码任务（Python + FFmpeg）加一个验证任务，最多三个重计算进程，低优先级；旧代理和试用集暂不移动。校准或代理失败的会话保留原因，不进入依赖步骤。
+后续调度脚本 `proxy_validation_batch.py` 等待全部校准进程结束，再只处理 calibrated=true 的会话，写入独立 `proxies_v2_pending` 和 `sync_validation_v2`。代理阶段在一个 BelowNormal Python 进程中，以两个独立会话线程调用既有 `tools.workdata.proxies.run`，各最多一个 FFmpeg/ffprobe 子进程，最多三个重计算进程；全部编码结束后才启动最多三个独立低优先级验证进程。算法和编码参数不变。旧代理和试用集暂不移动。校准或代理失败的会话保留原因，不进入依赖步骤。较早的串行编码等待脚本尚未执行任务时中断（exit 1），旧版本保存在外部 `proxy_validation_batch.serial.py`，用于核对调度变化。
 
 2026-10-17 15:13 JST：前四个会话的 metadata-only refit 已完成，20/20 文件 valid，包括 20260903 原先失败的六个文件。旧等待脚本尚未启动任何校准时中断（exit 1），改为每个会话扫描结束即 refit；按剩余基础扫描占用的名额限制新校准，使长期扫描+校准总数始终 ≤3。代理调度仍等待全部校准结束。已通过 Get-Process 核实三个活动扫描进程为 BelowNormal。一次全进程 psutil 探针耗时较长而中断；一次 CIM 只读查询因权限拒绝，未提权；改用已知 PID 的 psutil 查询确认原等待进程已退出。另一次汇总读 JSON 遇到 cp932 解码错误，显式 UTF-8 重读成功。均未改变数据、环境或权限设置。
 
 提交 `3cb090b` — `Summarize clock differences without hiding failed samples` 补齐契约第 6 条的时钟分布：`delta_distribution` 按摄像机给出有符号 min/median/max、绝对值 p90、可评估/不可评估/通过计数。超限值保留、全缺失用 null；不改变任何门槛。新回归先以缺少该字段失败（1 test / 1 error），随后 33 项聚焦检查通过。最终完整离线门 **638 tests / 16.186s / 0 skip**；compileall（含 tools）、help、list-models、diff-check 均通过。四份文档与工具指南同步，日志 `task-139\clock-distribution-*.log` 和 `final-*.log`。这是 A 级报告完整性补充，不是修改研究指标。
+
+15:39 JST 的 A 级待修复：`convergence-check.json` 复现当前 `corrected_time` 把最后一次更新幅度当作最终误差。base=origin=1000、c0=3、c1=-0.0005，两次迭代为 997、996.9985；解析解 996.9984992496247，最终误差 7.50e-7 s，但旧实现因最后更新 0.0015 s 而拒绝。应核对迭代结果是否满足原方程，不改变 1 ms 门槛或迭代次数。当前采样批保持代码不变，避免运行中混用实现；代理等待进程尚无输出时已中断（exit 1），在修复与重新验证完成前不恢复。计划在采样结束后增加显式复用已校验缩略图的拟合入口，将旧样本指纹与新拟合指纹分别保存，输出到新根目录，保留原结果与真实失败。Q-012 的正台阶无解反例仍须失败，不能因修复这一误报而放行。
+
+16:08 JST 的真实 B 级失败：20260911 A 有效窗 30、MAD=0.024503 s，通过；E 有效窗 53、MAD=0.101424 s，超过 0.08 s，calibrated=false，CLI exit 1。穷举符合两侧各 ≥5 窗的首个断点候选，最佳为相对原点 780 s（OSD 数值编码时刻 2026-09-07 22:12:45.6），台阶 +0.438786 s；合并残差 MAD=0.060071 s，只降至原值的 0.592274，未满足严格减半。没有接受该候选、降低阈值或排除窗口。诊断 `0911-split-diagnostics.json` 保留全部候选。
+
+只提取 Claude 参考 `analyze_sync.py` 已读过的纯数值函数，在本轮同样本/同选格上核对 60 个 B–E 窗：运动格数组逐项一致，互相关最大差 5.55e-16，因参考脚本四舍五入造成的门槛分类差异为 0。对照实际用时 3.855 s、BelowNormal CPU，无源视频重新解码；详见 `0911-reference-comparison.json`。这不声称新旧媒体或整个流程等价，但排除了该病例的运动/互相关数值实现差异。**建议 Claude 按新数据判断分段接受规则及正台阶时间域问题；当前保持原协议，20260911 代理与依赖七会话齐全的数据集暂不生成，其余会话继续。**
+
+### 16:36 JST：采样、复算与离线门
+
+七会话基础拟合已全部完成，40/40 文件 valid；共 8,206 个锚点、1,679,089 个实际解码帧、40 个 PTS span。各文件锚点在 ±1.5 s 内的最低比例为 1.0，最高绝对残差中位数为 0.277543 s，最大绝对残差为 1.006786 s。1009 A 第二段实际首帧 PTS=1.896 s 已计入覆盖。`base-audit.json` 核对全部旧 anchors SHA 与复用记录相符；没有声称重新计算所有原始大视频 SHA。
+
+首次校准采样批已结束，exit 1：20260911 因真实 MAD 失败；20261002 因上述迭代误判在 assemble_session 失败，其三路样本已完整保存。真实 1002 E 起点的两次迭代距离解析解为 7.15256e-7 s，最后更新为 0.00138569 s，见 `1002-convergence-diagnostics.json`。其它五会话 exit 0。原批次日志、映射、失败和样本全部保留。
+
+提交 `d7431e02cdeaf9190945b3a84eb04f0bed79d7af` — `Validate clock convergence and reuse verified motion samples`：两次迭代后按原方程检验 1 ms；正台阶无解仍失败。新增 `--reuse-samples`，核对基础映射/网格、媒体 size/mtime、像素 SHA/shape/dtype、逐步来源及全部源 EOF，要求新输出映射，旧样本只读，`sampling_evidence` 保存原采样与新拟合的不同指纹及文件 SHA。此入口只供拟合修复，不代替采样算法改变后的重采样。四份文档、工具指南及文档测试同步。
+
+回归先红后绿：两次迭代误判的两个子例失败；复用集成先因缺少入口参数失败；修复后 **37 项聚焦 / 0.724s**、完整离线门 **642 tests / 11.450s / 0 skip**。`compileall main.py gazelle tests tools`、`main.py --help`、`main.py --list-models`、校准 CLI help、`git diff --check` 全部 exit 0。日志 `reuse-focused-green.log`、`refit-{compile,unittest,help,models,calibrate-help}.log`。保留负例的 `moov atom not found` 与 Git LF/CRLF 警告；没有网络、模型、GPU 或真实 FFmpeg 单元测试。
+
+`refit_calibration_batch.py` 通过每会话 CLI `sync_calibrate --timemaps ...\timemaps_v2_base_refit --out-root ...\timemaps_v2_refit --samples-root ...\sync_samples_v2 --session <id> --reuse-samples` 完成七次 BelowNormal CPU 复算，单会话 3.09–12.49 s。六次 exit 0；0911 exit 1，失败不变。42 个原样本文件字节哈希未变，已有六份诊断及单独保存的1002诊断完全一致，B 基础映射未变。21 份旁注汇总：40 个不同源、1,679,089 帧、全部 EOF、容器差异需复核数 0，见 `calibration-audit.json`、`calibration-refit-results.json`。
+
+| 会话 | A 有效窗 / MAD s | E 有效窗 / MAD s | 结果 |
+| --- | --- | --- | --- |
+| 20260821 | 39 / 0.020647 | 44 / 0.027600 | calibrated |
+| 20260828 | 22 / 0.026389 | 28 / 0.071356 | calibrated |
+| 20260903 | 35 / 0.028567 | 48 / 0.056015 | calibrated |
+| 20260911 | 30 / 0.024503 | 53 / 0.101424 | 无法校准 E |
+| 20260925 | 45 / 0.026368 | 46 / 0.027697 | calibrated |
+| 20261002 | 40 / 0.022532 | 50 / 0.048717 | calibrated；误判已修复 |
+| 20261009 | 54 / 0.034403 | 45 / 0.053675 | calibrated |
+
+全部实际拟合都没有满足门槛的断点，因而本次通过会话无台阶逆映射预检需求；Q-012 的通用台阶反例仍待 Claude 判断。`proxy_validation_batch.py` 已指向 `timemaps_v2_refit` 并开始六个通过会话的代理生成，0911 记录 blocked。输出 `proxies_v2_pending`，旧代理/数据集不动；磁盘启动时可用约 501.6 GB。代理、残差/时钟/事件材料尚未验证，不得称为同步验收通过。
 
 - 接手核对：
 - 提交与推送（SHA）：

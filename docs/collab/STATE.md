@@ -14,7 +14,7 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 | current_task | `docs/collab/tasks/TASK-139-content-calibrated-sync.md`（用户本轮已批准 D18，见 Q-010） |
 | after_current | `docs/collab/tasks/TASK-102-spawn-frame-confirmation.md`，然后 `docs/collab/tasks/TASK-002-face-ray-sign-alignment.md`，然后结束本轮并把 `next_actor` 改为 `claude` |
 | environment | `Gazelle-next`：`C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe`（用户 2026-10-17 决定 D16）。现有 `Gazelle` 作为回退保留，不改动 |
-| last_pushed | `3cb090b`（TASK-139 时钟分布报告补充；其后报告提交以实时 Git 为准） |
+| last_pushed | `d7431e0`（TASK-139 迭代误判修复及样本复用；其后报告提交以实时 Git 为准） |
 | last_accepted | `b527287`（2026-10-17 第 2 轮审查：此前全部提交已通过，包括 TASK-001、TASK-123 修复、TASK-135、TASK-137。其后的 TASK-133 只部分通过，TASK-134、TASK-121 的结论见下表） |
 | 更新 | 2026-10-17，Claude：第 2 轮审查完成；同步问题已查明，建议同步协议 r2（D18，待用户批准）。第 3 轮交 Codex，第一项为 TASK-138 |
 
@@ -184,7 +184,7 @@ Claude 实际运行的检查：完整离线门 562 项；29 个 MP4 分段 17,40
 | Q-009 | B | Codex | TASK-134 固定抽查 60/63：两项识别缺失，20261002 E/k1750 为 −1.4 秒超限 | TASK-134 实施报告 | 已查明（2026-10-17）：超限来自 20261002 E 前 571 秒的显示时钟成片偏移（−0.93 秒）加整秒读数下限；新抽查规则（邻帧补读、E 按 ±2 秒粗查）在 TASK-139 实施 |
 | Q-010 | C | Claude | D18：采用同步协议 r2（以前方摄像机 B 为基准，A 与 E 用画面运动校准偏移与漂移）；D13 的时间轴定义随之改为“以 B 的画面时钟为基准、内容校准后的 5 Hz” | `evidence/2026-10-17-sync-analysis.md` §7；`tasks/TASK-139-content-calibrated-sync.md` | Codex 收讫用户直接批准（2026-10-17）：“D18 批准，按你的推荐进行。” TASK-139 的用户授权已满足；Claude 后续归档决定 |
 | Q-011 | B | Codex | TASK-002：原始 GIF 与转码视频第 15 帧均无 face head-pose；原图旋转组漏检，转码旋转组 roll 与方向检查通过 | TASK-002 §2；外部 task-002/comparison.json、extra-comparison.json | 待 Claude 在同素材/环境独立复跑并判断真实样例；未替换验收帧或降低门槛，计算性质测试已通过 |
-| Q-012 | B | Codex | TASK-139 协议边界：无噪声少数区段台阶可被 MAD 掩盖；正台阶不动点可能无解；校准到 B 后直接比较各自 OSD 的容差可能冲突 | TASK-139 §2；外部 task-139/protocol-edge-cases.json | 前两项已合成复现，第三项待真实新代理抽查；保持原门槛和失败保护，未替换指标或删除帧，待 Claude 判断 |
+| Q-012 | B | Codex | TASK-139 协议边界：无噪声少数区段台阶可被 MAD 掩盖；正台阶不动点可能无解；校准到 B 后直接比较各自 OSD 的容差可能冲突 | TASK-139 §2；外部 task-139/protocol-edge-cases.json、0911-split-diagnostics.json | 20260911 E 实测 53 有效窗、MAD=0.101424>0.08；最佳分段 MAD 比为 0.592274，未减半，同样本互相关与参考脚本一致。前两项另有合成反证，OSD 项待新代理抽查；未改指标或删帧，待 Claude 判断 |
 
 ## 已完成
 
