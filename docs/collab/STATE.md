@@ -14,7 +14,7 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 | current_task | `docs/collab/tasks/TASK-139-content-calibrated-sync.md`（用户本轮已批准 D18，见 Q-010） |
 | after_current | `docs/collab/tasks/TASK-102-spawn-frame-confirmation.md`，然后 `docs/collab/tasks/TASK-002-face-ray-sign-alignment.md`，然后结束本轮并把 `next_actor` 改为 `claude` |
 | environment | `Gazelle-next`：`C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe`（用户 2026-10-17 决定 D16）。现有 `Gazelle` 作为回退保留，不改动 |
-| last_pushed | `b24dd67`（TASK-002 实现；其后报告提交以实时 Git 为准） |
+| last_pushed | `3cb090b`（TASK-139 时钟分布报告补充；其后报告提交以实时 Git 为准） |
 | last_accepted | `b527287`（2026-10-17 第 2 轮审查：此前全部提交已通过，包括 TASK-001、TASK-123 修复、TASK-135、TASK-137。其后的 TASK-133 只部分通过，TASK-134、TASK-121 的结论见下表） |
 | 更新 | 2026-10-17，Claude：第 2 轮审查完成；同步问题已查明，建议同步协议 r2（D18，待用户批准）。第 3 轮交 Codex，第一项为 TASK-138 |
 

@@ -142,6 +142,10 @@ A 级修复：首轮扫描用 `pts<=previous` 把实际重复 PTS=0 误分成独
 
 后续调度脚本 `proxy_validation_batch.py` 等待全部校准进程结束，再只处理 calibrated=true 的会话，写入独立 `proxies_v2_pending` 和 `sync_validation_v2`。最多一个代理编码任务（Python + FFmpeg）加一个验证任务，最多三个重计算进程，低优先级；旧代理和试用集暂不移动。校准或代理失败的会话保留原因，不进入依赖步骤。
 
+2026-10-17 15:13 JST：前四个会话的 metadata-only refit 已完成，20/20 文件 valid，包括 20260903 原先失败的六个文件。旧等待脚本尚未启动任何校准时中断（exit 1），改为每个会话扫描结束即 refit；按剩余基础扫描占用的名额限制新校准，使长期扫描+校准总数始终 ≤3。代理调度仍等待全部校准结束。已通过 Get-Process 核实三个活动扫描进程为 BelowNormal。一次全进程 psutil 探针耗时较长而中断；一次 CIM 只读查询因权限拒绝，未提权；改用已知 PID 的 psutil 查询确认原等待进程已退出。另一次汇总读 JSON 遇到 cp932 解码错误，显式 UTF-8 重读成功。均未改变数据、环境或权限设置。
+
+提交 `3cb090b` — `Summarize clock differences without hiding failed samples` 补齐契约第 6 条的时钟分布：`delta_distribution` 按摄像机给出有符号 min/median/max、绝对值 p90、可评估/不可评估/通过计数。超限值保留、全缺失用 null；不改变任何门槛。新回归先以缺少该字段失败（1 test / 1 error），随后 33 项聚焦检查通过。最终完整离线门 **638 tests / 16.186s / 0 skip**；compileall（含 tools）、help、list-models、diff-check 均通过。四份文档与工具指南同步，日志 `task-139\clock-distribution-*.log` 和 `final-*.log`。这是 A 级报告完整性补充，不是修改研究指标。
+
 - 接手核对：
 - 提交与推送（SHA）：
 - 变更文件：
