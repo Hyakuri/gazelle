@@ -120,6 +120,16 @@ git status --short
 
 ## 2. 实施报告（Codex 追加，不要修改上文）
 
+### 2026-10-17 运行中记录
+
+用户在本会话直接批准 D18，Q-010 已记录。TASK-138 正式 ROI 限定修正与导出、TASK-136 已完成。实现提交 `efa7d34`，`Calibrate camera timelines against front-view motion`；仅工具、测试、四份用户文档和工具指南。完整离线门 626 tests / 11.559s / 0 skip，compileall、help、list-models、diff-check 均通过，日志在 `gazelle_runs\task-139\`。
+
+`python gazelle_runs\task-139\base_batch.py` 正在执行 7 会话的 `python -m tools.workdata.timemap --inventory ...\inventory\inventory.json --remux-root ...\remux --out-root ...\timemaps_v2_base --session <session>`，最多三个 BelowNormal CPU 子进程。全部实际帧顺序解码并检查 PTS，仅窗口内识别时钟；保留旧 `timemaps`、代理与数据集。它们是计算进程，不是子代理。新结果尚未验收，不代表同步已经通过。
+
+后续在当前主线程实施不依赖同步输出的 TASK-102、TASK-002，同时等待本任务 CPU 计算；本轮最终仍须汇总本任务真实结果、保留失败、更新报告后交 Claude。STATE 暂保持 current_task=TASK-139，直到完成或明确报告依赖阻塞。
+
+待实际验证：新映射校准、代理、残差/时钟/事件材料、重建数据集。全部门槛保持契约数值。正式逐帧标注尚不能开始。
+
 - 接手核对：
 - 提交与推送（SHA）：
 - 变更文件：
