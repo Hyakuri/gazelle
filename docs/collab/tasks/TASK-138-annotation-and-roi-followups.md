@@ -1,6 +1,6 @@
 # TASK-138：标注与区域工具的第 2 轮审查后续（正式标注前必须完成）
 
-状态：ready
+状态：ready-for-review
 创建：2026-10-17（Asia/Tokyo）　协调者：Claude　实现者：Codex　验收：Claude，之后用户在独立 checkout 验收
 依据：TASK-121、TASK-123、TASK-135 的第 2 轮审查结论（各任务文件 §3），以及两份独立代码审查。
 授权：2026-10-14 本地修改与本地运算授权；作业数据只读。
@@ -124,19 +124,74 @@ git status --short
 
 ## 2. 实施报告（Codex 追加，不要修改上文）
 
-- 接手核对：
-- 提交与推送（SHA）：
-- 变更文件：
-- 命令、退出码、测试数、warnings 与 skips：
-- 真实运行结果：
-- 外部活动：
-- 反证式复核（v1.1 §9）：
-- 自主决定（A 级）：
-- 范围外改动：
-- 待 Claude 判断（B 级）：
-- 待用户决定（C 级）：
-- 未运行的检查、限制、阻塞：
-- 状态标签（v1.1 §12）：
+### 2026-10-17 实施与验证
+
+- 接手：新仓库根与分支复核，HEAD `db5f29f`，`writer=none`、`next_actor=codex`；先接管 writer。Claude 的 14 份协调文档单独提交为 `117fbc2`（`Record coordinator updates`）并推送，PR #6 正文已同步。用户本轮直接批准 D18，收讫记录在 Q-010。仅主线程 Inline Execution，无子代理。
+- 实现提交：`1b854ebfa06b9a12a070c7f34cd5e51c6f7ce91a` — `Require explicit reviewed annotation completion`，已普通推送到既有分支。
+- 修改：25 个文件，范围为契约列出的标注、区域、抽样、remux、media、对应测试、两个 Node harness、四份用户文档与两份中文指南。
+- 标注 version 2：实际图片加载、显示后记录合并 `viewed_ranges`，未看部分保留纹理；服务端拒绝已看范围缩减、重叠与越界。全部已看且有类别后，显式完成才写 `finished_at`；修改类别/他人区间清除完成，撤销不恢复旧完成凭据。续标优先未看步，支持可重复 `--segment`。
+- 完成标记 version 2：绑定区域、导出目录、参考图与类别 SHA-256；显式未完成 `--regions-path` 失败，复制使用验证后的原始字节。会话白名单、独立 `seed + int(session)`、pilot 重叠重抽及记录已实现。区域小于 0.5% 时要求确认，服务端丢弃区域行额外字段，页面显示完成状态。固定类别中文名统一、请求体读取前检查令牌、Host/Origin 拒绝测试已补齐。
+
+#### 命令与结果
+
+所有 Python 使用 `C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe`，设置 `PYTHONPYCACHEPREFIX=%TEMP%\gazelle-task-138-pycache`、`PYTHONIOENCODING=utf-8`。完整日志在仓库外 `gazelle_runs\task-138\`。
+
+| 命令 / 检查 | 结果 |
+| --- | --- |
+| `python -m unittest tests.test_validation_labels -v`（修改前回归） | exit 1，两个预期失败，复现自动完成与旧 schema |
+| 相关 ROI/抽样/尾部回归（修改前） | exit 1：无导出绑定、未完成 ROI 静默回退、尾部时间偏差；新增测试插入位置错误导致一次 NameError，修正后重跑 |
+| `python -m unittest tests.test_validation_labels tests.test_validation_server tests.test_validation_sampling tests.test_validation_roi tests.test_workdata_tools tests.test_media tests.test_usage_docs -q` | exit 0，79 tests / 5.020s / 0 skip |
+| `python -m compileall main.py gazelle tests tools` | exit 0 |
+| `python -m unittest discover -s tests -v` | exit 0，611 tests / 9.839s / 0 skip |
+| `python main.py --help`、`python main.py --list-models` | 均 exit 0 |
+| `node tests/roi_page_test.cjs`、`node tests/annotation_page_test.cjs` | 均 exit 0；后者初次因测试遗留未结束的他人区间而失败，明确取消起点后通过，未放宽按钮规则 |
+| `python -m unittest tests.test_validation_sampling -q`（最终补充导出篡改拒绝断言） | exit 0，5 tests / 0.155s；参考图与类别任一被修改均拒绝创建数据集 |
+| `git diff --check`、准确暂存路径检查 | 通过；无未跟踪数据，无仓库内媒体、权重或字节码产物 |
+
+非致命输出：离线套件既有坏 MP4 用例输出 `moov atom not found`；Git 提示 LF/CRLF 转换，未改全局配置。一次汇总脚本漏写 UTF-8 导致 cp932 解码失败，补上 `encoding='utf-8'` 后只读重跑通过。浏览器首次按 label 定位片段选择器未匹配，依据实际 DOM 的 `#segments` 重试成功。
+
+#### 真实运行
+
+1. `python gazelle_runs\task-138\revalidate.py`：BelowNormal CPU，真实 ffprobe/OpenCV，只读复核 **11/11** 重封装文件，exit 0，用时 **128.205s**；头/中各 30 帧、尾部 59 或 60 帧到 EOF。先扣除 0.033s 起点后尾部差接近 0（浮点舍入量级）。源文件和输出 size/mtime 未变，`remux_report.json` SHA 前后相同；独立结果为 `gazelle_data\workdata\remux\task138_validation.json`。
+2. 本地浏览器服务：`python -m tools.validation.annotate_server --dataset-root ...\gazelle_validation\roi_r2_trial --labels-path ...\gazelle_runs\task-138\browser_labels.json --annotator codex-task138 --port 8781`。只用旧试用集，不改其 manifest、帧或正式 labels。
+   - 第 0 步按一次 `1`：已标 300/300，已看 1/300，299 步有未看纹理，完成按钮禁用。
+   - 重载定位步 1（0.2s），播放至 300/300 后按钮可用；确认后跳至 `20260821_s01`。
+   - `python -m tools.validation.labels validate --dataset-root ...\roi_r2_trial --labels-path ...\task-138\browser_labels.json --segment 20260911_pilot`：未确认 exit 1；确认后 exit 0；改为 unknown 后完成清空、exit 1；再次确认后 exit 0。其他 26 段未完成不妨碍 pilot 单段严格检查。
+   - 控制台 warnings/errors 为空；页面与服务已关闭，8781 无监听。试用集正式 `labels.json` 仍不存在。此为交互机制验证，所选类别不代表研究判断。
+3. 用户区域：只读检查发现五个多边形均为 target，缺 cell，故无完成标记。用户明确批准“保留全部顶点、名称和颜色，仅将 work_area.kind 改为 cell，并在 TASK-138 完成后导出校验”。完成上述验证后执行该限定例外。
+   - 原始 JSON 完整备份：`gazelle_runs\task-138\roi_regions_before_cell_fix.json`，SHA `747bfee95b8723e8230c1cff61e739b923b92e201c2df0b8cf853d37ee7fa760`。
+   - 修正后 SHA `6511ff108c397e4d7dc474bddf6531810f505443f80cf8aca4967c8d4cddf0bb`；深比较证明唯一语义变化是该 kind，四个目标、全部顶点、名称、颜色及元数据保留。参考候选 1920×1080，哈希匹配；五块面积分别约 9.323%、7.672%、13.360%、6.169%、65.539%。
+   - 使用修复后的 `render()` 实际导出 1 张参考图、7 张跨日期叠图、8 类 classes.json 与 v2 完成标记；`completed_document()` 与各 SHA 全通过。参考图及全部七日期叠图已目视检查，边线与文字完整；人员遮挡与容器高度变化不构成精确几何标定证明。
+   - 记录在 `gazelle_runs\task-138\formal_roi_check.json`。未生成正式数据集、正式逐帧 labels；须等待 TASK-139 同步验收。
+
+#### 反证式复核
+
+一键填满不等于看完；完整播放仍不等于显式确认；确认后修改仍使严格校验失败。篡改导出任一文件不能复制；改变一个会话的随机消耗不影响另一会话，20261016 被忽略；0.25s 起点的合成尾部用例也按 0 差计算。旧试用集和全部真实媒体保留。
+
+#### 自主决定（A 级）
+
+- 标签 HTTP 的 `finish=true` 要求类别/他人区间先保存，不能在同一请求修改后直接确认；UI 保存完成后才启用确认，避免混合操作。
+- 图片显示用两次 animation frame 且页面可见时记已看；未加载、失败或被跳过的图片不记。已看保存会创建临时/正式指定的标签文件，六份说明同步此行为。
+- ROI 完成标记升为 v2，旧标记需重新导出；区域 JSON 本身仍为 v1。复制前读取并验证导出字节，避免校验后再读到另一版内容。
+- `--sessions` 仍要求包含固定 pilot 的会话，保留“恰好一个 pilot”既有约束；缺少指定会话明确报错。
+
+#### 范围外改动
+
+仅用户直接批准的正式 ROI 单字段修正、备份与导出；未更改研究类别含义、顶点或协议。D18 批准只记授权，不在本任务实施同步。
+
+#### 待 Claude 判断（B 级）
+
+请独立复跑、审查 A 级决定和真实浏览器完成流程。正式 ROI 的领域边界与后续标注协议由用户/Claude 验收；本次数据一致性与叠图检查不能代替研究验收。
+
+#### 待用户决定（C 级）
+
+无待决授权。D18 与 ROI 单字段例外均由用户本轮直接批准，未扩大到任意编辑正式区域。
+
+#### 外部活动、限制与状态
+
+真实活动仅 CPU、磁盘、ffprobe/OpenCV/Pillow、loopback 浏览器和已授权 GitHub 发布；无模型、CUDA 推理、MediaPipe、下载、模型缓存修改或 Conda 改动。普通沙盒权限沿用本会话已验证结果；Git/GitHub 在已批准 yun 上下文，非普通沙盒认证通过。标签与媒体不上传。
+
+**已实施、已静态检查、已实际运行；待 Claude 独立验收。** 当前四份用户文档与两份指南同步。本任务没有生成同步代理或正式数据集，按队列继续 TASK-136，再执行已获 D18 批准的 TASK-139。
 
 ## 3. 审查结论（Claude 追加）
 
