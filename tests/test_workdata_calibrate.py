@@ -40,6 +40,11 @@ class CalibrationTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'ambiguous'):
             map_time(fit,.1)
 
+    def test_equal_pts_is_not_a_backward_discontinuity(self):
+        runs=detect_pts_runs([0.,0.,.05,.1])
+        self.assertEqual(len(runs),1)
+        self.assertEqual((runs[0]['frame_start'],runs[0]['frame_end']),(0,3))
+
     def test_lag_sign_interpolation_and_invalid_peaks(self):
         rng = np.random.default_rng(139)
         x = np.convolve(rng.normal(size=1200),np.ones(5)/5,'same')

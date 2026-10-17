@@ -73,13 +73,24 @@ def detect_pts_runs(points):
     for index,pts in enumerate(points):
         if not np.isfinite(pts):
             raise ValueError('Nonfinite decoded PTS')
-        if not runs or pts<=runs[-1]['pts_end'] or pts-runs[-1]['pts_end']>1:
+        if not runs or pts<runs[-1]['pts_end'] or pts-runs[-1]['pts_end']>1:
             runs.append(dict(frame_start=index,frame_end=index,pts_start=float(pts),pts_end=float(pts)))
         else:
             runs[-1].update(frame_end=index,pts_end=float(pts))
     if not runs:
         raise ValueError('No decoded frames')
     return runs
+
+
+def coalesce_equal_pts_runs(runs):
+    result=[]
+    for run in runs:
+        if (result and result[-1]['pts_end']==run['pts_start']
+                and result[-1]['frame_end']+1==run['frame_start']):
+            result[-1].update(pts_end=run['pts_end'],frame_end=run['frame_end'])
+        else:
+            result.append(dict(run))
+    return result
 
 
 def fit_time_map(rows,start,end,pts_runs=None):
@@ -150,7 +161,7 @@ def sample_file(path,camera,step=10.,window=2.25,source_factory=VideoSource,read
     with source_factory(path) as source:
         next_start=None;window_end=None;previous=None;first_reading=None
         for index,(pts,frame) in enumerate(source.frames()):
-            discontinuity=bool(points and (pts<=points[-1] or pts-points[-1]>1))
+            discontinuity=bool(points and (pts<points[-1] or pts-points[-1]>1))
             points.append(pts)
             if next_start is None or discontinuity or pts>=next_start:
                 if first_reading:
@@ -204,11 +215,13 @@ def assemble_session(session,files):
                 files=files,cameras=cameras,overlap=overlap_intervals([c['coverage'] for c in cameras.values()]))
 
 
-def run(inventory_path,remux_root,out_root,session=None,step=10.,window=2.25,force=False):
+def run(inventory_path,remux_root,out_root,session=None,step=10.,window=2.25,force=False,sample_cache=None):
     if not np.isfinite(step) or step<=0 or not np.isfinite(window) or window<1:
         raise ValueError('Positive step and a window of at least one second are required')
     inventory=json.loads(Path(inventory_path).read_text(encoding='utf-8'))
     out_root=outside_source(out_root,inventory['root'])
+    if sample_cache is not None and Path(sample_cache).resolve()==out_root.resolve():
+        raise ValueError('Refitting requires a separate output root to preserve sampled evidence')
     version=implementation_hash()
     sessions=sorted({r['session'] for r in inventory['files'] if session is None or r['session']==session})
     if not sessions:
@@ -230,7 +243,20 @@ def run(inventory_path,remux_root,out_root,session=None,step=10.,window=2.25,for
             row=dict(source=entry['relative_path'],media_path=str(path),camera=entry['physical_camera'],fingerprint=fingerprint)
             try:
                 old=json.loads(cache.read_text(encoding='utf-8')) if cache.exists() and not force else {}
-                if old.get('fingerprint')==fingerprint:
+                if sample_cache is not None:
+                    previous=Path(sample_cache)/'anchors'/name/cache.name
+                    evidence=json.loads(previous.read_text(encoding='utf-8'))
+                    expected=('source_sha256','media_size','media_mtime_ns','step','window')
+                    if evidence.get('version')!=2 or any(evidence['fingerprint'].get(k)!=fingerprint[k] for k in expected):
+                        raise ValueError('Sample cache provenance or sampling parameters differ')
+                    sampled=evidence['sampled']
+                    if sampled['camera']!=entry['physical_camera'] or not sampled.get('pts_runs'):
+                        raise ValueError('Sample cache lacks verified camera or full PTS scan')
+                    sampled=dict(sampled,pts_runs=coalesce_equal_pts_runs(sampled['pts_runs']))
+                    fingerprint.update(reused_samples_sha256=hash_file(previous),
+                                       sampled_implementation_sha256=evidence['fingerprint']['implementation_sha256'])
+                    atomic_json(cache,dict(version=2,fingerprint=fingerprint,sampled=sampled))
+                elif old.get('fingerprint')==fingerprint:
                     sampled=old['sampled']
                 else:
                     print('Sampling '+entry['relative_path'],flush=True)
@@ -261,11 +287,13 @@ def main(argv=None):
     parser.add_argument('--sample-step',type=float,default=10.)
     parser.add_argument('--window-seconds',type=float,default=2.25)
     parser.add_argument('--force',action='store_true')
+    parser.add_argument('--sample-cache',type=Path,
+                        help='Refit verified v2 decoded/OCR evidence into a different root; preserve original fingerprint')
     args=parser.parse_args(argv)
     import psutil
     process=psutil.Process()
     process.nice(psutil.BELOW_NORMAL_PRIORITY_CLASS if hasattr(psutil,'BELOW_NORMAL_PRIORITY_CLASS') else 10)
-    results=run(args.inventory,args.remux_root,args.out_root,args.session,args.sample_step,args.window_seconds,args.force)
+    results=run(args.inventory,args.remux_root,args.out_root,args.session,args.sample_step,args.window_seconds,args.force,args.sample_cache)
     return int(any(r['status']!='valid' for s in results for r in s['files']))
 
 
