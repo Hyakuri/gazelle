@@ -1,6 +1,6 @@
 # TASK-136：Gazelle 输入预处理移到推理设备
 
-状态：ready（用户 2026-10-17 同意 D17；排在第 3 轮开头）
+状态：ready-for-review（2026-10-17，Codex 实施与对照完成，待 Claude 独立验收）
 创建：2026-10-17（Asia/Tokyo）　协调者：Claude　实现者：Codex　验收：Claude，之后用户在独立 checkout 验收
 依据：[候选环境评估](../evidence/2026-10-17-env-next-evaluation.md) §5.3、§5.4；问题登记表 GZ-25。
 授权：2026-10-14 本地修改与本地运算授权；作业数据只读；2026-10-17 用户同意 D17。
@@ -123,19 +123,51 @@ git status --short
 
 ## 2. 实施报告（Codex 追加，不要修改上文）
 
-- 接手核对：
-- 提交与推送（SHA）：
-- 变更文件：
-- 命令、退出码、测试数、warnings 与 skips：
-- 真实运行结果：
-- 外部活动：
-- 反证式复核（v1.1 §9）：
-- 自主决定（A 级）：
-- 范围外改动：
-- 待 Claude 判断（B 级）：
-- 待用户决定（C 级）：
-- 未运行的检查、限制、阻塞：
-- 状态标签（v1.1 §12）：
+### 2026-10-17 实施与验证
+
+- 接手：STATE 从 TASK-138 推进，writer/next_actor 均为本轮 Codex；基线 `d767dba62bcf4218656a9246d1dfaf5322deaab2`，分支不变。
+- 实现：`04096c4e2cdae8a2b7a8a5e23207b90abc750f88` — `Preprocess standard Gazelle RGB inputs on the model device`。本报告随独立提交普通推送到 PR #6。
+- 仅改 `gazelle/runtime/predictor.py` 和 `tests/test_predictor.py`。每次识别标准三步 Compose，uint8 先拷贝到模型设备，再按默认 dtype 转换、除以 255、调用原 Normalize/Resize；非标准变换及其他输入保留原路径。PIL 使用可写复制，非连续/只读数组安全复制，无全局 warning 过滤。计时边界未改。
+
+所有 Python 均使用 `C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe`，字节码放 `%TEMP%\gazelle-task-136-pycache`。外部证据根为 `C:\Users\yun\Documents\Claude_Code\gazelle_runs\task-136`。
+
+| 命令 | 结果 |
+| --- | --- |
+| `python -m unittest tests.test_predictor.DevicePreprocessingTest -v`（修改前） | exit 1，5 methods / 5 预期失败：新路径仍调用 legacy 转换 |
+| `python -m unittest tests.test_predictor -v` | exit 0，31 tests / 0.189s / 0 skip |
+| `python -m compileall main.py gazelle tests tools` | exit 0，日志 `compile.log` |
+| `python -m unittest discover -s tests -v` | exit 0，616 tests / 9.157s / 0 skip，日志 `unittest.log` |
+| `python main.py --help`、`python main.py --list-models` | 均 exit 0 |
+| `git diff --check`、准确暂存路径检查 | 通过；仅暂存上述两个文件 |
+| `python ...\task-136\smoke.py` | exit 0，6 次真实 CLI 均 exit 0，每次 300 帧 |
+
+离线门在最终 TASK-136 实现和格式整理后运行；之后开始准备 TASK-139 的新测试，不包含在该门或该提交内。非致命输出为既有坏 MP4 的 `moov atom not found`。一次列举不存在的 `workdata\proxy` 路径退出 1，随后确认实际目录是 `proxies`；未改数据。
+
+### CUDA 对照
+
+修改前使用 `git archive d767dba` 导出的仓库外只读基线快照；修改后使用 `04096c4`，未替换模型或 transform。六次顺序执行，真实 argv、退出码与用时见 `commands.json`，数值见 `comparison.json`。4K 输入按契约；1080p 输入为既有 `proxies\20260911\proxy_right.mp4`，仅用于性能 smoke，不宣称旧代理已同步。
+
+命令模板：`python smoke.py cli <baseline-or-repo> --input <input> --output-dir <external-case> --cache-dir <repo>\models --max-frames 300 --device cuda`；静态组加 `--head-source static --bbox .35 .25 .55 .55 --bbox-format normalized`；MediaPipe 组加 `--head-source mediapipe --max-heads 1`。
+
+| 组别 | 推理帧数 | 中位数 ms（前→后） | p90 ms（前→后） | 第 0 帧 ms（前→后） | 中位数降低 | 最大 in/out 差 |
+| --- | ---: | --- | --- | --- | ---: | ---: |
+| 4K static | 300 | 123.142 → 42.298 | 146.589 → 44.681 | 720.912 → 247.457 | 65.651% | 0.000178397 |
+| 4K MediaPipe | 73 | 97.702 → 51.237 | 135.499 → 60.063 | 无推理 → 无推理 | 47.558% | 0.000061065 |
+| 1080p static | 300 | 31.314 → 19.972 | 34.147 → 20.802 | 233.525 → 202.220 | 36.219% | 0.000161558 |
+
+三组均 **300/300 帧状态一致、person gaze_status 一致、峰值坐标一致**。MediaPipe 未选头的帧没有 inference_ms，统计只包括 73 次真实推理，没有把其余 227 帧记为零。p90 使用排序后 `floor(.9*(n-1))`；中位数包括首次推理，另在 JSON 保留去掉首个推理的中位数。4K static 的全部硬门槛通过。
+
+### 活动、复核与决定
+
+- 真实 RTX 4080 SUPER / driver 617.14 / Gazelle-next / CUDA；启动前空闲 10211 MiB、使用率 9%，后续各启动也检查显存和占用。未改 TF32、autocast、dtype 或环境。MediaPipe 使用既有 CPU 配置。
+- Python 网络 audit 拦截每次 Torch Hub 的 `urllib.Request` 尝试，随后复用已有 DINOv2 与 Gazelle 缓存。六次均记录 `NETWORK_AUDIT=["urllib.Request"]`。缓存全部文件 size/mtime 前后相同，无下载；audit 不覆盖 MediaPipe 原生库的潜在遥测，不将其描述为网络绝对隔离。xFormers 三项不可用 warning 保留。未调用真实 FFmpeg 可执行程序；视频由运行时解码，无渲染编码。
+- 反证复核：37×53 与 480×640、RGB PIL/numpy、负步长、只读、float64 默认 dtype、Normalize inplace、自定义 Resize、公开 transform 替换均覆盖。非 RGB 与非 uint8 继续原转换，没有强行纳入优化；无头仍不调用变换或模型。
+- A 级决定：采用可写数组复制，避免只读 warning；每次检查 transform 结构，以保证公开属性替换立即生效。只读基线是已提交源码快照，非新增开发 checkout 或分支。
+- 四份用户文档已检索预处理和 inference_ms；没有声称 CPU 预处理的内容，接口、schema、数值语义与计时口径均未改，故不需要修改用户文档。
+- 范围外改动：无。C 级待决：无。B 级：请 Claude 独立审查输入数值边界及复跑 CUDA；自审与实际 smoke 不等同独立验收。
+- 无未执行的契约检查；性能只代表此次连续运行条件，不是正式基准或科学准确性结论。原始数据只读，媒体、输出与凭证均未上传。
+
+**已实施、已静态检查、已实际运行；待 Claude 独立验收。**
 
 ## 3. 审查结论（Claude 追加）
 
