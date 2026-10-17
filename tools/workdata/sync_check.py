@@ -43,6 +43,18 @@ def nearest_frames(frames,times,step):
 
 
 def mapped_frames(files,start,end,source_factory=VideoSource):
+    if any('frame_start' in s or 'calibration' in row for row in files for s in row['segments']):
+        from .proxies import full_mapped_frames
+        frames=full_mapped_frames(files,[],source_factory)
+        try:
+            for row in frames:
+                if start-.5<=row['wall_time']<=end+.5:
+                    yield row
+                if row['wall_time']>end+.5:
+                    break
+        finally:
+            frames.close()
+        return
     def one(row):
         stat=Path(row['media_path']).stat()
         if (stat.st_size,stat.st_mtime_ns)!=(row['fingerprint']['media_size'],row['fingerprint']['media_mtime_ns']):
@@ -86,24 +98,12 @@ def motion_energy(files,start,seconds=120.,hz=10):
 
 
 def correlation_lag(a,e,hz=10,max_lag=10):
-    a,e=np.asarray(a,dtype=float),np.asarray(e,dtype=float)
-    if a.shape!=e.shape or a.ndim!=1 or len(a)<3 or not np.isfinite(a).all() or not np.isfinite(e).all():
-        raise ValueError('Finite equally sized motion arrays are required')
-    best=None
-    for lag in range(-round(max_lag*hz),round(max_lag*hz)+1):
-        if abs(lag)>=len(a)-2:
-            continue
-        aa,ee=(a[lag:],e[:len(e)-lag]) if lag>=0 else (a[:len(a)+lag],e[-lag:])
-        aa,ee=aa-aa.mean(),ee-ee.mean()
-        scale=np.linalg.norm(aa)*np.linalg.norm(ee)
-        if scale<=1e-12:
-            continue
-        r=float(np.dot(aa,ee)/scale)
-        if best is None or r>best['r']:
-            best=dict(lag_seconds=lag/hz,r=r)
-    if best is None:
-        return dict(lag_seconds=None,r=None,passed=False,reason='insufficient motion variance')
-    return dict(best,passed=abs(best['lag_seconds'])<=.5 and best['r']>=.3)
+    from .sync_calibrate import lag_peak
+    # Legacy sign retained: corr(camera[t + lag], cam_e[t]).
+    peak=lag_peak(e,a,hz,max_lag)
+    return dict(lag_seconds=peak['lag_seconds'],r=peak['r'],prominence=peak['prominence'],
+                at_boundary=peak['at_boundary'],reason=peak['reason'],
+                passed=peak['valid'] and abs(peak['lag_seconds'])<=.5)
 
 
 def choose_windows(overlap,seconds=120.,count=3):
@@ -119,7 +119,8 @@ def run(path,out_root,force=False):
     if any(r['status']!='valid' for r in mapping['files']):
         raise ValueError('All file maps must be valid before sync checking')
     out_root=Path(out_root)
-    version=dict(timemap_sha256=hash_file(path),implementation_sha256=hash_file(__file__))
+    from .sync_calibrate import implementation_hash
+    version=dict(timemap_sha256=hash_file(path),implementation_sha256=implementation_hash())
     results=[];started=time.monotonic()
     for index,start in enumerate(choose_windows(mapping['overlap'])):
         energy={}
@@ -140,6 +141,8 @@ def run(path,out_root,force=False):
                 convention='r(lag) = corr(camera[t + lag], cam_e[t]); no clock correction is applied',
                 windows=results,passed=all(p['passed'] for r in results for p in r['pairs'].values()),
                 elapsed_seconds=time.monotonic()-started)
+    reasons=[p['reason'] for r in results for p in r['pairs'].values()]
+    report['window_categories']={reason:reasons.count(reason) for reason in sorted(set(reasons))}
     atomic_json(out_root/(mapping['session']+'.json'),report)
     return report
 

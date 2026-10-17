@@ -500,7 +500,8 @@ class UsageDocumentationTest(unittest.TestCase):
             text = self._section(path, 15)
             for token in ('tools.workdata.inventory', 'tools.workdata.remux',
                           'tools.workdata.osd_clock', 'tools.workdata.timemap',
-                          'tools.workdata.sync_check', 'tools.workdata.proxies',
+                          'tools.workdata.sync_check', 'tools.workdata.sync_calibrate',
+                          'tools.workdata.sync_validate', 'tools.workdata.proxies',
                           '--allow-internal-gaps', '../tools/workdata/README_CN.md'):
                 self.assertIn(token, text, str(path))
 

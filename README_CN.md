@@ -330,15 +330,21 @@ python main.py `
 可执行程序，不使用模型、GPU、下载或外部网络。入口见[用法](docs/USAGE_CN.md#15-研究数据工具)
 与[标注指南](tools/validation/ANNOTATION_GUIDE_CN.md)。
 
-`tools.workdata.proxies` 为每次录制生成三段 5 Hz、1920×1080 的画面时钟对齐视频，
+`tools.workdata.proxies` 为每次录制生成三段 5 Hz、1920×1080 视频，
 附源帧旁注和全长解码计数。使用 CPU PyAV 与 FFmpeg/libx264，输出在仓库外，
-不使用模型、GPU 或网络。命令与内部覆盖缺口的暂定规则见
+不使用模型、GPU 或网络。命令与内部覆盖缺口的显式规则见
 [研究数据工具](docs/USAGE_CN.md#15-研究数据工具)。
 
 时钟工具 `tools.workdata.osd_clock`、`tools.workdata.timemap` 与
 `tools.workdata.sync_check` 读取画面时钟、拟合原生视频 PTS 并检查运动对齐。
 它们使用 CPU/PyAV，映射与报告写在仓库外；不调用 FFmpeg 可执行程序、GPU、模型或网络。
 无法可靠识别的时钟保持缺失，同步检查失败需复核。
+
+同步协议 r2 以前方摄像机 B 为基准。`tools.workdata.sync_calibrate` 在 v2 原生 PTS 基础映射后，
+用画面运动拟合 A/E 的偏移、漂移及有证据的台阶；`tools.workdata.sync_validate` 检查残差滞后、
+固定时钟样本，并导出事件条图供人工复核。两者只使用 CPU，输出留在仓库外，不使用模型、GPU 或网络。
+校准需要作业者有可见动作；无人或静止时段不能提供校准窗口。旧代理与旧数据集保留为带日期的备份，
+正式标注须等待同步审查。
 
 本地研究数据工具可生成只读源清单并无损重封装 AVI 空包。从仓库根目录运行
 `python -m tools.workdata.inventory` 和 `python -m tools.workdata.remux`，读取源视频、

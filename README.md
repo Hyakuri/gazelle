@@ -328,17 +328,25 @@ strictly checks just that segment; repeat the option for several. It uses CPU on
 or external network. See [usage](docs/USAGE.md#15-research-data-tools) and the
 [annotation guide](tools/validation/ANNOTATION_GUIDE_CN.md).
 
-`tools.workdata.proxies` creates three 5 Hz, 1920×1080 clock-aligned videos per
+`tools.workdata.proxies` creates three 5 Hz, 1920×1080 videos per
 session, with source-frame sidecars and full decode counts. It uses CPU PyAV and
 FFmpeg/libx264, writes outside the repository, and uses no model, GPU or network.
 See [Research data tools](docs/USAGE.md#15-research-data-tools) for commands and
-the provisional policy for internal coverage gaps.
+the explicit policy for internal coverage gaps.
 
 The clock tools `tools.workdata.osd_clock`, `tools.workdata.timemap`, and
 `tools.workdata.sync_check` read displayed clocks, fit native video PTS, and check
 motion alignment. They use CPU/PyAV and write maps and reports outside the
 repository; no FFmpeg executable, GPU, model, or network is used. Unreadable
 clocks remain missing, and failed synchronization checks require review.
+
+Synchronization r2 uses front camera B as the reference. `tools.workdata.sync_calibrate`
+fits A/E motion offsets, drift and supported steps after a v2 native-PTS base map;
+`tools.workdata.sync_validate` measures residual lag, checks fixed clock samples and
+exports event strips for human review. Both run on CPU, write only external data,
+and use no models, GPU or network. Calibration needs visible worker motion;
+empty or stationary periods cannot supply calibration windows. Preserve previous
+proxies and datasets as dated backups. Formal annotation waits for synchronization review.
 
 Local research data tools build a read-only source inventory and losslessly
 remux AVI empty packets. Run `python -m tools.workdata.inventory` and

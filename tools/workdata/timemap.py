@@ -29,60 +29,92 @@ def _initial_line(x,y):
 
 
 def _fit(rows,indices,start,end,breakpoint=False):
+    if len(rows)<3:
+        raise ValueError('At least three anchors per actual PTS span are required')
     x=np.array([r['pts'] for r in rows],dtype=float)
     y=np.array([r['wall_time'] for r in rows],dtype=float)
     x0,y0=x[0],y[0]
     xx,yy=x-x0,y-y0
     a,b=_initial_line(xx,yy)
-    for _ in range(3):
-        keep=np.abs(yy-(a+b*xx))<=.35
+    for _ in range(8):
+        residual=yy-(a+b*xx)
+        # Redescending weights retain the dominant clock line without letting a
+        # coherent sub-second OSD offset or ramp pull it toward that offset.
+        scale=max(.05,1.4826*float(np.median(abs(residual-np.median(residual)))))
+        bandwidth=min(1.5,4.685*scale)
+        weights=np.square(np.maximum(0,1-np.square(residual/bandwidth)))
+        weights[abs(residual)>=bandwidth]=0
+        keep=weights>0
         if keep.sum()<3:
-            raise ValueError('Insufficient reliable second-transition anchors')
-        center=xx[keep].mean()
-        b=float(np.sum((xx[keep]-center)*(yy[keep]-yy[keep].mean()))/np.sum((xx[keep]-center)**2))
-        a=float(np.mean(yy[keep]-b*xx[keep]))
+            break
+        center=float(np.average(xx,weights=weights))
+        ycenter=float(np.average(yy,weights=weights))
+        b=float(np.sum(weights*(xx-center)*(yy-ycenter))/np.sum(weights*(xx-center)**2))
+        a=ycenter-b*center
     residual=yy-(a+b*xx)
-    keep=np.abs(residual)<=.35
-    if keep.sum()<3 or not np.isfinite(b) or b<=0:
+    keep=np.abs(residual)<=1.5
+    if not np.isfinite(b) or b<=0:
         raise ValueError('Invalid clock mapping')
-    absolute=np.abs(residual[keep])
+    absolute=np.abs(residual)
+    median=float(np.median(absolute))
+    within=float(np.mean(absolute<=1.5))
     return dict(pts_start=float(start),pts_end=float(end),a=float(y0+a-b*x0),b=b,
                 drift_ppm=(b-1)*1e6,breakpoint=breakpoint,anchor_count=len(rows),inlier_count=int(keep.sum()),
-                residuals=dict(median=float(np.median(absolute)),p95=float(np.quantile(absolute,.95)),max=float(absolute.max())),
+                valid=median<=.5 and within>=.9,
+                residuals=dict(median=median,p90=float(np.quantile(absolute,.9)),
+                               p95=float(np.quantile(absolute,.95)),max=float(absolute.max()),within_1_5=within,
+                               signed_seconds=residual.tolist()),
                 outliers=[dict(index=int(i),**row,residual_seconds=float(r))
                           for i,row,r,k in zip(indices,rows,residual,keep) if not k])
 
 
-def fit_time_map(rows,start,end):
+def detect_pts_runs(points):
+    runs=[]
+    for index,pts in enumerate(points):
+        if not np.isfinite(pts):
+            raise ValueError('Nonfinite decoded PTS')
+        if not runs or pts<=runs[-1]['pts_end'] or pts-runs[-1]['pts_end']>1:
+            runs.append(dict(frame_start=index,frame_end=index,pts_start=float(pts),pts_end=float(pts)))
+        else:
+            runs[-1].update(frame_end=index,pts_end=float(pts))
+    if not runs:
+        raise ValueError('No decoded frames')
+    return runs
+
+
+def fit_time_map(rows,start,end,pts_runs=None):
     if len(rows)<3 or not np.isfinite(start) or not np.isfinite(end) or end<=start:
         raise ValueError('Invalid anchor coverage')
     x=np.array([r['pts'] for r in rows],dtype=float)
     y=np.array([r['wall_time'] for r in rows],dtype=float)
-    if not np.isfinite(x).all() or not np.isfinite(y).all() or np.any(np.diff(x)<=0):
+    if not np.isfinite(x).all() or not np.isfinite(y).all() or (pts_runs is None and np.any(np.diff(x)<=0)):
         raise ValueError('Anchors must be finite and strictly ordered')
-    def split(lo,hi,left,right,breakpoint):
-        xx=x[lo:hi]-x[lo]; yy=y[lo:hi]-y[lo]
-        a,b=_initial_line(xx,yy)
-        residual=yy-(a+b*xx)
-        candidates=[]
-        for i in range(8,hi-lo-7):
-            l,r=residual[i-8:i],residual[i:i+8]
-            lm,rm=np.median(l),np.median(r)
-            if (abs(rm-lm)>1 and np.quantile(abs(l-lm),.9)<=.5 and np.quantile(abs(r-rm),.9)<=.5):
-                candidates.append((abs(rm-lm),i+lo))
-        if candidates:
-            _,index=max(candidates)
-            cut=float((x[index-1]+x[index])/2)
-            return split(lo,index,left,cut,breakpoint)+split(index,hi,cut,right,True)
-        return [_fit(rows[lo:hi],range(lo,hi),left,right,breakpoint)]
-    return split(0,len(rows),start,end,False)
+    if pts_runs is None:
+        return [_fit(rows,range(len(rows)),start,end)]
+    result=[]
+    for index,run in enumerate(pts_runs):
+        selected=[(i,r) for i,r in enumerate(rows) if run['frame_start']<=r['frame_index']<=run['frame_end']]
+        indices,anchors=zip(*selected) if selected else ([],[])
+        segment=_fit(anchors,indices,run['pts_start'],run['pts_end'],index>0)
+        segment.update(frame_start=run['frame_start'],frame_end=run['frame_end'])
+        result.append(segment)
+    return result
 
 
-def map_time(segments,pts):
-    for segment in segments:
-        if segment['pts_start']<=pts<=segment['pts_end']:
-            return segment['a']+segment['b']*pts
-    raise ValueError('PTS outside mapping coverage')
+def map_time(segments,pts,frame_index=None):
+    matches=[s for s in segments if s['pts_start']<=pts<=s['pts_end'] and
+             (frame_index is None or 'frame_start' not in s or s['frame_start']<=frame_index<=s['frame_end'])]
+    if len(matches)!=1:
+        raise ValueError('PTS outside mapping coverage or ambiguous without frame index')
+    return matches[0]['a']+matches[0]['b']*pts
+
+
+def map_file_time(row,pts,frame_index=None):
+    base=map_time(row['segments'],pts,frame_index)
+    if 'calibration' in row:
+        from .sync_calibrate import corrected_time
+        return corrected_time(base,row['calibration'])
+    return base
 
 
 def _merge(intervals):
@@ -114,42 +146,47 @@ def implementation_hash():
 
 def sample_file(path,camera,step=10.,window=2.25,source_factory=VideoSource,reader=None):
     reader=reader or ClockReader()
-    anchors=[];auxiliary=[];decoded=recognized=windows=0;identity=None
+    anchors=[];auxiliary=[];decoded=recognized=windows=0;identity=None;points=[]
     with source_factory(path) as source:
-        starts=list(np.arange(source.start,source.end,step))
-        if source.end-source.start>window:
-            starts=sorted(set(starts+[source.end-window]))
-        for start in starts:
-            previous=None;first_reading=None
-            windows+=1
-            for pts,frame in source.frames(start,float(min(start+window,source.end))):
-                decoded+=1
-                pixels=clock_pixels(frame)
-                if identity is None:
-                    found=reader.identify(pixels,source.size)
-                    if found:
-                        identity=found['camera']
-                        if identity!=camera:
-                            raise ValueError('Camera layout mismatch: expected {}, observed {}'.format(camera,identity))
-                reading=reader.read(pixels,camera,source.size)
-                row=dict(pts=pts,wall_time=reading['wall_time'] if reading else None)
-                if reading:
-                    recognized+=1
-                    if first_reading is None:
-                        first_reading=dict(pts=pts,**reading)
-                transition=second_transitions([previous,row]) if previous else []
-                if transition:
-                    anchors.extend(transition)
-                    break
-                previous=row
-            if first_reading:
-                auxiliary.append(first_reading)
-            if windows%30==0:
-                print('  windows={} anchors={} recognized={}/{}'.format(windows,len(anchors),recognized,decoded),flush=True)
+        next_start=None;window_end=None;previous=None;first_reading=None
+        for index,(pts,frame) in enumerate(source.frames()):
+            discontinuity=bool(points and (pts<=points[-1] or pts-points[-1]>1))
+            points.append(pts)
+            if next_start is None or discontinuity or pts>=next_start:
+                if first_reading:
+                    auxiliary.append(first_reading)
+                previous=None;first_reading=None;windows+=1
+                window_end=pts+window;next_start=pts+step
+            if pts>=window_end:
+                continue
+            decoded+=1
+            pixels=clock_pixels(frame)
+            if identity is None:
+                found=reader.identify(pixels,source.size)
+                if found:
+                    identity=found['camera']
+                    if identity!=camera:
+                        raise ValueError('Camera layout mismatch: expected {}, observed {}'.format(camera,identity))
+            reading=reader.read(pixels,camera,source.size)
+            row=dict(pts=pts,wall_time=reading['wall_time'] if reading else None)
+            if reading:
+                recognized+=1
+                if first_reading is None:
+                    first_reading=dict(pts=pts,frame_index=index,**reading)
+            transition=second_transitions([previous,row]) if previous else []
+            if transition:
+                anchors.extend(dict(r,frame_index=index) for r in transition)
+                window_end=pts
+                if windows%30==0:
+                    print('  windows={} anchors={} decoded={}'.format(windows,len(anchors),len(points)),flush=True)
+            previous=row
+        if first_reading:
+            auxiliary.append(first_reading)
         if identity is None:
             raise ValueError('Camera identity could not be independently read')
-        anchors=sorted({row['pts']:row for row in anchors}.values(),key=lambda r:r['pts'])
-        return dict(pts_start=source.start,pts_end=source.end,camera=identity,anchors=anchors,
+        runs=detect_pts_runs(points)
+        return dict(pts_start=min(points),pts_end=max(points),declared_start=source.start,
+                    first_decoded_pts=points[0],pts_runs=runs,decoded_frames=len(points),camera=identity,anchors=anchors,
                     readings=auxiliary,windows=windows,decoded_samples=decoded,recognized_samples=recognized)
 
 
@@ -157,12 +194,13 @@ def assemble_session(session,files):
     cameras={}
     for camera in ('cam_a','cam_b','cam_e'):
         selected=[f for f in files if f['camera']==camera and 'segments' in f]
-        selected.sort(key=lambda f:map_time(f['segments'],f['pts_start']))
-        intervals=[(s['a']+s['b']*s['pts_start'],s['a']+s['b']*s['pts_end']) for f in selected for s in f['segments']]
+        selected.sort(key=lambda f:map_file_time(f,f['segments'][0]['pts_start'],f['segments'][0].get('frame_start')))
+        intervals=[(map_file_time(f,s['pts_start'],s.get('frame_start')),
+                    map_file_time(f,s['pts_end'],s.get('frame_end'))) for f in selected for s in f['segments']]
         merged=_merge(intervals)
         cameras[camera]=dict(files=[f['source'] for f in selected],coverage=merged,
                              gaps=[dict(start=b,end=c,seconds=c-b) for (_,b),(c,_) in zip(merged,merged[1:])])
-    return dict(version=1,session=session,wall_clock_encoding='OSD naive clock encoded as UTC epoch seconds; not calibrated UTC',
+    return dict(version=2,session=session,wall_clock_encoding='OSD clock encoded as UTC epoch seconds; not calibrated UTC',
                 files=files,cameras=cameras,overlap=overlap_intervals([c['coverage'] for c in cameras.values()]))
 
 
@@ -197,12 +235,12 @@ def run(inventory_path,remux_root,out_root,session=None,step=10.,window=2.25,for
                 else:
                     print('Sampling '+entry['relative_path'],flush=True)
                     sampled=sample_file(path,entry['physical_camera'],step,window)
-                    atomic_json(cache,dict(version=1,fingerprint=fingerprint,sampled=sampled))
+                    atomic_json(cache,dict(version=2,fingerprint=fingerprint,sampled=sampled))
                 row.update(pts_start=sampled['pts_start'],pts_end=sampled['pts_end'],
-                           segments=fit_time_map(sampled['anchors'],sampled['pts_start'],sampled['pts_end']),
+                           segments=fit_time_map(sampled['anchors'],sampled['pts_start'],sampled['pts_end'],sampled['pts_runs']),
                            anchor_count=len(sampled['anchors']),sampling={k:sampled[k] for k in ('windows','decoded_samples','recognized_samples')},
                            anchors_path=str(cache))
-                row['status']='valid' if all(s['residuals']['p95']<=.5 for s in row['segments']) else 'review'
+                row['status']='valid' if all(s['valid'] for s in row['segments']) else 'review'
             except (ValueError,OSError,RuntimeError) as error:
                 row.update(status='failed',error=str(error))
             row['elapsed_seconds']=time.monotonic()-started

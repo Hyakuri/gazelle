@@ -16,7 +16,7 @@ import cv2
 
 from .common import atomic_json, hash_file
 from .sync_check import has_sampling_gap, nearest_frames
-from .timemap import map_time
+from .timemap import map_file_time
 from .video_source import VideoSource
 
 
@@ -122,9 +122,9 @@ def full_mapped_frames(files, counts, source_factory=VideoSource):
         counts.append(record)
         previous=-float('inf')
         with source_factory(path) as source:
-            for pts,frame in source.frames():
+            for frame_index,(pts,frame) in enumerate(source.frames()):
                 record['decoded_frames']+=1
-                wall=map_time(row['segments'],pts)
+                wall=map_file_time(row,pts,frame_index)
                 if wall<previous:
                     raise ValueError('Backward clock breakpoint requires review: '+row['source'])
                 previous=wall
@@ -205,6 +205,8 @@ def run(path,out_root,hz=5.,size=(1920,1080),force=False,ffmpeg='ffmpeg',ffprobe
     if len(size)!=2 or any(type(v) is not int or v<=0 or v%2 for v in size):
         raise ValueError('Positive even output dimensions are required')
     mapping=json.loads(Path(path).read_text(encoding='utf-8'))
+    if mapping['version']>=2 and mapping.get('calibrated') is not True:
+        raise ValueError('v2 proxies require successful content calibration for both cameras')
     if any(row['status']!='valid' for row in mapping['files']):
         raise ValueError('Every source requires a valid time map')
     grid=make_grid(mapping['overlap'],hz,allow_internal_gaps)
@@ -217,7 +219,7 @@ def run(path,out_root,hz=5.,size=(1920,1080),force=False,ffmpeg='ffmpeg',ffprobe
     dirty=bool(subprocess.run(git+['status','--porcelain','--','tools/workdata'],cwd=repository,
                               capture_output=True,text=True,check=True).stdout.strip())
     implementation=hashlib.sha256(b''.join((Path(__file__).parent/name).read_bytes() for name in
-                                 ('proxies.py','sync_check.py','video_source.py','timemap.py'))).hexdigest()
+                                 ('proxies.py','sync_check.py','sync_calibrate.py','video_source.py','timemap.py'))).hexdigest()
     version=dict(timemap_sha256=hash_file(path),implementation_sha256=implementation,grid=grid,size=list(size))
     cameras={}; started=time.monotonic()
     for camera,role in ROLES.items():

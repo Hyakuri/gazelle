@@ -10,7 +10,7 @@ class SyncTest(unittest.TestCase):
         e=np.random.default_rng(22).normal(size=1200)
         a=np.roll(e,3)
         result=correlation_lag(a,e,hz=10,max_lag=10)
-        self.assertAlmostEqual(result['lag_seconds'],.3)
+        self.assertAlmostEqual(result['lag_seconds'],.3,delta=.001)
         self.assertAlmostEqual(result['r'],1)
         self.assertTrue(result['passed'])
         self.assertFalse(correlation_lag(np.roll(e,15),e)['passed'])

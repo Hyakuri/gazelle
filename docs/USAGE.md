@@ -548,6 +548,8 @@ The report includes `last_pts`, actual decoded counts and `tail_eof`.
 | `tools.workdata.osd_clock` | One complete local video-frame image | Recognized clock or null on stdout | CPU/OpenCV; no FFmpeg executable |
 | `tools.workdata.timemap` | Inventory, original MP4 and validated remuxes | Anchor caches and per-session time maps | CPU/PyAV (FFmpeg libraries), no FFmpeg executable |
 | `tools.workdata.sync_check` | Time maps and mapped videos | Motion-energy caches and correlation reports | CPU/PyAV; no FFmpeg executable |
+| `tools.workdata.sync_calibrate` | v2 base maps and source videos | 96×54 gray samples, provenance, calibrated maps | CPU/PyAV; no models, network or FFmpeg executable |
+| `tools.workdata.sync_validate` | Calibrated proxies and saved clock sample indices | Residual reports, clock checks, event strips | CPU/OpenCV/Pillow; no models, network or FFmpeg executable |
 | `tools.workdata.proxies` | Valid time maps and mapped videos | Three H.264 proxies/session, frame sidecars, full source decode counts and `session.json` | CPU/PyAV, FFmpeg/libx264, ffprobe |
 | `tools.validation.extract_roi_candidates` | Inventory, validated overview remuxes | 12 JPEGs/session and `roi/candidates.json` | CPU OpenCV/Pillow; no FFmpeg executable |
 | `tools.validation.roi_server` | Candidates and optional saved regions | Atomic region/draft files, backups; reference/class export on request | Local browser at 127.0.0.1 only |
@@ -607,23 +609,34 @@ Clock commands, from the repository root using the same external `$data`:
 
 ```powershell
 python -m tools.workdata.osd_clock --image C:\path\outside-repository\clock.png
-python -m tools.workdata.timemap --inventory "$data\inventory\inventory.json" --remux-root "$data\remux" --out-root "$data\timemaps"
-python -m tools.workdata.sync_check --timemaps "$data\timemaps" --out-root "$data\sync_checks"
+python -m tools.workdata.timemap --inventory "$data\inventory\inventory.json" --remux-root "$data\remux" --out-root "$data\timemaps_v2_base"
+python -m tools.workdata.sync_calibrate --timemaps "$data\timemaps_v2_base" --out-root "$data\timemaps_v2" --samples-root "$data\sync_samples_v2" --session 20260828
+python -m tools.workdata.sync_check --timemaps "$data\timemaps_v2" --out-root "$data\sync_checks" --session 20260828
 ```
 
 These commands use no GPU, model, network or downloads. Video commands set below-normal
-priority, stream native PTS through PyAV, and support `--session` and `--force`.
-Time maps fit first frames after clock-second transitions; unreliable readings stay
-missing. The naive displayed clock is encoded numerically as epoch seconds, without
-claiming calibrated UTC. Motion checks use three 120-second windows at 10 Hz,
-192×108 gray, with ±10-second lag search; `abs(lag) <= 0.5` and `r >= 0.3`
-are both required. A failed check exits nonzero and keeps its report for review;
-it does not silently correct camera clocks. See the [Chinese guide](../tools/workdata/README_CN.md).
+priority and stream native PTS through PyAV. v2 base maps fit one robust line per file,
+splitting only at actual decoded PTS discontinuities, not OSD jumps; coverage begins
+at the first decoded frame. All anchor residuals remain in the report; validity requires
+median absolute residual ≤0.5 s and ≥90% within ±1.5 s. Unreadable clocks stay missing.
+
+Synchronization r2 uses front camera B as the reference. A/E use 5 Hz, 96×54 gray
+motion, six cells selected across all lags, 60 s windows and ±10 s correlation search.
+Valid windows require r ≥0.5, prominence ≥0.1 and a peak away from the boundary.
+Theil–Sen fits need ≥10 windows spanning ≥30% of the session and MAD ≤0.08 s;
+supported steps are refined with 20 s windows. Final time solves `t = base_X(pts) - L(t)`.
+It is B's displayed-clock axis, not calibrated UTC. Calibration needs visible worker
+motion; empty or stationary periods cannot calibrate themselves. Uncalibratable cameras
+remain explicit failures and cannot generate v2 proxies. The optional legacy `sync_check`
+keeps three 120 s, 10 Hz diagnostic windows, reports boundary/non-prominent peaks separately,
+and requires a valid peak with |lag| ≤0.5 s. It is not the r2 residual acceptance gate.
+Caches bind mapping and sampling implementation hashes. See the [Chinese guide](../tools/workdata/README_CN.md).
 
 Proxy generation, using the same external `$data`:
 
 ```powershell
-python -m tools.workdata.proxies --timemaps "$data\timemaps" --out-root "$data\proxies" --session 20260828
+python -m tools.workdata.proxies --timemaps "$data\timemaps_v2" --out-root "$data\proxies" --session 20260828 --allow-internal-gaps
+python -m tools.workdata.sync_validate --proxies "$data\proxies" --out-root "$data\sync_validation" --session 20260828 --clock-samples C:\path\outside-repository\check_proxy_clocks.json
 ```
 
 Defaults are `--step-hz 5 --size 1920 1080`, CRF 20, yuv420p, constant frame rate,
@@ -636,10 +649,17 @@ fingerprint are preserved and require explicit `--force` to replace. Sidecars re
 time difference and a gap flag when the difference exceeds half a grid step.
 
 Multiple common-coverage intervals are rejected by default. The explicit
-`--allow-internal-gaps` option provisionally retains one continuous clock grid
+`--allow-internal-gaps` option retains one continuous clock grid
 across the entire range and records every coverage gap and nearest-frame gap flag;
-it does not compress time. This policy needs coordinator review. Clock-aligned
-proxies alone do not establish physical motion synchronization. See the
+it does not compress time. Preserve old proxies and trial datasets as dated backups before
+regeneration. `sync_validate` reuses the saved fixed k indices, tries k−1/k+1/k−2/k+2
+only for missing clock reads, and records unevaluable samples (≥90% must be evaluable).
+Clock tolerances are A/B ±1 s and E ±2 s. Residual checks cover A–B, E–B and A–E:
+≥90% of valid windows within ±0.2 s, median |lag| ≤0.1 s, midpoint |offset| ≤0.1 s,
+and |drift| ≤0.1 s/hour. All failures remain in reports; no window is removed to pass.
+Three ±1 s event strips per session support independent visual review. Regenerate trial
+and completed-ROI datasets only after calibrated proxies exist; formal annotation waits
+for independent synchronization acceptance. See the
 [Chinese tool guide](../tools/workdata/README_CN.md).
 
 Three-view annotation, from the repository root in Gazelle-next:

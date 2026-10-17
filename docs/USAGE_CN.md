@@ -542,6 +542,8 @@ Perception quality 依赖 visible-face evidence。`pose_only` 使用近似 pose-
 | `tools.workdata.osd_clock` | 本地完整视频帧图片 | 标准输出中的识别时钟或 null | CPU/OpenCV；不调用 FFmpeg 可执行程序 |
 | `tools.workdata.timemap` | 清单、原始 MP4、已验证的重封装视频 | 锚点缓存与各会话时间映射 | CPU/PyAV（FFmpeg 库），不调用 FFmpeg 可执行程序 |
 | `tools.workdata.sync_check` | 时间映射与对应视频 | 运动能量缓存与互相关报告 | CPU/PyAV；不调用 FFmpeg 可执行程序 |
+| `tools.workdata.sync_calibrate` | v2 基础映射与源视频 | 96×54 灰度样本、来源、校准映射 | CPU/PyAV；无模型、网络或 FFmpeg 可执行程序 |
+| `tools.workdata.sync_validate` | 校准代理与已有时钟抽样索引 | 残差报告、时钟检查、事件条图 | CPU/OpenCV/Pillow；无模型、网络或 FFmpeg 可执行程序 |
 | `tools.workdata.proxies` | 有效时间映射与对应视频 | 每会话三段 H.264 代理、逐帧旁注、源全长解码计数与 `session.json` | CPU/PyAV、FFmpeg/libx264、ffprobe |
 | `tools.validation.extract_roi_candidates` | 清单、已校验的全局摄像机重封装视频 | 每会话 12 张 JPEG、`roi/candidates.json` | CPU OpenCV/Pillow；不调用 FFmpeg 可执行程序 |
 | `tools.validation.roi_server` | 候选帧、可选已有区域 | 原子区域/草稿文件、备份；按需导出参考图与类别 | 仅 127.0.0.1 本机浏览器 |
@@ -592,21 +594,30 @@ python -m tools.validation.render_roi_reference --regions-path "$data\roi\roi_re
 
 ```powershell
 python -m tools.workdata.osd_clock --image C:\path\outside-repository\clock.png
-python -m tools.workdata.timemap --inventory "$data\inventory\inventory.json" --remux-root "$data\remux" --out-root "$data\timemaps"
-python -m tools.workdata.sync_check --timemaps "$data\timemaps" --out-root "$data\sync_checks"
+python -m tools.workdata.timemap --inventory "$data\inventory\inventory.json" --remux-root "$data\remux" --out-root "$data\timemaps_v2_base"
+python -m tools.workdata.sync_calibrate --timemaps "$data\timemaps_v2_base" --out-root "$data\timemaps_v2" --samples-root "$data\sync_samples_v2" --session 20260828
+python -m tools.workdata.sync_check --timemaps "$data\timemaps_v2" --out-root "$data\sync_checks" --session 20260828
 ```
 
 这些命令不使用 GPU、模型、网络或下载。视频命令自动设为低于正常优先级，通过 PyAV
-流式读取原生 PTS，支持 `--session` 与 `--force`。映射使用秒位跳变后第一帧作为锚点；
-不可靠读数保持缺失。画面本地时钟仅用 epoch 秒数编码，不表示经过校准的 UTC。
-运动检查取三个 120 秒窗口，采用 10 Hz、192×108 灰度、±10 秒滞后搜索，要求
-`abs(lag) <= 0.5` 且 `r >= 0.3`。失败时非零退出并保留报告供复核，不自动修正摄像机时钟。
+流式读取原生 PTS。v2 基础映射每文件拟合一条稳健直线，只在实际解码 PTS 不连续时分段，
+不跟随显示时钟跳变；覆盖从实际首帧开始。全部锚点残差保留，要求绝对残差中位数 ≤0.5 s，
+且 ≥90% 位于 ±1.5 s。不可靠时钟读数保持缺失。
+
+同步协议 r2 以前方摄像机 B 为基准。A/E 使用 5 Hz、96×54 灰度运动信号，跨全部滞后选择六格，
+以 60 s 窗口和 ±10 s 搜索测量滞后。有效窗要求 r ≥0.5、突出度 ≥0.1、峰不在边界。
+Theil–Sen 拟合要求 ≥10 窗、跨度 ≥30%、MAD ≤0.08 s；有证据的台阶用 20 s 窗细化。
+最终时间求解 `t = base_X(pts) - L(t)`，含义是 B 的画面时钟轴，不是校准 UTC。
+校准需要作业者有可见动作，无人或静止时段不能单独校准。无法校准的摄像机明确失败，不能生成 v2 代理。
+可选旧诊断 `sync_check` 保留三个 120 s、10 Hz 窗，单独报告边界峰和不突出峰，要求有效峰且 |lag| ≤0.5 s；
+它不替代 r2 残差验收。缓存绑定映射与采样实现哈希。
 详见[中文工具指南](../tools/workdata/README_CN.md)。
 
 代理生成沿用外部 `$data`：
 
 ```powershell
-python -m tools.workdata.proxies --timemaps "$data\timemaps" --out-root "$data\proxies" --session 20260828
+python -m tools.workdata.proxies --timemaps "$data\timemaps_v2" --out-root "$data\proxies" --session 20260828 --allow-internal-gaps
+python -m tools.workdata.sync_validate --proxies "$data\proxies" --out-root "$data\sync_validation" --session 20260828 --clock-samples C:\path\outside-repository\check_proxy_clocks.json
 ```
 
 默认 `--step-hz 5 --size 1920 1080`、CRF 20、yuv420p、恒定帧率、不含音频。
@@ -616,9 +627,13 @@ python -m tools.workdata.proxies --timemaps "$data\timemaps" --out-root "$data\p
 保留文件并要求显式 `--force` 才替换。
 旁注记录最近源帧、原生 PTS、时间差；超过网格半步长的差异标记为缺口。
 
-共同覆盖包含多个区间时默认拒绝；显式 `--allow-internal-gaps` 暂定保留整体起止间
-连续时钟网格，记录全部覆盖缺口与最近帧缺口标记，不压缩时间。此规则需要协调者复核。
-画面时钟对齐代理本身不能证明物理运动已同步。详见
+共同覆盖包含多个区间时默认拒绝；显式 `--allow-internal-gaps` 保留整体起止间
+连续时钟网格，记录全部覆盖缺口与最近帧缺口标记，不压缩时间。重新生成前把旧代理和试用集改名为带日期备份。
+`sync_validate` 复用已有固定 k，只对缺失读数依次补读 k−1/k+1/k−2/k+2；仍缺失记不可评估，
+每会话可评估比例须 ≥90%。时钟容差 A/B ±1 s、E ±2 s。残差检查 A–B、E–B、A–E：
+有效窗 ≥90% 在 ±0.2 s 内、中位 |lag| ≤0.1 s、会话中点 |offset| ≤0.1 s、|drift| ≤0.1 s/小时。
+所有失败保留，不删除窗口求通过。每会话三张 ±1 s 事件条图供独立目视核对。
+有校准代理后才重新生成试用集和已完成 ROI 的正式集，正式标注等待同步独立验收。详见
 [中文工具指南](../tools/workdata/README_CN.md)。
 
 三视角标注在仓库根目录、Gazelle-next 环境中运行：

@@ -19,14 +19,12 @@ class TimeMapTest(unittest.TestCase):
         self.assertLess(result[0]['residuals']['p95'],.05)
         self.assertAlmostEqual(map_time(result,500),1788818899,delta=.02)
 
-    def test_two_residual_clusters_produce_explicit_piecewise_mapping(self):
+    def test_osd_jump_does_not_create_a_pts_breakpoint(self):
         rows=[dict(pts=float(i*10),wall_time=float(1000+i*10+(3 if i>=30 else 0))) for i in range(60)]
         result=fit_time_map(rows,0,600)
-        self.assertEqual(len(result),2)
-        self.assertAlmostEqual(map_time(result,200),1200)
-        self.assertAlmostEqual(map_time(result,400),1403)
-        self.assertEqual(result[0]['pts_end'], result[1]['pts_start'])
-        self.assertTrue(result[1]['breakpoint'])
+        self.assertEqual(len(result),1)
+        self.assertFalse(result[0]['breakpoint'])
+        self.assertEqual(len(result[0]['residuals']['signed_seconds']),60)
 
     def test_overlap_preserves_real_segment_gaps(self):
         self.assertEqual(overlap_intervals([[(0,10),(12,20)],[(2,18)],[(5,15)]]),[(5,10),(12,15)])
@@ -42,7 +40,7 @@ class TimeMapTest(unittest.TestCase):
             def __init__(self,path): pass
             def __enter__(self): return self
             def __exit__(self,*args): pass
-            def frames(self,start,end):
+            def frames(self):
                 yield 5.125, 'first'
                 yield 5.2, 'second'
         reader=Mock()
@@ -53,6 +51,8 @@ class TimeMapTest(unittest.TestCase):
         self.assertEqual(result['anchors'][0]['pts'],5.2)
         self.assertEqual(result['anchors'][0]['wall_time'],101.)
         self.assertEqual(result['readings'][0]['pts'],5.125)
+        self.assertEqual(result['pts_start'],5.125)
+        self.assertEqual(result['declared_start'],5.)
         with patch('tools.workdata.timemap.clock_pixels',side_effect=lambda x:x):
             with self.assertRaisesRegex(ValueError,'Camera layout mismatch'):
                 sample_file('fake','cam_a',source_factory=Source,reader=reader)
