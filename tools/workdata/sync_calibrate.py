@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 
 from .common import atomic_json, hash_file
+from .sample_cache import read_sample_cache
 
 
 def motion_cells(thumbs,gaps):
@@ -167,15 +168,17 @@ def corrected_time(base,calibration):
     if not calibration.get('valid'):
         raise ValueError('Camera cannot be calibrated: '+calibration.get('reason','invalid fit'))
     origin=calibration['origin']
-    current=base
-    for _ in range(2):
-        relative=current-origin
+    def evaluate(value):
+        relative=value-origin
         segment=next((s for s in calibration['segments'] if s['start']<=relative<s['end']),None)
         if segment is None:
             segment=calibration['segments'][0 if relative<calibration['segments'][0]['start'] else -1]
-        updated=base-segment['c0']-segment['c1']*relative
-        previous,current=current,updated
-    if abs(current-previous)>.001:
+        return base-segment['c0']-segment['c1']*relative
+    current=base
+    for _ in range(2):
+        current=evaluate(current)
+    # Test the final candidate against the equation, not the preceding update.
+    if not np.isfinite(current) or abs(evaluate(current)-current)>.001:
         raise ValueError('Clock correction did not converge within 1 ms in two iterations')
     return float(current)
 
@@ -230,7 +233,7 @@ def clock_summary(rows):
 def implementation_hash():
     root=Path(__file__).parent
     return hashlib.sha256(b''.join((root/name).read_bytes() for name in
-        ('sync_calibrate.py','sync_check.py','timemap.py','video_source.py','proxies.py'))).hexdigest()
+        ('sync_calibrate.py','sample_cache.py','sync_check.py','timemap.py','video_source.py','proxies.py'))).hexdigest()
 
 
 def sample_camera(mapping,camera,root,grid,fingerprint):
@@ -265,18 +268,32 @@ def sample_camera(mapping,camera,root,grid,fingerprint):
         frames.close()
 
 
-def run(path,out_root,samples_root):
+def run(path,out_root,samples_root,reuse_samples=False):
     from .proxies import make_grid
     from .timemap import assemble_session
     mapping=json.loads(Path(path).read_text(encoding='utf-8'))
     if mapping['version']!=2 or any(r['status']!='valid' for r in mapping['files']):
         raise ValueError('Every source requires a valid v2 base map')
+    target=Path(out_root)/(mapping['session']+'.json')
+    if reuse_samples and target.exists():
+        raise FileExistsError('Calibration refit requires a fresh output map: '+str(target))
+    for row in mapping['files']:
+        stat=Path(row['media_path']).stat()
+        if (stat.st_size,stat.st_mtime_ns)!=(row['fingerprint']['media_size'],row['fingerprint']['media_mtime_ns']):
+            raise ValueError('Source changed since mapping: '+row['source'])
     grid=make_grid(mapping['overlap'],allow_internal_gaps=True)
     root=Path(samples_root)/mapping['session']
     fingerprint=dict(mapping_sha256=hash_file(path),implementation_sha256=implementation_hash(),grid=grid)
-    cells={}
+    cells={};evidence={}
     for camera in ('cam_b','cam_a','cam_e'):
-        sidecar=sample_camera(mapping,camera,root,grid,dict(fingerprint,camera=camera))
+        camera_fingerprint=dict(fingerprint,camera=camera)
+        if reuse_samples:
+            sidecar=read_sample_cache(root,camera,camera_fingerprint,
+                                     [r['source'] for r in mapping['files'] if r['camera']==camera])
+        else:
+            sidecar=sample_camera(mapping,camera,root,grid,camera_fingerprint)
+        evidence[camera]=dict(fingerprint=sidecar['fingerprint'],pixels_sha256=sidecar['sha256'],
+                              sidecar_sha256=hash_file(root/(camera+'.json')),reused=bool(reuse_samples))
         cells[camera]=motion_cells(np.load(root/(camera+'.npy'),mmap_mode='r'),
                                   np.array([r['gap'] for r in sidecar['frames']]))
     signals,selection=select_signals(cells)
@@ -293,8 +310,9 @@ def run(path,out_root,samples_root):
                     row['calibration']=fit
     result=assemble_session(mapping['session'],mapping['files'])
     result.update(calibration=calibrations,calibrated=all(f['valid'] for f in calibrations.values()),
-                  reference_camera='cam_b',base_mapping_sha256=hash_file(path),implementation_sha256=implementation_hash())
-    atomic_json(Path(out_root)/(mapping['session']+'.json'),result)
+                  reference_camera='cam_b',base_mapping_sha256=hash_file(path),implementation_sha256=implementation_hash(),
+                  sampling_evidence=evidence)
+    atomic_json(target,result)
     print(mapping['session'],json.dumps({k:{f:v[f] for f in ('valid','reason','valid_windows','segments','breakpoints')}
                                        for k,v in calibrations.items()}),flush=True)
     return result
@@ -306,10 +324,12 @@ def main(argv=None):
     parser.add_argument('--out-root',type=Path,required=True)
     parser.add_argument('--samples-root',type=Path,required=True)
     parser.add_argument('--session',required=True)
+    parser.add_argument('--reuse-samples',action='store_true',
+                        help='Refit verified grayscale evidence into a fresh map without decoding or rewriting samples.')
     args=parser.parse_args(argv)
     import psutil
     psutil.Process().nice(psutil.BELOW_NORMAL_PRIORITY_CLASS if hasattr(psutil,'BELOW_NORMAL_PRIORITY_CLASS') else 10)
-    result=run(args.timemaps/(args.session+'.json'),args.out_root,args.samples_root)
+    result=run(args.timemaps/(args.session+'.json'),args.out_root,args.samples_root,args.reuse_samples)
     return int(not result['calibrated'])
 
 

@@ -357,6 +357,8 @@ python main.py `
 正式标注须等待同步审查。
 仅修复拟合时，可用 `timemap --sample-cache <旧-v2-root>` 在不同输出根中复用已核实的解码/OCR 证据，
 保留原采样实现与文件哈希。
+`sync_calibrate --reuse-samples` 复用已校验的灰度缓存重新拟合，不重新解码源视频。
+须使用尚不存在的输出映射；分别记录原采样与当前拟合指纹，原样本保持不变。
 
 本地研究数据工具可生成只读源清单并无损重封装 AVI 空包。从仓库根目录运行
 `python -m tools.workdata.inventory` 和 `python -m tools.workdata.remux`，读取源视频、

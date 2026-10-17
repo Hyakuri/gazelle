@@ -361,6 +361,9 @@ empty or stationary periods cannot supply calibration windows. Preserve previous
 proxies and datasets as dated backups. Formal annotation waits for synchronization review.
 For a fitting-only repair, `timemap --sample-cache <previous-v2-root>` can reuse verified
 decoded/OCR evidence in a different output root, retaining its original implementation and file hashes.
+`sync_calibrate --reuse-samples` refits verified grayscale caches without decoding source
+video. Use a fresh output map; the old sampling fingerprint and current fitting fingerprint
+are recorded separately, and the original samples remain unchanged.
 
 Local research data tools build a read-only source inventory and losslessly
 remux AVI empty packets. Run `python -m tools.workdata.inventory` and

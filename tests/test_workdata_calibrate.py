@@ -106,6 +106,96 @@ class CalibrationTest(unittest.TestCase):
         actual = corrected_time(base,fit)
         self.assertAlmostEqual(actual,(base-2.5+.0002*1000)/1.0002,delta=.001)
 
+    def test_two_iterations_are_accurate_despite_large_last_update(self):
+        for origin in (1000.,1700000000.):
+            fit=dict(valid=True,origin=origin,segments=[dict(start=0.,end=3600.,c0=3.,c1=-.0005)])
+            exact=(origin-3.-.0005*origin)/(1.-.0005)
+            with self.subTest(origin=origin):
+                self.assertAlmostEqual(corrected_time(origin,fit),exact,delta=.001)
+
+    def test_positive_step_without_a_solution_still_fails(self):
+        fit=dict(valid=True,origin=0.,segments=[dict(start=0.,end=100.,c0=0.,c1=0.),
+                                              dict(start=100.,end=200.,c0=.4,c1=0.)])
+        with self.assertRaisesRegex(ValueError,'converge'):
+            corrected_time(100.1,fit)
+
+    def test_explicit_sample_reuse_verifies_pixels_grid_and_complete_decoding(self):
+        from tools.workdata.sample_cache import read_sample_cache
+        from tools.workdata.common import hash_file
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);target=root/'cam_e.npy';sidecar=root/'cam_e.json'
+            np.save(target,np.zeros((3,54,96),dtype=np.uint8))
+            grid=dict(t0=10.,N=3,step=.2,step_hz=5.)
+            fingerprint=dict(mapping_sha256='1'*64,implementation_sha256='2'*64,grid=grid,camera='cam_e')
+            saved=dict(fingerprint=fingerprint,grid=grid,sha256=hash_file(target),
+                frames=[dict(k=k,t_k=10.+k*.2,source='source.mp4',pts=k*.2,delta_seconds=0.,gap=False) for k in range(3)],
+                source_decode=[dict(source='source.mp4',decoded_frames=12,reached_eof=True)])
+            sidecar.write_text(json.dumps(saved),encoding='utf-8')
+            original_sidecar=sidecar.read_bytes();original_pixels=target.read_bytes()
+            current=dict(fingerprint,implementation_sha256='3'*64)
+            cached=read_sample_cache(root,'cam_e',current)
+            self.assertEqual(cached['fingerprint']['implementation_sha256'],'2'*64)
+            self.assertEqual(sidecar.read_bytes(),original_sidecar)
+            self.assertEqual(target.read_bytes(),original_pixels)
+            with self.assertRaisesRegex(ValueError,'source set'):
+                read_sample_cache(root,'cam_e',current,{'another.mp4'})
+            with self.assertRaisesRegex(ValueError,'provenance'):
+                read_sample_cache(root,'cam_e',dict(current,mapping_sha256='4'*64))
+            target.write_bytes(original_pixels[:-1]+b'\x01')
+            with self.assertRaisesRegex(ValueError,'checksum'):
+                read_sample_cache(root,'cam_e',current)
+            target.write_bytes(original_pixels)
+            saved['source_decode'][0]['reached_eof']=False
+            sidecar.write_text(json.dumps(saved),encoding='utf-8')
+            with self.assertRaisesRegex(ValueError,'complete'):
+                read_sample_cache(root,'cam_e',current)
+            saved['source_decode'][0]['reached_eof']=True
+            np.save(target,np.zeros((3,54,95),dtype=np.uint8))
+            saved['sha256']=hash_file(target)
+            sidecar.write_text(json.dumps(saved),encoding='utf-8')
+            with self.assertRaisesRegex(ValueError,'shape'):
+                read_sample_cache(root,'cam_e',current)
+
+    def test_calibration_refit_preserves_samples_and_checks_sources_before_reuse(self):
+        from tools.workdata.common import hash_file
+        from tools.workdata.sync_calibrate import run
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);samples=root/'samples/session';samples.mkdir(parents=True)
+            files=[];original={}
+            for camera in ('cam_a','cam_b','cam_e'):
+                media=root/(camera+'.mp4');media.write_bytes(b'fake video')
+                stat=media.stat()
+                files.append(dict(camera=camera,source=media.name,media_path=str(media),status='valid',
+                    fingerprint=dict(media_size=stat.st_size,media_mtime_ns=stat.st_mtime_ns)))
+            mapping=root/'base.json'
+            mapping.write_text(json.dumps(dict(version=2,session='session',files=files,overlap=[[10.,10.4]])))
+            grid=dict(t0=10.,N=3,step=.2,step_hz=5.)
+            for row in files:
+                camera=row['camera'];target=samples/(camera+'.npy');sidecar=samples/(camera+'.json')
+                np.save(target,np.zeros((3,54,96),dtype=np.uint8))
+                sidecar.write_text(json.dumps(dict(grid=grid,sha256=hash_file(target),
+                    fingerprint=dict(mapping_sha256=hash_file(mapping),implementation_sha256='original-code',
+                                     grid=grid,camera=camera),
+                    frames=[dict(k=k,t_k=10.+k*.2,source=row['source'],pts=k*.2,delta_seconds=0.,gap=False) for k in range(3)],
+                    source_decode=[dict(source=row['source'],decoded_frames=12,reached_eof=True)])))
+                original[target]=target.read_bytes();original[sidecar]=sidecar.read_bytes()
+            windows=[dict(t_mid_seconds=t,lag_seconds=0.,valid=True) for t in np.linspace(.02,.38,10)]
+            with patch('tools.workdata.sync_calibrate.sample_camera',side_effect=AssertionError('must not decode')), \
+                 patch('tools.workdata.sync_calibrate.window_lags',return_value=windows), \
+                 patch('tools.workdata.timemap.assemble_session',return_value=dict(session='session')):
+                result=run(mapping,root/'new',root/'samples',reuse_samples=True)
+                self.assertTrue(result['calibrated'])
+                self.assertEqual(result['sampling_evidence']['cam_a']['fingerprint']['implementation_sha256'],'original-code')
+                self.assertNotEqual(result['implementation_sha256'],'original-code')
+                for path,content in original.items():
+                    self.assertEqual(path.read_bytes(),content)
+                with self.assertRaisesRegex(FileExistsError,'fresh'):
+                    run(mapping,root/'new',root/'samples',reuse_samples=True)
+                Path(files[0]['media_path']).write_bytes(b'changed source')
+                with self.assertRaisesRegex(ValueError,'Source changed'):
+                    run(mapping,root/'rejected',root/'samples',reuse_samples=True)
+                self.assertFalse((root/'rejected').exists())
+
     def test_gap_motion_and_clock_neighbor_reading_preserve_missing(self):
         thumbs = np.zeros((4,54,96),dtype=np.uint8)
         thumbs[1:] = 20

@@ -648,6 +648,20 @@ different `--out-root`. Source/media signatures, camera identity and sampling se
 the old sample hash and implementation fingerprint are retained. It performs no video decoding
 or OCR and never labels older samples as newly measured. Equal consecutive PTS are not regressions.
 
+To repair only calibration fitting, explicitly reuse saved grayscale evidence in a fresh map:
+
+```powershell
+python -m tools.workdata.sync_calibrate --timemaps "$data\timemaps_v2_base" --out-root "$data\timemaps_v2_refit" --samples-root "$data\sync_samples_v2" --session 20260828 --reuse-samples
+```
+
+This CPU-only mode checks the base-map hash, grid, source size/mtime, pixel SHA-256,
+96×54 uint8 shape, per-step provenance and complete source-decoding records. It performs
+no source-video decoding, model inference, GPU work, FFmpeg calls or network access.
+The output map must not already exist. Original samples remain read-only; `sampling_evidence`
+retains their original fingerprints and file hashes beside the current fitting implementation.
+Two clock-correction iterations are checked against the original equation within 1 ms;
+unsolved step boundaries still fail. Reuse is for fitting repairs, not sampling changes.
+
 Proxy generation, using the same external `$data`:
 
 ```powershell
