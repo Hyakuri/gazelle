@@ -116,6 +116,8 @@ def validate_points(row,require_coverage=False):
         run=by_start[skip['step']]
         if not point_required(run['label']) or (skip['reason']=='out_of_view' and run['label'] not in ('hands_object','cell_other')):
             raise ValueError('Point skip reason is not allowed for this run')
+        if groups[skip['step']]:
+            raise ValueError('Attention points and point skips are mutually exclusive within a run')
         skipped.add(skip['step'])
     missing=[r['start_step'] for r in runs if point_required(r['label']) and not groups[r['start_step']] and r['start_step'] not in skipped]
     if require_coverage and missing:
@@ -178,6 +180,8 @@ class LabelStore:
         if not annotator.strip():raise ValueError('Annotator must not be empty')
         self.manifest=json.loads((self.root/'manifest.json').read_text(encoding='utf-8'))
         if not isinstance(self.manifest,dict):raise ValueError('Invalid dataset manifest')
+        if type(self.manifest.get('annotation_schema_version')) is not int or self.manifest['annotation_schema_version']!=3:
+            raise ValueError('Dataset annotation_schema_version must be 3; regenerate the dataset or update classes and manifest following TASK-125 section 5')
         self.classes=json.loads((self.root/'classes.json').read_text(encoding='utf-8'))
         validate_classes(self.classes)
         self.fingerprint=dict(manifest_sha256=hash_file(self.root/'manifest.json'),

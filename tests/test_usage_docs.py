@@ -542,6 +542,19 @@ class UsageDocumentationTest(unittest.TestCase):
                           'viewed_ranges', 'finished_at', 'keepalive', '--segment', '--sessions', 'export_root', '0.5%'):
                 self.assertIn(token, text, str(path))
 
+    def test_annotation_point_exclusivity_and_shortcuts_are_in_all_six_guides(self):
+        for path in (ENGLISH_README,ENGLISH_GUIDE):
+            text=self._read(path)
+            for token in ('first step','clearest','mutually exclusive','entire run','partly visible',
+                          'tabletop','Ctrl/Meta/Alt','TASK-125 section 5'):
+                self.assertIn(token,text,str(path))
+        for path in (CHINESE_README,CHINESE_GUIDE,
+                     REPOSITORY_ROOT/'tools/validation/ANNOTATION_GUIDE_CN.md',REPOSITORY_ROOT/'tools/validation/ROI_GUIDE_CN.md'):
+            text=self._read(path)
+            for token in ('片段的第一步','最清楚','互斥','整个片段','部分可见','桌面或物体',
+                          'Ctrl/Meta/Alt','TASK-125 第 5 条'):
+                self.assertIn(token,text,str(path))
+
     def test_argument_validation_precedes_overwrite_in_both_guides(self):
         for path in (ENGLISH_GUIDE, CHINESE_GUIDE):
             self.assertIn('before any `--overwrite` deletion', self._read(path))

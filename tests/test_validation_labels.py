@@ -10,14 +10,14 @@ from tools.validation.labels import expand_runs, validate_document, LabelStore
 
 
 def fixture():
-    manifest=dict(version=2,segments=[dict(segment_id='s1',session='session',start_wall_time=100.,step_hz=5.,step_count=5)])
+    manifest=dict(version=2,annotation_schema_version=3,segments=[dict(segment_id='s1',session='session',start_wall_time=100.,step_hz=5.,step_count=5)])
     classes=dict(version=1,classes=[dict(key=1,label='target',name_zh='Target',color='#112233'),
                                    dict(key=0,label='unknown',name_zh='Unknown',color='#cccccc')])
     return manifest,classes
 
 
 class LabelTest(unittest.TestCase):
-    def test_cli_rejects_top_level_array_and_excessively_nested_json(self):
+    def test_cli_rejects_top_level_arrays(self):
         from tools.validation.labels import main
         manifest,classes=fixture()
         with tempfile.TemporaryDirectory() as directory:

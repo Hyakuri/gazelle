@@ -99,26 +99,80 @@ run("addPoint({clientX:1280,clientY:360});assign('away');");
 assert.deepEqual(plain('[record().points,record().point_skips]'),[[],[]]);
 assert.match(run("byId('pointNotice').textContent"),/清除/);
 run('undo();');
-assert.equal(run('record().points.length'),1,'undo restores points with labels');
+assert.equal(run('record().points.length'),0,'clicking a marked run cannot add a point');
 assert.equal(run('record().point_skips[0].reason'),'out_of_view','undo restores out-of-view mark');
 run("assign('target');");
 assert.deepEqual(plain('record().point_skips'),[],'out-of-view cannot remain on a target region');
 assert.equal(run("byId('outOfView').disabled"),true);
 console.log('PASS: scaled overview points, replacement, spacing, deletion, skips/out-of-view, cleanup/undo, completion');
 
-run("record().labels=[{start_step:0,end_step_exclusive:5,label:'target'},{start_step:5,end_step_exclusive:50,label:'hands_object'}];record().points=[{step:4,x:.1,y:.1},{step:5,x:.2,y:.2}];record().point_skips=[{step:5,reason:'unsure'}];go(5);byId('deleteChange').click();");
+run("record().labels=[{start_step:0,end_step_exclusive:5,label:'target'},{start_step:5,end_step_exclusive:50,label:'hands_object'}];record().points=[{step:4,x:.1,y:.1},{step:5,x:.2,y:.2}];record().point_skips=[];go(5);byId('deleteChange').click();");
 assert.deepEqual(plain('record().points'),[{step:4,x:.1,y:.1}],'merging runs enforces the same five-step spacing');
 assert.deepEqual(plain('record().point_skips'),[],'a removed run start cannot retain its skip');
 assert.match(run("byId('pointNotice').textContent"),/清除/);
 run('undo();');
 assert.equal(run('record().points.length'),2,'undo restores both pre-merge points');
-assert.deepEqual(plain('record().point_skips'),[{step:5,reason:'unsure'}]);
+const key=(key,extra={})=>{let prevented=false;events.keydown({key,target:{tagName:'BODY'},preventDefault(){prevented=true;},...extra});return prevented;};
+run("record().points=[{step:0,x:.1,y:.1},{step:5,x:.2,y:.2}];go(5);");
+key('Delete');
+assert.equal(run('record().labels.length'),1,'Delete really removes a label change');
+assert.equal(run('record().points.length'),2,'Delete preserves valid attention points');
+
+run("record().labels=[{start_step:0,end_step_exclusive:5,label:'hands_object'},{start_step:5,end_step_exclusive:50,label:'target'}];record().points=[{step:5,x:.2,y:.2},{step:10,x:.3,y:.3}];record().point_skips=[{step:0,reason:'out_of_view'}];go(5);assign('hands_object');");
+assert.equal(run('record().points.length'),2,'merge keeps points');
+assert.deepEqual(plain('record().point_skips'),[],'merge removes the conflicting skip at the surviving start');
+assert.match(run("byId('pointNotice').textContent"),/1 个标记/);
+run('undo();');
+assert.deepEqual(plain('record().point_skips'),[{step:0,reason:'out_of_view'}]);
+assert.equal(run('record().labels.length'),2);
+
+run("record().labels=[{start_step:0,end_step_exclusive:50,label:'hands_object'}];record().point_skips=[];go(7);");
+for(const [shortcut,reason] of [['s','unsure'],['o','out_of_view']]){
+  key(shortcut);
+  assert.deepEqual(plain('record().point_skips'),[{step:0,reason}],'middle-of-run shortcut uses its start');
+  assert.deepEqual(plain('record().points'),[],'skip removes all points in the run');
+  assert.match(run("byId('pointNotice').textContent"),/2 个/);
+  run('addPoint({clientX:1280,clientY:360});');
+  assert.deepEqual(plain('record().points'),[],'marked run rejects a click');
+  assert.match(run("byId('pointNotice').textContent"),/先按 [SO].*取消/);
+  key('z',{ctrlKey:true});
+  assert.equal(run('record().points.length'),2,'undo restores both points');
+  assert.deepEqual(plain('record().point_skips'),[],'undo restores absence of skip');
+}
+for(const modifier of ['ctrlKey','metaKey','altKey'])for(const shortcut of ['s','o','x','Delete','1',' ','ArrowLeft','ArrowRight']){
+  const before=plain('[record(),step,playing,undoStack.length]');
+  assert.equal(key(shortcut,{[modifier]:true}),false,'browser modifier shortcut keeps its default');
+  assert.deepEqual(plain('[record(),step,playing,undoStack.length]'),before,'modifier shortcut cannot edit or navigate');
+}
+for(const shortcut of ['s','o','x','Delete','1',' ']){
+  const before=plain('[record(),step,playing,undoStack.length]');
+  key(shortcut,{repeat:true});
+  assert.deepEqual(plain('[record(),step,playing,undoStack.length]'),before,'repeated shortcut is ignored');
+}
+key('ArrowRight',{repeat:true});assert.equal(run('step'),8,'arrows still repeat');
+key('o');assert.equal(run("byId('finish').disabled"),false,'out-of-view alone can cover the complete run');
+run('addPoint({clientX:100,clientY:100});');
+assert.match(run("byId('pointNotice').textContent"),/请在全局画面上点/);
+
+const advance=time=>{clock=time;for(const [id,t] of [...timers])if(t.due<=clock){timers.delete(id);t.fn();}};
+timers.clear();
+run("byId('speed').value='1';byId('image').delayLoad=true;go(0);togglePlay();");
+advance(200);assert.equal(run('step'),0);
+clock=1000;run("byId('image').onload();");
+advance(1025);assert.equal(run('step'),0,'slow frame must dwell for a full step after loading');
+advance(1199);assert.equal(run('step'),0);
+advance(1200);assert.equal(run('step'),1);
+run("pause();byId('image').delayLoad=false;");timers.clear();clock=0;
+console.log('PASS: mutually exclusive points/skips, merge and undo, modifier/repeat guards, slow-frame dwell');
 
 (async()=>{
-  const writes=[];
+  const writes=[];let serverRevision=0,staleRequests=0;
   context.fetch=async(url,options)=>{
     const payload=JSON.parse(options.body);writes.push({clock,payload,keepalive:options.keepalive});
-    const result=plain('documentData');result.revision++;
+    assert.ok(Array.isArray(payload.points),'save includes points');
+    assert.ok(Array.isArray(payload.point_skips),'save includes point_skips');
+    if(payload.revision!==serverRevision){staleRequests++;return {ok:false,json:async()=>({error:'Stale annotation revision'})};}
+    const result=plain('documentData');result.revision=++serverRevision;
     const row=result.segments.find(r=>r.segment_id===payload.segment_id);
     Object.assign(row,payload,{started_at:'saved',active_seconds:0,annotator:'test',finished_at:null});
     return {ok:true,json:async()=>result};
@@ -141,6 +195,7 @@ assert.deepEqual(plain('record().point_skips'),[{step:5,reason:'unsure'}]);
   assert.equal(writes.at(-1).payload.note,'immediate','notes are never throttled');
   clock=1500;add(1);document.visibilityState='hidden';events.visibilitychange();await run('saveQueue');
   assert.equal(writes.at(-1).clock,1500,'hidden page flushes immediately');
+  assert.equal(writes.at(-1).keepalive,false,'visibility hiding uses the normal queue');
   clock=1550;add(2);windowEvents.beforeunload({preventDefault(){}});await run('saveQueue');
   assert.equal(writes.at(-1).keepalive,true,'closing starts a keepalive flush');
   document.visibilityState='visible';timers.clear();writes.length=0;
@@ -150,7 +205,7 @@ assert.deepEqual(plain('record().point_skips'),[{step:5,reason:'unsure'}]);
   for(let i=1;i<=20;i++){
     clock=begin+i*100;
     for(const [id,timer] of [...timers])if(timer.due<=clock){timers.delete(id);timer.fn();}
-    events.keydown({key:'ArrowRight',target:{tagName:'BODY'},preventDefault(){}});
+    events.keydown({key:'ArrowRight',repeat:true,target:{tagName:'BODY'},preventDefault(){}});
     await run('saveQueue');
   }
   assert.ok(writes.length<=3,`unplayed 10Hz stepping wrote ${writes.length} times in two seconds`);
@@ -161,16 +216,31 @@ assert.deepEqual(plain('record().point_skips'),[{step:5,reason:'unsure'}]);
 
   const originalFetch=context.fetch;
   let resolveBusy;
+  let hold=true;
   context.fetch=(url,options)=>{
-    if(options.keepalive)return originalFetch(url,options);
+    if(options.keepalive||!hold)return originalFetch(url,options);
+    hold=false;
     return new Promise(resolve=>{resolveBusy=()=>originalFetch(url,options).then(resolve);});
   };
   run("save();");await Promise.resolve();await Promise.resolve();
   assert.equal(typeof resolveBusy,'function');
   add(3);const before=writes.length;
-  windowEvents.beforeunload({preventDefault(){}});
-  assert.equal(writes.length,before+1,'keepalive dispatches while a prior save is still unresolved');
-  assert.equal(writes.at(-1).keepalive,true);
+  document.visibilityState='hidden';events.visibilitychange();
+  assert.equal(writes.length,before,'hidden-page save waits for the in-flight save');
   resolveBusy();await run('saveQueue');
+  assert.equal(run('failed'),false,'hiding while saving does not fail');
+  assert.equal(staleRequests,0,'queued writes use the returned server revision');
+  assert.deepEqual(writes.at(-1).payload.viewed_ranges,[{start_step:0,end_step_exclusive:4}]);
+  for(const event of ['pagehide','beforeunload']){
+    run('failed=false;pending=0;');context.currentRevision=serverRevision;run('documentData.revision=currentRevision;');
+    hold=true;run('save();');await Promise.resolve();await Promise.resolve();
+    clock+=100;add(event==='pagehide'?4:5);const count=writes.length;
+    windowEvents[event]({preventDefault(){}});
+    assert.equal(writes.length,count+1,`${event} dispatches keepalive without waiting for an in-flight save`);
+    assert.equal(writes.at(-1).keepalive,true);
+    resolveBusy();await run('saveQueue');
+    assert.equal(run('failed'),true,'real close races remain protected by server revisions');
+  }
+  assert.equal(staleRequests,2,'only the deliberately raced closing requests conflict');
   console.log('PASS: fake-clock save coalescing, pause/switch/hide/close flush, immediate edits');
 })().catch(error=>{console.error(error);process.exitCode=1;});

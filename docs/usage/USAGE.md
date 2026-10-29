@@ -778,8 +778,9 @@ included in the finish request are saved but do not qualify that request. Replay
 after changing its labels before confirming completion: viewed only means displayed.
 View-only autosaves occur at most once per second during playback and unplayed stepping,
 jumps or change-point navigation. Pausing active playback, switch, finish, hide and close
-flush immediately. Hide/close dispatch `keepalive` without waiting for an in-flight save;
-server revision checks still apply. Label, people and note edits are never throttled; failed saves stop editing.
+flush without throttling. Hiding queues behind in-flight saves; only pagehide/beforeunload dispatch
+direct `keepalive` requests. Delivery on close or network interruption is not guaranteed, so wait for saved status
+before closing. Server revision checks still apply. Label, people and note edits are never throttled; failed saves stop editing.
 `labels validate` errors, including non-object or excessively nested JSON, include the segment
 and reason in one line, exit 1, without traceback.
 Region save/export status comes from the server, including unchanged saves. Version 1 and 2 labels
@@ -789,6 +790,14 @@ Unlabelled draft steps are distinct from intentional `unknown`; `--allow-incompl
 certify completion. See the [Chinese annotation guide](../../tools/validation/ANNOTATION_GUIDE_CN.md).
 Judge visible eyes before head direction, and head direction before hand activity.
 `hands_object` takes priority over the drawn region containing the attended hand or held object.
+Use a region when gaze lands on the tabletop or an object inside it. Default to a point on the first step
+of the run; otherwise choose the step where the target is clearest. Points and skip marks are mutually exclusive
+within each run. Out-of-view replaces points only when the target is outside the overview for the entire run;
+if partly visible, point only at the visible portion, without out-of-view. If uncertain, skip the whole run.
+S/O removes all points in the run and reports the count; undo restores both. Cancel the mark before adding a point.
+On merging runs, points take priority and conflicting marks are removed with a notice and can be undone.
+Except Ctrl/Cmd+Z, Ctrl/Meta/Alt combinations retain browser behavior and do not annotate. Held-key repeats
+are ignored for S/O/X/Delete/digits/space; arrows can repeat. Slow frames receive a full step after loading.
 With four targets, keys are 1–4 targets, 5 hands, 6 `cell_other`, 7 `away`, 8 `absent`, 0 `unknown`.
 Click the overview to add/replace the current step's point. X deletes it; S toggles an `unsure` skip;
 O toggles `out_of_view` for hands/other only. Delete still removes a class change point.
@@ -799,7 +808,8 @@ with a notice, and undo restores them. Merging runs retains the earlier point wh
 Version 3 adds `points: [{step, x, y}]`, finite normalized 1920×1080 overview coordinates in [0, 1],
 and `point_skips: [{step, reason}]`, where step is a run start and reason is `unsure` or `out_of_view`.
 Point steps are unique. Completion requires previously saved labels/points/skips as well as viewing.
-New dataset manifests record `annotation_schema_version: 3`; old annotations require reannotation.
+The editor and labels validator require manifest `annotation_schema_version: 3` before opening labels;
+regenerate old datasets or update their classes and manifest following TASK-125 section 5.
 For an authorized re-export, append `--backup-existing` to the `tools.validation.render_roi_reference`
 command above. It renames prior classes, reference, overlays and completion marker into a dated backup,
 then writes new exports using local CPU/Pillow and an existing font. Region JSON is unchanged;

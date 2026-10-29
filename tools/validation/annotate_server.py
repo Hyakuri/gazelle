@@ -5,6 +5,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
 import secrets
+import sys
 from urllib.parse import unquote, urlsplit
 
 from tools.workdata.common import hash_file, source_path
@@ -113,7 +114,11 @@ def main(argv=None):
     parser.add_argument('--annotator',default='local')
     parser.add_argument('--port',type=int,default=8766)
     args=parser.parse_args(argv)
-    app=AnnotationApplication(args.dataset_root,args.labels_path or args.dataset_root/'labels.json',args.annotator)
+    try:
+        app=AnnotationApplication(args.dataset_root,args.labels_path or args.dataset_root/'labels.json',args.annotator)
+    except (ValueError,TypeError,KeyError,AttributeError,RecursionError,OSError) as error:
+        print('Cannot start annotation editor: '+' '.join(str(error).splitlines()),file=sys.stderr)
+        return 1
     with ThreadingHTTPServer(('127.0.0.1',args.port),make_handler(app)) as server:
         print('Annotation editor: http://127.0.0.1:{}'.format(server.server_port),flush=True)
         try:server.serve_forever()

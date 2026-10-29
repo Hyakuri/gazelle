@@ -343,8 +343,9 @@ labels, points, skips or other-person ranges clears completion. Replay a long sp
 before confirming completion: viewed only means displayed. Completion uses previously saved
 viewed ranges; new ranges in that request are saved but cannot qualify it. View-only autosaves
 are coalesced to at most once per second during playback and unplayed stepping/jumps.
-Pausing active playback, switch/finish/hide/close flush immediately. Hide/close `keepalive`
-requests bypass in-flight saves while retaining server revision checks; label, people
+Pausing active playback, switch/finish/hide/close flush without throttling. Hiding queues behind
+in-flight saves; only pagehide/beforeunload send direct `keepalive` requests. Delivery on close
+or network interruption is not guaranteed, so wait for saved status before closing. Server revision checks remain; label, people
 and note edits save immediately. `labels validate --segment ID`
 strictly checks just that segment; repeat the option for several. It uses CPU only, with no FFmpeg executable, model, GPU, downloads
 or external network. See [usage](docs/usage/USAGE.md#15-research-data-tools) and the
@@ -352,6 +353,16 @@ or external network. See [usage](docs/usage/USAGE.md#15-research-data-tools) and
 
 Judge visible eyes before head direction, and head direction before hand activity.
 `hands_object` takes priority over a drawn region when attention is on a hand or held object.
+Use a region when gaze lands on the tabletop or an object inside it. Default to a point on the first step
+of the run; otherwise choose the step where the target is clearest. Points and skip marks are mutually exclusive
+within each run. Out-of-view replaces points only when the target is outside the overview for the entire run;
+if partly visible, point only at the visible portion, without out-of-view. If uncertain, skip the whole run.
+S/O removes all points in the run and reports the count; undo restores both. Cancel the mark before adding a point.
+On merging runs, points take priority and conflicting marks are removed with a notice and can be undone.
+Except Ctrl/Cmd+Z, Ctrl/Meta/Alt combinations retain browser behavior and do not annotate. Held-key repeats
+are ignored for S/O/X/Delete/digits/space; arrows can repeat. Slow frames receive a full step after loading.
+The editor and labels validator require manifest `annotation_schema_version: 3` before opening labels;
+regenerate old datasets or update their classes and manifest following TASK-125 section 5.
 With four targets, keys are 1–4 targets, 5 hands, 6 `cell_other`, 7 `away`, 8 `absent`, 0 `unknown`.
 Click the overview to add/replace a point; X deletes the current point, S toggles an `unsure` skip,
 and O toggles `out_of_view` (hands/other only). Delete still deletes a class change point.
