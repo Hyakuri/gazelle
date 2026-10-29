@@ -10,14 +10,24 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 | stage | 阶段 2：作业数据可用、多机同步、正确性修复，建立区域标注 |
 | branch | `feature/stage2-correctness`（基于 PR #5 head `bbec056`） |
 | pr | [#6](https://github.com/Hyakuri/gazelle/pull/6)（draft）；正文来源 `docs/collab/STAGE2_PR_BODY.md` |
-| writer | codex |
-| next_actor | codex |
+| writer | none |
+| next_actor | claude |
 | current_task | 第 6 轮：`docs/collab/tasks/TASK-125-annotation-points-and-hands-class.md` §3 的“第 2 轮要求”：注视点与标记互斥、组合键与按住重复、页面隐藏时的保存、数据集版本门、测试与文档。换色（第 8 条）只在 Q-025 第 1 项为“已同意”时做 |
 | after_current | TASK-125 第 2 轮完成后立即结束本轮，把 `next_actor` 改为 `claude`。本轮不做 TASK-101、TASK-150 与 TASK-140 第 3 轮（第 7 轮），也不开始阶段 3 的任务 |
 | environment | `Gazelle-next`：`C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe`（用户 2026-10-17 决定 D16）。现有 `Gazelle` 作为回退保留，不改动 |
-| last_pushed | `daeebc9b7ec4777e4b9b2d8e32f3e87c8a97f44a`（第 5 轮最终实现；本文件与报告/基线的交接提交随后推送，以实时 Git HEAD 为准） |
+| last_pushed | `a9f07387daeef71d15fc1504e532e0a65b4ca829`（第 6 轮报告；实现为 `ac89a66f726bc3a2efcfa777d0c8910010d7834b`。本文件与基线的交接提交随后推送，以实时 Git HEAD 为准） |
 | last_accepted | `44bacea`。2026-10-29 第 5 轮审查：`6a3989a`（协调文档）、`139a51f`（文档工具，Claude 编写，经离线门）、`d041669`（TASK-140 第 2 轮）、`21b3233`（TASK-124 第 2 轮）与 `44bacea`（两项报告）通过；`daeebc9`（TASK-125）changes-requested；`f14b36b` 只含报告与交接。第 4 轮 changes-requested 的 `2dc76be`（TASK-124）已由 `21b3233` 修复 |
 | 更新 | 2026-10-29 20 时起，Claude 第 5 轮审查：复跑离线门（708 tests，0 skip）；独立复算不确定区间、抽样、帧与时钟；在正式数据集上只读、写临时标签的浏览器实测；两个只读子代理做代码审查与变异测试。TASK-140 第 2 轮、TASK-124 第 2 轮通过，TASK-125 changes-requested；发布 VALSET 4.2.0（协调者的补充说明）；新增 Q-025；第 4 轮记录与本轮开始时的说明移入 HISTORY；第 6 轮交给 Codex。此前同日的更新记录见 HISTORY |
+
+## 第 6 轮交接记录（Codex，2026-10-29）
+
+- 本轮只实施 TASK-125 第 2 轮，主线程 Inline Execution，无子代理。协调文档 `60464e2`、实现 `ac89a66`、完整报告 `a9f0738` 已推送现有分支；按授权同步 PR #6 正文并发布[双语评论](https://github.com/Hyakuri/gazelle/pull/6#issuecomment-6498419167)。任务 §2 有命令、结果、预检、失败/跳过和 A/B/C 记录。
+- 已修复点/标记互斥、S/O 清点与撤销、合并清理、组合键/重复事件、隐藏时正常排队、schema 3 门及第 7 条三个小项。四份英中用户文档与两份中文指南同步。完整离线门 **715 tests / 19.108s / 0 skip**，两个 Node harness、compileall、help、list-models、docs build/check 与补丁检查通过。
+- 可见浏览器使用正式 `roi_r2` 只读数据、仓库外临时标签；真实 requestAnimationFrame 未替换。pilot 实际显示 300/300 步，完成前严格校验失败，确认后通过；点/标记、撤销、away 清理与组合键实测通过。播放常规保存间隔 1.039743–1.068478 秒，非播放逐步 1.044421–1.061257 秒。
+- **仍待独立验收，不能宣布全部浏览器验收通过**：IAB 隐藏面板/切换标签没有产生 visibilitychange，按住 S 只产生一次 repeat=false；桌面 Chrome 访问审批超时，未输入或绕过。Node 已覆盖隐藏时在途保存、revision 及 repeat=true，但不能替代真实事件。推荐 Claude 按现有计划在可见浏览器、临时标签上补测这两项，再决定接受和恢复正式标注。用户独立 checkout 验收尚未进行。
+- Q-025 颜色仍未批准，未换色、重导出或更新数据集。正式区域/类别/参考图/完成标记和两个数据集 manifest/classes 共八项哈希不变，两数据集仍无正式 labels.json。全部证据在 `gazelle_runs/codex-round6/`，截图 `browser-proof.png`、审计 `browser-audit.json`。
+- 环境预检的普通权限与 yun Git/GitHub 例外分开记录；未改配置或 Conda。真实活动仅 CPU/本机 HTTP/JPEG/哈希/临时标签及 GitHub；无模型推理、下载、缓存更新或转码。GPU、FFmpeg/ffprobe 仅查询。临时页面已关闭、服务已停止、8786 无监听，已有忽略目录保留。
+- 本轮按 build → snapshot“第 6 轮结束” → check 完成交接；`last_accepted` 不变。第 7 轮与阶段 3 未开始，正式标注继续暂停。`next_actor=claude`；只读输出和实现提交供 Claude 审查，不作为已接受结果。
 
 ## 第 5 轮审查结论（Claude，2026-10-29）
 
@@ -66,7 +76,7 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 | Codex 第 5 轮 | [TASK-140](tasks/TASK-140-sync-validation-and-steps.md) 第 2 轮：切点不确定区间、时钟同源帧补读、正式切换与两个数据集 | accepted | Claude 2026-10-29 审查通过，独立复算一致 |
 | Codex 第 5 轮 | [TASK-124](tasks/TASK-124-annotation-hardening.md) 第 2 轮：手动逐步的写盘降频等 | accepted | 页面隐藏时的保存冲突并入 TASK-125 第 2 轮 |
 | Codex 第 5 轮 | [TASK-125](tasks/TASK-125-annotation-points-and-hands-class.md) 标注方案 r3 与 r3.1 | changes-requested | 见 TASK-125 §3 |
-| Codex 第 6 轮 | TASK-125 第 2 轮：注视点与标记互斥、组合键与按住重复、页面隐藏时的保存、数据集版本门、测试与文档 | ready | 本轮唯一一项，完成后立即交回 Claude；换色只在你同意 Q-025 第 1 项后做 |
+| Codex 第 6 轮 | TASK-125 第 2 轮：注视点与标记互斥、组合键与按住重复、页面隐藏时的保存、数据集版本门、测试与文档 | ready-for-review | 实现与离线门通过；真实隐藏事件和按住重复仍待 Claude 补测；Q-025 未批准，未换色。已交回 Claude |
 | Codex 第 7 轮 | [TASK-101](tasks/TASK-101-face-pose-association.md) 人脸与姿态关联修正（D1，契约 r2） | ready | 阶段 3 的作业者锁定依赖它 |
 | Codex 第 7 轮 | [TASK-150](tasks/TASK-150-new-sessions-and-webcam-intake.md) 新录制与 webcam 接入（D26） | blocked（等 TASK-125 第 2 轮） | 契约 r2 已按第 5 轮产物修订；你标注期间不碰 `roi_r2` 的标签 |
 | Codex 第 7 轮 | TASK-140 第 3 轮：只补测试与正式字段说明 | ready | 见 TASK-140 §3 |

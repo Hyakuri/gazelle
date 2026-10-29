@@ -1,6 +1,6 @@
 # TASK-125：标注方案 r3——“手部/手中物体”类别与注视点
 
-状态：changes-requested（Claude 2026-10-29 第 5 轮审查）。第 2 轮排在第 6 轮，是该轮唯一一项，完成后立即交回 Claude；正式标注在第 2 轮通过审查后开始
+状态：ready-for-review（Codex 2026-10-29 第 6 轮实现已推送；真实隐藏事件与按住重复待独立补测，见 §2）。已交回 Claude；正式标注在第 2 轮通过审查后开始
 创建：2026-10-18（Asia/Tokyo）　协调者：Claude　实现者：Codex　验收：Claude，之后用户在独立 checkout 验收
 依据：用户 2026-10-18 的目标说明（`docs/requirements/PROJECT_GOALS_CN.md` v3）与决定 D20；[验证集设计](../../design/VALIDATION_SET_DESIGN.md) §10（r3）。
 授权：2026-10-14 本地修改与本地运算授权；作业数据只读；正式区域的类别重新导出以 Q-017 的确认为准，用户已于 2026-10-29 确认。

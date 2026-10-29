@@ -231,6 +231,35 @@
         "docs/rules/COLLABORATION_PLAN_CN.md": "e9c36d5c64b7f2d3599df563eb4eb082052e18b3cecbd2233f49dadc77144a76",
         "docs/rules/DOCS_SYSTEM_CN.md": "03ef9ddd4c0982bbb6cd2f19ccf953de512ee3299e8bb9d049e5ad01b1219ff7"
       }
+    },
+    {
+      "date": "2026-10-29",
+      "documents": {
+        "COLLAB": "0.9.1",
+        "DOCS": "1.1.1",
+        "GOALS": "3.2.1",
+        "PERCEPTION": "1.1.2",
+        "STAGE3": "3.1.1",
+        "SYSTEM": "1.2.1",
+        "VALSET": "4.2.0"
+      },
+      "files": {
+        "docs/archive/baselines/B009/README.md": "78b08c9f0486ce3f39558c87668b4593622563aa5a6e45f9caea42d18fecf36b",
+        "docs/archive/baselines/B009/index.html": "df13bc6d8c2087785bbca2be970dd7b8d2edafd78fc976c2edffba61b7be88ae"
+      },
+      "id": "B009",
+      "note": "第 6 轮结束",
+      "sources": {
+        "docs/collab/ROADMAP.md": "258ea5de836b952ba9179818b4e9e4571c712f5586e5e59906289eab3c408421",
+        "docs/collab/STATE.md": "2cce3e3623aff9ae57499f743dec1f5ce48a6eda1f78e655b70dd94148fb606c",
+        "docs/design/PERCEPTION_D1_D2_DESIGN.md": "c3107eeeeb58d2695e1d78254f228500d3340a89430c00299b149d08e0dd5429",
+        "docs/design/STAGE3_GAZE_ATTENTION_CN.md": "318a850d72980050f3dde1f729d3a13f027b58291c848e3ecdf29ec8d90f2b4f",
+        "docs/design/SYSTEM_OVERVIEW_CN.md": "a194643961d7aa5af8d1504518f1d0467a9e429d25ae813bdcb6ad09b0a104a3",
+        "docs/design/VALIDATION_SET_DESIGN.md": "82d5a46486b6f3a2097f11979f51605783deffb192ddf19c94ba8c359fc43a20",
+        "docs/requirements/PROJECT_GOALS_CN.md": "fd39ff2e5929d9c493536ec085181f2afaffcf0c3c50e8e0f03b26954f670f97",
+        "docs/rules/COLLABORATION_PLAN_CN.md": "e9c36d5c64b7f2d3599df563eb4eb082052e18b3cecbd2233f49dadc77144a76",
+        "docs/rules/DOCS_SYSTEM_CN.md": "03ef9ddd4c0982bbb6cd2f19ccf953de512ee3299e8bb9d049e5ad01b1219ff7"
+      }
     }
   ],
   "documents": [

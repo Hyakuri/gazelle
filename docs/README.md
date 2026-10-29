@@ -2,7 +2,7 @@
 
 > 本文件由 `python -m tools.docs build` 自动生成，与 [总览网页](portal/index.html) 内容相同，不要手改。规则见 [文档记录体系与版本规则](rules/DOCS_SYSTEM_CN.md)。
 
-当前基线：**B008**（2026-10-29）；其后有更新的来源：`docs/collab/STATE.md`。
+当前基线：**B009**（2026-10-29）；其后有更新的来源：`docs/collab/STATE.md`。
 
 ## 1. 总览
 
@@ -10,7 +10,7 @@
 | --- | --- |
 | 当前阶段 | 阶段 2：作业数据可用、多机同步、正确性修复，建立区域标注 |
 | 当前任务 | 第 6 轮：`docs/collab/tasks/TASK-125-annotation-points-and-hands-class.md` §3 的“第 2 轮要求”：注视点与标记互斥、组合键与按住重复、页面隐藏时的保存、数据集版本门、测试与文档。换色（第 8 条）只在 Q-025 第 1 项为“已同意”时做 |
-| 轮到 | Codex |
+| 轮到 | Claude |
 | 最近更新 | 2026-10-29 20 时起，Claude 第 5 轮审查：复跑离线门（708 tests，0 skip）；独立复算不确定区间、抽样、帧与时钟；在正式数据集上只读、写临时标签的浏览器实测；两个只读子代理做代码审查与变异测试。TASK-140 第 2 轮、TASK-124 第 2 轮通过，TASK-125 changes-requested；发布 VALSET 4.2.0（协调者的补充说明）；新增 Q-025；第 4 轮记录与本轮开始时的说明移入 HISTORY；第 6 轮交给 Codex。此前同日的更新记录见 HISTORY |
 
 ### 需要你处理
@@ -271,7 +271,7 @@ flowchart LR
 | Codex 第 5 轮 | [TASK-140](collab/tasks/TASK-140-sync-validation-and-steps.md) 第 2 轮：切点不确定区间、时钟同源帧补读、正式切换与两个数据集 | accepted | Claude 2026-10-29 审查通过，独立复算一致 |
 | Codex 第 5 轮 | [TASK-124](collab/tasks/TASK-124-annotation-hardening.md) 第 2 轮：手动逐步的写盘降频等 | accepted | 页面隐藏时的保存冲突并入 TASK-125 第 2 轮 |
 | Codex 第 5 轮 | [TASK-125](collab/tasks/TASK-125-annotation-points-and-hands-class.md) 标注方案 r3 与 r3.1 | changes-requested | 见 TASK-125 §3 |
-| Codex 第 6 轮 | TASK-125 第 2 轮：注视点与标记互斥、组合键与按住重复、页面隐藏时的保存、数据集版本门、测试与文档 | ready | 本轮唯一一项，完成后立即交回 Claude；换色只在你同意 Q-025 第 1 项后做 |
+| Codex 第 6 轮 | TASK-125 第 2 轮：注视点与标记互斥、组合键与按住重复、页面隐藏时的保存、数据集版本门、测试与文档 | ready-for-review | 实现与离线门通过；真实隐藏事件和按住重复仍待 Claude 补测；Q-025 未批准，未换色。已交回 Claude |
 | Codex 第 7 轮 | [TASK-101](collab/tasks/TASK-101-face-pose-association.md) 人脸与姿态关联修正（D1，契约 r2） | ready | 阶段 3 的作业者锁定依赖它 |
 | Codex 第 7 轮 | [TASK-150](collab/tasks/TASK-150-new-sessions-and-webcam-intake.md) 新录制与 webcam 接入（D26） | blocked（等 TASK-125 第 2 轮） | 契约 r2 已按第 5 轮产物修订；你标注期间不碰 `roi_r2` 的标签 |
 | Codex 第 7 轮 | TASK-140 第 3 轮：只补测试与正式字段说明 | ready | 见 TASK-140 §3 |
@@ -638,6 +638,7 @@ flowchart TB
 
 | 基线 | 日期 | 说明 | 文档版本 | 快照 |
 | --- | --- | --- | --- | --- |
+| B009 | 2026-10-29 | 第 6 轮结束 | COLLAB v0.9.1、DOCS v1.1.1、GOALS v3.2.1、PERCEPTION v1.1.2、STAGE3 v3.1.1、SYSTEM v1.2.1、VALSET v4.2.0 | [网页](archive/baselines/B009/index.html) |
 | B008 | 2026-10-29 | 第 5 轮审查：验证集设计 4.2.0 的补充说明 | COLLAB v0.9.1、DOCS v1.1.1、GOALS v3.2.1、PERCEPTION v1.1.2、STAGE3 v3.1.1、SYSTEM v1.2.1、VALSET v4.2.0 | [网页](archive/baselines/B008/index.html) |
 | B007 | 2026-10-29 | 第5轮结束 | COLLAB v0.9.1、DOCS v1.1.1、GOALS v3.2.1、PERCEPTION v1.1.2、STAGE3 v3.1.1、SYSTEM v1.2.1、VALSET v4.1.1 | [网页](archive/baselines/B007/index.html) |
 | B006 | 2026-10-29 | 录制称呼统一为文件夹名；Q-024 已确认（2026-10-29） | COLLAB v0.9.1、DOCS v1.1.1、GOALS v3.2.1、PERCEPTION v1.1.2、STAGE3 v3.1.1、SYSTEM v1.2.1、VALSET v4.1.1 | [网页](archive/baselines/B006/index.html) |
