@@ -241,6 +241,113 @@ git status --short
 
 无新增。Q-025 的颜色偏好仍按现有表等待，未重复请求授权。用户独立 checkout 验收、正式科学标注和模型精度评估均未执行。
 
+### 第 7 轮实施报告：第 3 轮修订（2026-10-30，Asia/Tokyo）
+
+- **提交**：协调文档 `36aa643b641a45e7544f1e7e81371d86d4639509`（`Record coordinator updates`）；实现 `806068cc4f255ccc6673c8c0350ae26aa9e2eb8b`（`Fix annotation shortcut repeats and apply approved hands color`），均已推送 `feature/stage2-correctness`。PR #6 正文已按来源文件同步，draft、标题、base 保持原状。
+- **范围与状态**：只实施本节下方第 3 轮要求 1–7；主线程 Inline Execution，无子代理。已实施、已静态检查、已离线验证、已实际运行下述数据与浏览器检查；**ready-for-review，未独立验收**。真实按住重复的浏览器验证仍待 Claude，不能宣布全部浏览器验收通过。正式标注继续暂停；未做第 8 轮或阶段 3。
+- **证据根目录**：`C:\Users\yun\Documents\Claude_Code\gazelle_runs\codex-round7\`，以下日志和脚本均相对此目录；没有上传媒体、标签、原始/派生数据或缓存。UTC 自动备份名仍为 20261029，报告日期采用 JST 2026-10-30。
+
+#### 改动与预检
+
+- 重复的页面快捷键先阻止浏览器默认动作再返回，方向键保留重复。Ctrl/Cmd+Z 必须不带 Shift、Alt；重复撤销阻止默认动作且不再次撤销。未采用按钮失焦，不改变原有焦点导航。
+- Node 补充 S/O 取消及撤销恢复、重复事件 default prevention、首次生效后保持不变、Ctrl/Meta 的 Shift/Alt/repeat 组合、INPUT/TEXTAREA/SELECT 焦点隔离。文档测试防止两份 USAGE 重复说明旧版本重新标注；默认类别测试核对新颜色。
+- 四份英中用户文档及两份中文指南同步撤销范围、没有重做、按住只算一次及 `#b6ff00`；标注指南 §5 补互斥检查。删除两份 USAGE 中未覆盖的极深 JSON 一行报错保证，不修改解析器或既有结构校验。
+- 新目录 cwd/Git root 均为 `C:\Users\yun\Documents\Claude_Code\hyakuri-gazelle`，接手 HEAD `e605687ba9965bcf63f0825ce73689398978ce3e`，`writer=none/next_actor=codex`。普通 `codexsandboxonline` 上仓库、三个外部输出目录及 TEMP 的隔离目录/文件创建、读取、删除全部通过；原始数据只读列出九个录制目录，没有重跑 inventory。
+- `Gazelle-next` Python 3.14.8；FFmpeg/ffprobe 仅版本查询（`2025-03-31-git-35c091f4b7-full_build-www.gyan.dev`）；RTX 4080 SUPER 驱动 617.14，3051/16376 MiB，仅记录。项目 TOML 解析确认三个可写目录和网络设置，普通实际访问探针另行验证，未用提权成功冒充普通权限通过。
+- 普通 Git 远端读取成功；普通 `gh` 认证仍失败，按 2026-10-16 常设批准仅 Git/GitHub 命令使用 `yun` 上下文，认证 Hyakuri 有效，PR #6 为本分支的 open draft。未改配置、凭证、Conda 或依赖。
+
+#### 命令、结果、失败与跳过
+
+Python 均为 `C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe`；`PYTHONPYCACHEPREFIX=%TEMP%\gazelle-r7-pycache`、`PYTHONIOENCODING=utf-8`。Node 为现有 v24.19.0。长 CPU/文件校验命令以 BelowNormal 优先级运行。
+
+| 命令 | 结果与证据 |
+| --- | --- |
+| `node tests/annotation_page_test.cjs`（先测试后修复） | 原实现 exit 1：重复事件未 preventDefault；`offline-red.log`。修复后通过；`annotation-final.log` |
+| `python -m unittest tests.test_validation_points tests.test_usage_docs -v` | 聚焦 36 tests 通过；新增颜色/文档断言在修改前失败；`focused.log`、`docs-color-red.log` |
+| `python -m unittest tests.test_validation_points.PointLabelsTest.test_export_cli_parses_backup_flag_before_rendering -v` | 导出 CLI 的 `%` 帮助文本在 Python 3.14 报错，修复前 exit 1，修复后 exit 0；`export-cli-red.log`、`export-cli-green.log` |
+| `python -m compileall main.py gazelle tests tools/validation` | exit 0；`compileall-final.log` |
+| `python -m unittest discover -s tests -v` | **717 tests / 32.143s / 0 skip / exit 0**；`unittest-final.log`。此前 716 项为加入导出 CLI 回归测试前的证据，不冒充最终门 |
+| `python main.py --help`、`python main.py --list-models` | exit 0；`help.log`、`list-models.log`；未构造模型 |
+| `node tests/roi_page_test.cjs` | exit 0；`roi-page-final.log` |
+| `node undo-negative.cjs shift`、`node undo-negative.cjs repeat` | 两项仅在内存中恢复旧撤销缺陷，均被新增断言捕获（预期 exit 1）；仓库文件不变 |
+| `python color_exports.py prepare` | 校验两集全部 16,200 帧哈希，记录旧元数据、导出与备份列表；计算 13 色 CIE76；exit 0 |
+| `python -m tools.validation.render_roi_reference --regions-path ..\gazelle_data\workdata\roi\roi_regions.json --candidates ..\gazelle_data\workdata\roi\candidates.json --backup-existing` | 第一次在 argparse 构造阶段失败，**没有导出或改写**；核对全部哈希与备份列表不变后修复 CLI。随后唯一一次实际导出成功，8 张 PNG 与旧文件逐字节一致；`export.log`、`export-completed.log` |
+| `python color_exports.py update-datasets` | 先核对区域、候选清单、8 张 PNG、旧导出备份及颜色唯一差异，再改两个数据集的类别和 manifest；exit 0 |
+| `python -m tools.validation.extract_frames --dataset-root ..\gazelle_validation\roi_r2 --validate-only` | 27 segments / 8100 frames / valid true / exit 0；`validate-roi_r2.log` |
+| 同上，`--dataset-root ..\gazelle_validation\roi_r2_trial` | 27 segments / 8100 frames / valid true / exit 0；`validate-roi_r2_trial.log` |
+| `python -m tools.validation.labels validate --dataset-root ..\gazelle_validation\roi_r2 --labels-path ..\gazelle_runs\codex-round7\browser\green.json --allow-incomplete` | 27 段草稿结构通过，exit 0；仅临时标签，**不是正式完成验收** |
+| `python audit.py` | 正式元数据与本轮导出后哈希一致、两集无 labels.json、7 项内置浏览器检查通过、8797/8798 无监听、Edge 临时配置清理；exit 0 |
+| `python -m tools.docs build`、`python -m tools.docs check`、`git diff --check` | 通过；报告/STATE 变动后再次生成，交接执行本轮 snapshot |
+
+- 测试辅助脚本的首次生效断言最初在第 5 步测试 Delete，但那里没有类别变化点；改为第 0 步后通过，没有放宽生产逻辑。一次写错 Node 文件名 `roi_editor_test.cjs` 导致 MODULE_NOT_FOUND；改用仓库实际 `roi_page_test.cjs` 后通过，原日志保留。
+- `rg` 对 PowerShell 未展开的文件通配路径报错后改用明确路径。非致命输出为坏 MP4 隔离用例的 `moov atom not found` 和 Git LF/CRLF 提示。无新增 skip，无未授权安装。
+- 未运行真实模型/CUDA/MediaPipe 推理、FFmpeg 转码、下载、训练或正式实验；未重复第 6 轮已经由 Claude 完成的完整 pilot/隐藏页面/慢帧验收。真实按住重复的浏览器检查受下述 B 级问题影响。
+
+#### 一次正式导出与两个数据集
+
+- 旧导出完整改名至 `gazelle_data\workdata\roi\export-backup-20261029T152657019554Z`，备份各文件哈希与导出前一致。导出目录及移动目标均先 resolve 并确认在指定 ROI 根目录内。
+- 两个数据集分别保留 `classes.json.before-task125-r3-20261030` 与 `manifest.json.before-task125-r3-20261030`，备份哈希与旧文件一致。只改手部类颜色和 manifest 的 `classes_sha256`；27 段定义、所有帧、采样、版本、来源字段不变。试用集继续使用 default-trial，无新增参考图。
+- 原区域多边形与颜色完全不改；参考图及 7 张叠加图字节不变。完整前后及备份哈希在 `before-export.json`、`after-export.json`、`final-audit.json`，这些外部证据没有上传 Git。
+
+| 文件 | 导出前 SHA-256 | 导出后 SHA-256 |
+| --- | --- | --- |
+| `roi/roi_regions.json` | `6511ff108c397e4d7dc474bddf6531810f505443f80cf8aca4967c8d4cddf0bb` | 不变 |
+| `roi/roi_reference.png`（数据集内副本亦不变） | `bb88e34bb6bcd653aba27b21da5e32498a4e7383823d5cb38fde1fb9b1db59f6` | 不变 |
+| `roi/classes.json` 与 `roi_r2/classes.json` | `2871cdb85817a4c77f00c7640a95dd451afdc551504b540473e8c0d6b72ad2d8` | `79a85dabac2f170be4d92be2d1cc44cf28b99c9cdbb7942cddb1d9d6cf616aa7` |
+| `roi/roi_regions.complete.json` | `8ef3f24cc54e59000bca3e69bcb999e09fff1d39f18f757009e1e0b3d92ed70d` | `153f4b254729f3f058294e167ea14479b9c88546769f758bd648c4a5dbc9a9cd` |
+| `roi_r2/manifest.json` | `7cb207798dc284e0c11f0f6e1c36000ec5273c7b38d7987b55cc706efd8634ae` | `cce3365003c4b0e758348280e484364bd4f9fee83a3808d6ac64ca6838d207af` |
+| `roi_r2_trial/classes.json` | `0767bad7b01ed1b73eb167b12a4d7857384c87b366562f62820225ce4f0a72d9` | `3d1056b1d2167c28a22b8301dc9ab4f1deb9f406ace1eda5e89a24a96b2d9113` |
+| `roi_r2_trial/manifest.json` | `45dc96fd8093d72b34c12510979245bde9541f494e833fb00ca842814353958f` | `916bcb6f025c62d8626b8210dd459345b75667c2f5c62f4f2d5bf3d6a0ee5b1e` |
+
+CIE76 由 sRGB 线性化、D65 XYZ/CIELAB 和 Lab 欧氏距离独立计算；结果保留两位，完整数值在 `color-differences.json`。以下覆盖全部正式类别、默认类别及调色板的 13 个其他不同颜色。
+
+| 颜色 | 对应类别/用途 | 与 `#b6ff00` 的 CIE76 |
+| --- | --- | --- |
+| `#d4ac0d` | 正式 item_box；调色板 | 58.02 |
+| `#16a085` | 正式 work_area_1；调色板 | 91.19 |
+| `#e84393` | 正式 item_area_2；调色板 | 157.19 |
+| `#34495e` | 正式 finish_area；调色板 | 130.18 |
+| `#9b59b6` | 正式/默认 cell_other；默认 work_cell | 163.62 |
+| `#c0392b` | 正式/默认 away | 123.90 |
+| `#7f8c8d` | 正式/默认 absent | 107.62 |
+| `#bdc3c7` | 正式/默认 unknown | 104.64 |
+| `#e67e22` | 默认 pick_right | 93.21 |
+| `#2980b9` | 默认 work_front | 139.77 |
+| `#27ae60` | 默认 place_left | 65.59 |
+| `#6c5ce7` | 调色板 | 188.29 |
+| `#00b8d9` | 调色板 | 120.80 |
+
+新色最小 **58.0235**（对 `#d4ac0d`），其余颜色两两最小 **21.4303**（`#7f8c8d` 对 `#bdc3c7`），满足契约的 58.0/21.4 预期与下限。
+
+#### 浏览器、活动与清理
+
+- 复制 Claude 的临时 Edge 辅助脚本到 `browser/`，改用端口 8797/8798、临时 labels、一次性配置目录。独立 Edge 155.0.4283.62 的 `Browser.getVersion` 可读，但页面控制连接关闭（CDP 1006，诊断最终停在 `Page.enable`）。测试未达到注入真实输入阶段，**没有有效的 Edge 红/绿结果**。换用已有 WebSocket 客户端、禁止测试浏览器 GPU 呈现、使用初始空白目标，仍未解决。中间的辅助脚本导出名称错误已修正，无生产改动或依赖安装。日志 `browser/red*.log`、`probe*.log` 保留。
+- 用内置浏览器访问同一真实服务（`127.0.0.1:8798`），正式数据只读、外部 `browser/green.json` 临时标签。未替换 requestAnimationFrame，未注入标注状态或合成 keydown；通过支持的点击/按键 API 操作。
+- `browser/iab-results.json` 的 **7 项通过**：Ctrl+Shift/Alt+Z 无改动；Cmd+Shift/Alt+Z 无改动；普通 Ctrl+Z 只撤销最后类别；S 与 O 各自创建/取消标记；撤销按钮有焦点时内置浏览器长按空格不改类别/标记；新手部色同时显示于类别按钮与时间轴。按钮内联色为 `#b6ff00`，时间轴为 `rgb(182, 255, 0)`；`browser/color-proof.png` 只截取类别控件，不含视频。
+- **长按一项只证明该次界面结果，不证明真实 repeat=true**。Node 覆盖重复处理与默认阻止，不能替代真实浏览器验收。临时 pilot 未完成，只做草稿校验；保存 13 次，无正式标签。
+- 实际活动：CPU JSON/哈希、Pillow PNG 导出、OpenCV JPEG 校验、本机 HTTP/浏览器呈现、GitHub 读取与发布；GPU/FFmpeg/ffprobe 仅预检查询，无模型推理、Hub/模型下载或模型缓存更新。浏览器临时配置/缓存确实创建，随后清理；不将“无模型 GPU 推理”扩展成浏览器绝无 GPU 呈现。
+- 页面已关闭，两个服务已停止（停止进程 exit 1 为主动中断），8797/8798 无监听；临时 Edge profile 全清理。保留外部日志和临时标签供复核，保留仓库原有忽略目录，不清理未知本地文件。
+
+#### 自主决定（A 级）
+
+- 修复默认动作顺序即可保留焦点，不采用可选 blur；输入框与组合键仍优先隔离。
+- 按契约允许的两选一删除极深 JSON 文档保证，保留已有结构测试，不扩展解析协议。
+- 正式命令暴露 Python 3.14 argparse 对 `%` 的检查；最小修复为帮助字符串 `0.5%%`，显示仍为 `0.5%`。先以 mocked render 重现，再修复；核实零正式改动后才进行唯一一次实际导出。区域阈值与导出语义不变。
+- Edge 能力失败不扩大权限、不修改配置，继续其余工作，以内置浏览器完成可验证的部分并如实提交 B 级待复测。
+
+#### 范围外改动
+
+- `tools/validation/render_roi_reference.py` 的一处 argparse 帮助转义：第 3 轮未单列此代码修复，但它直接阻塞授权的正式 CLI 导出。相邻回归测试在本轮已涉及的 `tests/test_validation_points.py`；没有扩展其他任务或公共协议。
+
+#### 待 Claude 判断（B 级）
+
+- **真实按住重复验收未完成**：证据与尝试见上；没有确认 Edge 连接关闭的根因，不把它推断为业务代码故障。推荐 Claude 按 STATE 原计划，在自己的已验证环境、新端口/临时标签上复跑焦点空格、连续 S/O/X/Delete/数字及 Ctrl/Cmd+Z，确认 repeat=true 时默认动作被阻止、只生效一次；并复核 Shift/Alt、箭头与新颜色。利益是沿用已成功的真实事件路径；代价是本轮不能给出全部浏览器验收通过的结论。未临时扩大执行权限或恢复正式标注。
+- 请独立复核本轮唯一实际导出、所有备份与哈希，以及 argparse 的 A 级兼容性修复；用户独立 checkout 最终验收尚未进行。
+
+#### 待用户决定（C 级）
+
+- 无。Q-025 已授权并完成换色；本轮不要求新的环境或权限变更。
+
 ## 3. 审查结论（Claude 追加）
 
 ### 2026-10-29 第 5 轮审查（Claude）
