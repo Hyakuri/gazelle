@@ -81,11 +81,53 @@ def viewed_steps(ranges,count):
     return steps
 
 
+def point_required(label):
+    return label is not None and label not in ('away','absent','unknown')
+
+
+def validate_points(row,require_coverage=False):
+    points,skips=row.get('points'),row.get('point_skips')
+    if not isinstance(points,list) or not isinstance(skips,list):
+        raise ValueError('points and point_skips must be lists')
+    runs=row['labels'];by_start={r['start_step']:r for r in runs}
+    if any(a['label']==b['label'] for a,b in zip(runs,runs[1:])):
+        raise ValueError('Adjacent label runs with the same class must be merged')
+    steps=set();groups={start:[] for start in by_start}
+    for point in points:
+        if (not isinstance(point,dict) or set(point)!={'step','x','y'}
+                or not _integer(point['step']) or not 0<=point['step']<row['step_count']
+                or point['step'] in steps
+                or any(type(point[k]) not in (int,float) or not 0<=point[k]<=1 or not math.isfinite(point[k])
+                       for k in ('x','y'))):
+            raise ValueError('Invalid or duplicate attention point')
+        run=next(r for r in runs if r['start_step']<=point['step']<r['end_step_exclusive'])
+        if not point_required(run['label']):raise ValueError('Attention point in an ineligible run')
+        steps.add(point['step']);groups[run['start_step']].append(point['step'])
+    for values in groups.values():
+        ordered=sorted(values)
+        if any(b-a<5 for a,b in zip(ordered,ordered[1:])):
+            raise ValueError('Attention points in one run must be at least 5 steps apart')
+    skipped=set()
+    for skip in skips:
+        if (not isinstance(skip,dict) or set(skip)!={'step','reason'} or not _integer(skip['step'])
+                or skip['step'] not in by_start or skip['step'] in skipped
+                or skip['reason'] not in ('unsure','out_of_view')):
+            raise ValueError('Invalid or duplicate point skip')
+        run=by_start[skip['step']]
+        if not point_required(run['label']) or (skip['reason']=='out_of_view' and run['label'] not in ('hands_object','cell_other')):
+            raise ValueError('Point skip reason is not allowed for this run')
+        skipped.add(skip['step'])
+    missing=[r['start_step'] for r in runs if point_required(r['label']) and not groups[r['start_step']] and r['start_step'] not in skipped]
+    if require_coverage and missing:
+        raise ValueError('Missing attention point or point skip at run starts: '+str(missing))
+    return not missing
+
+
 def validate_document(document,manifest,classes,allow_incomplete=False,segments=None):
     labels=validate_classes(classes)
-    if isinstance(document,dict) and document.get('version')==1:
-        raise ValueError('Annotation version 1 is unsupported; reannotate with the new tool')
-    if (not isinstance(document,dict) or document.get('version')!=2
+    if isinstance(document,dict) and document.get('version') in (1,2):
+        raise ValueError('Annotation version {} is unsupported; reannotate with the new tool'.format(document['version']))
+    if (not isinstance(document,dict) or document.get('version')!=3
             or not _integer(document.get('revision')) or document['revision']<0
             or not isinstance(document.get('segments'),list)):
         raise ValueError('Invalid annotation document')
@@ -114,6 +156,7 @@ def _validate_segment(row,source,labels,incomplete):
     values=expand_runs(row.get('labels'),row['step_count'],labels,incomplete)
     viewed=viewed_steps(row.get('viewed_ranges'),row['step_count'])
     validate_other_people(row.get('other_people'),row['step_count'])
+    validate_points(row,require_coverage=not incomplete or row.get('finished_at') is not None)
     if (not isinstance(row.get('note'),str) or len(row['note'])>10000
             or not isinstance(row.get('annotator'),str) or not row['annotator']
             or type(row.get('active_seconds')) not in (int,float)
@@ -143,6 +186,8 @@ class LabelStore:
         if self.path.exists():
             document=json.loads(self.path.read_text(encoding='utf-8'))
             if not isinstance(document,dict):raise ValueError('Annotation document must be an object')
+            if document.get('version') in (1,2):
+                raise ValueError('Annotation version {} is unsupported; reannotate with the new tool'.format(document['version']))
             if any(document.get(k)!=v for k,v in self.fingerprint.items()):
                 raise ValueError('Labels belong to a different manifest or class configuration')
         else:
@@ -150,8 +195,8 @@ class LabelStore:
             for source in self.manifest['segments']:
                 rows.append(dict({k:source[k] for k in ('segment_id','session','start_wall_time','step_hz','step_count')},
                                  labels=[dict(start_step=0,end_step_exclusive=source['step_count'],label=None)],
-                                 viewed_ranges=[],other_people=[],note='',annotator=annotator,started_at=None,finished_at=None,active_seconds=0.))
-            document=dict(version=2,revision=0,**self.fingerprint,segments=rows)
+                                 points=[],point_skips=[],viewed_ranges=[],other_people=[],note='',annotator=annotator,started_at=None,finished_at=None,active_seconds=0.))
+            document=dict(version=3,revision=0,**self.fingerprint,segments=rows)
         self.data=validate_document(document,self.manifest,self.classes,allow_incomplete=True)
         self.saved_hash=hash_file(self.path) if self.path.exists() else None
 
@@ -190,19 +235,22 @@ class LabelStore:
             saved_steps=viewed_steps(row['viewed_ranges'],row['step_count'])
             if not saved_steps.issubset(steps):
                 raise ValueError('viewed_ranges may only grow')
-            changed=any(payload.get(key)!=row[key] for key in ('labels','other_people'))
+            changed=any(payload.get(key,row[key])!=row[key] for key in ('labels','other_people','points','point_skips'))
             row['viewed_ranges']=copy.deepcopy(viewed)
             for key in ('labels','other_people','note'):
                 row[key]=copy.deepcopy(payload.get(key))
+            for key in ('points','point_skips'):
+                row[key]=copy.deepcopy(payload.get(key,row[key]))
             values=expand_runs(row['labels'],row['step_count'],validate_classes(self.classes),True)
+            points_complete=validate_points(row)
             timestamp=now()
             finish=payload.get('finish',False)
             if type(finish) is not bool:raise ValueError('finish must be boolean')
             if changed:row['finished_at']=None
             finish_error=None
             if finish:
-                if changed or None in values or len(saved_steps)!=row['step_count']:
-                    finish_error=ValueError('Completion requires previously saved viewing and labels for every step')
+                if changed or None in values or len(saved_steps)!=row['step_count'] or not points_complete:
+                    finish_error=ValueError('Completion requires previously saved viewing, labels and attention points or skips for every eligible run')
                     if steps==saved_steps:raise finish_error
                 else:
                     row['finished_at']=timestamp

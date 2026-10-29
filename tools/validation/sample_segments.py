@@ -179,7 +179,7 @@ def create_dataset(proxies_root,dataset_root,seed=20261015,per_session=4,seconds
     manifest=plan(proxies_root,seed,per_session,seconds,sessions)
     if regions and hash_file(regions_path)!=marker['regions_sha256']:
         raise ValueError('Regions changed during sampling; export again')
-    manifest.update(regions_sha256=hash_file(regions_path) if regions else None,
+    manifest.update(annotation_schema_version=3,regions_sha256=hash_file(regions_path) if regions else None,
                     regions_path=str(Path(regions_path).resolve()) if regions else None,
                     classes_source='completed-regions' if regions else 'default-trial')
     if root.exists():

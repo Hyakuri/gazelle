@@ -593,8 +593,8 @@ python -m tools.validation.render_roi_reference --regions-path "$data\roi\roi_re
 无效或自相交多边形不能保存；续标请保留原候选清单。Ctrl+C 停止服务。
 导出的类别保留目标区域颜色，固定类别颜色来自配置。
 先画目标区域，最后画工作区。重叠处点击选中最小区域，所选顶点始终显示在所有多边形上方。
-双击闭合不会增加重复顶点，自定义目标自动使用不同颜色。导出要求 1–6 个目标、恰好一个工作区，
-且没有未闭合草稿。数字键按目标绘制顺序分配，之后为 `cell_other`、`away`、`absent`（最多 1–9）；
+双击闭合不会增加重复顶点，自定义目标自动使用不同颜色。导出要求 1–5 个目标、恰好一个工作区，
+且没有未闭合草稿。数字键按目标绘制顺序分配，之后为 `hands_object`、`cell_other`、`away`、`absent`（最多 1–9）；
 `unknown` 为 0。删除后重画会改变顺序。自动保存不表示完成：成功导出才写入
 `roi_regions.complete.json`（version 2、`completed_at`、`regions_sha256`、`export_root`，以及
 `exports` 中 `roi_reference.png` 与 `classes.json` 的哈希）。后续修改使完成状态失效，
@@ -715,17 +715,29 @@ python -m tools.validation.labels validate --dataset-root $dataset --labels-path
 首个 null 步，否则停在第 0 步。
 
 界面支持播放、步进、数字键变化点、删除、撤销、彩色时间轴和他人入镜区间；当前画面加载完成后
-才接受判断。标注 version 2 记录合并且只增不减的 `viewed_ranges`；未看步骤即使有类别仍叠加斜线。
-全部看过且有类别后，点击“本段完成”才写入 `finished_at`；修改类别或他人区间会清空完成时间。
+才接受判断。标注 version 3 记录合并且只增不减的 `viewed_ranges`；未看步骤即使有类别仍叠加斜线。
+全部看过、有类别且注视点规则满足后，点击“本段完成”才写入 `finished_at`；修改类别、点、跳过标记或他人区间会清空完成时间。
 完成条件只认此前已保存的已看范围；同请求新增范围照常保存，但不能用于本次完成判断。
 修改较长片段的类别后，确认完成前请回放检查，因为“已看”只表示显示过。
 播放或未播放时逐步、跳转、定位变化点产生的已看变化，最多每秒保存一次；暂停正在进行的播放、换段、完成、隐藏或关闭前立即写入。
 隐藏/关闭时的 `keepalive` 不等待正在进行的保存，服务端仍检查 revision。类别、他人区间和备注不降频，保存失败即停止编辑。
 `labels validate` 的结构错误（含顶层非对象或嵌套过深的 JSON）也输出包含段号与原因的一行错误、退出码 1，不打印 traceback。
 区域保存/导出状态以服务端为准，含无变化保存。
-version 1 标注明确拒绝，需用新工具重新标注。严格校验要求这三项同时满足；可重复给出 `--segment ID`
+version 1、2 标注明确拒绝，需用新工具重新标注。严格校验要求全部完成条件同时满足；可重复给出 `--segment ID`
 只对指定段严格检查，其余段检查结构。草稿中的未标注与主动选择 `unknown` 不同；`--allow-incomplete` 只检查草稿，
 不代表完成。详见[中文标注指南](../../tools/validation/ANNOTATION_GUIDE_CN.md)。
+判断依据为眼睛优先于头部、头部优先于手部。看手或手中物体时，`hands_object` 优先于它所在的固定区域。
+四个目标时键位为 1–4 目标、5 手部/手中物体、6 `cell_other`、7 `away`、8 `absent`、0 `unknown`。
+单击全局视图添加/替换当前步的点；X 删除点，S 切换 `unsure` 跳过，O 切换 `out_of_view` 画面外（仅手部/其他）。
+Delete 仍删除类别变化点。每个目标/手部/其他片段至少有一点或跳过，额外点在同一片段内至少相隔 5 步（1 秒）；
+away/absent/unknown 不点。当前点高亮，同片段其他点淡色显示；时间轴显示点与缺点片段。
+改类别自动清理不兼容的点和标记并提示，撤销一并恢复。合并片段后若点间隔冲突，保留较早的点。
+version 3 新增 `points: [{step, x, y}]`，坐标为 1920×1080 全局代理帧的有限归一化值 [0, 1]，步号唯一；
+`point_skips: [{step, reason}]` 的 step 为片段起点，reason 为 `unsure` 或 `out_of_view`。
+完成判断还要求类别、点与跳过标记此前已保存。新数据集 manifest 记录 `annotation_schema_version: 3`，旧标注需重新标注。
+经授权重新导出时，在前述 `tools.validation.render_roi_reference` 命令追加 `--backup-existing`，
+把旧类别、参考图、叠加图和完成标记改名到带日期的备份目录，再用本机 CPU/Pillow 和已有字体生成新导出。
+区域 JSON 不变；不调用模型、GPU、FFmpeg 可执行程序或网络。
 视频、帧和标注都保存在 Git 之外，不上传。
 
 ## 16. 验证命令

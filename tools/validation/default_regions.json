@@ -7,6 +7,7 @@
   ],
   "custom_colors": ["#d4ac0d", "#16a085", "#e84393", "#34495e", "#6c5ce7", "#00b8d9"],
   "fixed_classes": [
+    {"label": "hands_object", "name_zh": "手部/手中物体", "color": "#f1c40f", "definition": "自己的手或手中、正被手移动的工件与工具；优先于区域"},
     {"label": "cell_other", "name_zh": "工作区内其他位置", "color": "#9b59b6"},
     {"label": "away", "name_zh": "工作区外", "color": "#c0392b"},
     {"label": "absent", "name_zh": "作业者不在工位", "color": "#7f8c8d"},

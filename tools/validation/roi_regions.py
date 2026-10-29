@@ -117,7 +117,7 @@ def validate(payload):
         if row['kind'] == 'target':
             targets += 1
             if targets + sum(row['label'] != 'unknown' for row in fixed) > 9:
-                raise ValueError('At most six target regions fit the digit keys 1 to 9')
+                raise ValueError('At most five target regions fit the digit keys 1 to 9')
             if row['color'].lower() in colors:
                 raise ValueError('Target colors must be distinct from other targets and fixed classes')
             colors.add(row['color'].lower())

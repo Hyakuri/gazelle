@@ -41,7 +41,7 @@ class LabelTest(unittest.TestCase):
                 (root/name).write_text(json.dumps(data))
             store=LabelStore(root,root/'trial.json','reviewer')
             payload=dict(segment_id='s1',revision=0,labels=[dict(start_step=0,end_step_exclusive=5,label='target')],
-                         viewed_ranges=[],other_people=[],note='')
+                         viewed_ranges=[],other_people=[],note='',point_skips=[dict(step=0,reason='unsure')])
             store.update(payload)
             payload.update(revision=1,viewed_ranges=[dict(start_step=0,end_step_exclusive=5)],finish=True)
             with self.assertRaisesRegex(ValueError,'previously saved'):
@@ -63,7 +63,7 @@ class LabelTest(unittest.TestCase):
                 (root/name).write_text(json.dumps(data))
             store=LabelStore(root,root/'trial.json','reviewer')
             store.update(dict(segment_id='s1',revision=0,labels=[dict(start_step=0,end_step_exclusive=5,label='target')],
-                              viewed_ranges=[],other_people=[],note=''))
+                              viewed_ranges=[],other_people=[],note='',point_skips=[dict(step=0,reason='unsure')]))
             output=StringIO()
             with redirect_stderr(output):
                 status=main(['validate','--dataset-root',str(root),'--labels-path',str(root/'trial.json'),'--segment','s1'])
@@ -121,9 +121,10 @@ class LabelTest(unittest.TestCase):
                 (root/name).write_text(json.dumps(data))
             store=LabelStore(root,root/'trial.json','reviewer')
             payload=dict(segment_id='s1',revision=0,labels=[dict(start_step=0,end_step_exclusive=5,label='target')],
-                         viewed_ranges=[dict(start_step=0,end_step_exclusive=1)],other_people=[],note='')
+                         viewed_ranges=[dict(start_step=0,end_step_exclusive=1)],other_people=[],note='',
+                         point_skips=[dict(step=0,reason='unsure')])
             first=store.update(payload)
-            self.assertEqual(first['version'],2)
+            self.assertEqual(first['version'],3)
             self.assertIsNone(first['segments'][0]['finished_at'])
             self.assertEqual(store.resume(),('s1',1))
             payload['revision']=1
@@ -146,7 +147,7 @@ class LabelTest(unittest.TestCase):
             self.assertIsNone(changed['segments'][0]['finished_at'])
             payload.update(revision=4,finish=True)
             store.update(payload)
-            payload.update(revision=5,finish=False,labels=[dict(start_step=0,end_step_exclusive=5,label='unknown')])
+            payload.update(revision=5,finish=False,point_skips=[],labels=[dict(start_step=0,end_step_exclusive=5,label='unknown')])
             self.assertIsNone(store.update(payload)['segments'][0]['finished_at'])
             legacy=deepcopy(first);legacy['version']=1
             with self.assertRaisesRegex(ValueError,'version 1.*reannotate'):

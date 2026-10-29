@@ -337,8 +337,8 @@ python main.py `
 本机标注工具抽取三视角 60 秒片段与逐步 JPEG，在 `127.0.0.1` 提供自动保存的浏览器界面。
 已完成的区域定义提供类别；省略 `--regions-path` 才生成默认类别试用数据集，显式指定未完成文件会报错。
 各会话独立使用 `seed + int(session)`，`--sessions` 默认只含七次已批准录制，正式片段不与 pilot 重叠。
-标注使用 version 2：`viewed_ranges` 记录实际显示的步，未看部分保留斜线纹理；全部看过且有类别后，
-点击“本段完成”才写入 `finished_at`。修改类别或他人区间会清除完成状态。
+标注使用 version 3：`viewed_ranges` 记录实际显示的步，未看部分保留斜线纹理；全部看过、有类别且注视点规则满足后，
+点击“本段完成”才写入 `finished_at`。修改类别、点、跳过标记或他人区间会清除完成状态。
 修改较长片段的类别后，确认完成前请回放检查，因为“已看”只表示显示过。
 完成条件只认此前已保存的已看范围；同请求的新范围会保存，但不能用于本次确认。
 播放和未播放时逐步/跳转产生的已看变化最多每秒保存一次；暂停正在进行的播放、换段、完成、隐藏/关闭前立即写入。
@@ -346,6 +346,17 @@ python main.py `
 `labels validate --segment ID` 只严格检查指定段，可重复给出。仅使用 CPU，不启动 FFmpeg
 可执行程序，不使用模型、GPU、下载或外部网络。入口见[用法](docs/usage/USAGE_CN.md#15-研究数据工具)
 与[标注指南](tools/validation/ANNOTATION_GUIDE_CN.md)。
+
+判断依据为眼睛优先于头部、头部优先于手部。看手或手中物体时，`hands_object` 优先于它所在的固定区域。
+四个目标时键位为 1–4 目标、5 手部/手中物体、6 `cell_other`、7 `away`、8 `absent`、0 `unknown`。
+单击全局视图添加/替换当前步注视点；X 删除当前点，S 切换 `unsure` 跳过，O 切换 `out_of_view` 画面外（仅手部/其他）。
+Delete 仍删除类别变化点。每个目标/手部/其他片段需要点或跳过；额外点至少相隔 5 步（1 秒）。
+away/absent/unknown 不点；改类别自动清理不兼容的点和标记并提示，撤销一并恢复。
+version 3 保存 `points: [{step, x, y}]`（1920×1080 全局代理帧的归一化坐标）与
+`point_skips: [{step, reason}]`，数据集记录 `annotation_schema_version: 3`。
+完成判断还要求类别、点和跳过标记此前已保存。旧 version 1、2 需重新标注。
+经授权重导出时，`render_roi_reference --backup-existing` 将旧导出和完成标记改名到带日期的备份目录；
+区域 JSON 不变，仅使用本机 CPU。
 
 `tools.workdata.proxies` 为每次录制生成三段 5 Hz、1920×1080 视频，
 附源帧旁注和全长解码计数。使用 CPU PyAV 与 FFmpeg/libx264，输出在仓库外，
@@ -389,8 +400,8 @@ A/B −0.5 ≤ d <1.5 s，E −1.5 ≤ d <2.5 s。七会话全部通过后才改
 图像与区域文件留在外部数据根；仅使用 CPU/OpenCV/Pillow，不调用 FFmpeg 可执行程序、模型、GPU 或外部网络。
 导出的标注类别保留区域颜色，供后续标注工具使用。
 先画目标区域，最后画工作区；重叠处点击选中最小区域，顶点始终显示在工作区上方。
-导出要求 1–6 个目标区域与恰好一个工作区。数字键按目标绘制顺序分配，之后为
-`cell_other`、`away`、`absent`（最多 1–9）；`unknown` 为 0。自动保存仍是草稿：
+导出要求 1–5 个目标区域与恰好一个工作区。数字键按目标绘制顺序分配，之后为
+`hands_object`、`cell_other`、`away`、`absent`（最多 1–9）；`unknown` 为 0。自动保存仍是草稿：
 成功导出才写入含时间与区域 SHA-256 的 `roi_regions.complete.json`；version 2 标记还绑定
 `export_root`、`roi_reference.png` 与 `classes.json` 的 SHA-256，抽样复制前核对二者。
 CLI 的 `--out-root` 指定导出目录；默认正式区域导出到 JSON 旁，其他文件名导出到 `<stem>_export/`。

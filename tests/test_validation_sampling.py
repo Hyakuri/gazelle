@@ -110,6 +110,7 @@ class SamplingTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'completed'):
                 create_dataset(base/'proxies',dataset,regions_path=regions)
             first=create_dataset(base/'proxies',dataset)
+            self.assertEqual(first['annotation_schema_version'],3)
             self.assertEqual(first['classes_source'],'default-trial')
             self.assertIsNone(first['regions_sha256'])
             (dataset/'labels.json').write_text('preserved user labels')
@@ -119,6 +120,7 @@ class SamplingTest(unittest.TestCase):
             roi_regions.mark_complete(regions,out_root=exported)
             with self.assertRaises(FileExistsError):create_dataset(base/'proxies',dataset,regions_path=regions)
             second=create_dataset(base/'proxies',dataset,regions_path=regions,overwrite=True)
+            self.assertEqual(second['annotation_schema_version'],3)
             self.assertEqual(second['classes_source'],'completed-regions')
             self.assertEqual((Path(second['previous_dataset_backup'])/'labels.json').read_text(),'preserved user labels')
             self.assertEqual(json.loads((dataset/'classes.json').read_text(encoding='utf-8'))['classes'][0]['label'],'desk')

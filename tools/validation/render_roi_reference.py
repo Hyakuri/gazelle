@@ -1,4 +1,5 @@
 import argparse
+from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
@@ -53,7 +54,22 @@ def _save_png(image, path):
         temporary.unlink(missing_ok=True)
 
 
-def render(regions_path, candidates_path, out_root=None, font_path=None, confirm_small=False):
+def backup_exports(regions_path,out_root):
+    root=Path(out_root).resolve();marker=Path(regions_path).resolve().with_suffix('.complete.json')
+    targets=[root/'classes.json',root/'roi_reference.png',root/'overlays',marker]
+    existing=[path for path in targets if path.exists()]
+    if not existing:return None
+    backup=root/('export-backup-'+datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ'))
+    if backup.exists():raise FileExistsError(backup)
+    for path in existing:
+        if path!=marker and not path.resolve().is_relative_to(root):
+            raise ValueError('Export backup must stay inside its output root')
+    backup.mkdir(parents=True)
+    for path in existing:path.rename(backup/path.name)
+    return backup
+
+
+def render(regions_path, candidates_path, out_root=None, font_path=None, confirm_small=False,backup_existing=False):
     digest = hash_file(regions_path)
     payload = validate_complete(load(regions_path))
     small=small_regions(payload)
@@ -75,6 +91,9 @@ def render(regions_path, candidates_path, out_root=None, font_path=None, confirm
         if row['session'] not in sessions:
             sessions.add(row['session'])
             selected['overlays/' + row['session'] + '.png'] = row
+    if backup_existing:
+        backup=backup_exports(regions_path,out_root)
+        if backup is not None:print('Previous exports backed up: '+str(backup))
     outputs = []
     for relative, row in selected.items():
         path = source_path(out_root, relative)
@@ -96,9 +115,10 @@ def main(argv=None):
     parser.add_argument('--candidates', type=Path, required=True)
     parser.add_argument('--out-root', type=Path)
     parser.add_argument('--confirm-small', action='store_true', help='Confirm regions below 0.5% of the image')
+    parser.add_argument('--backup-existing', action='store_true', help='Rename existing exports and completion marker into a dated backup before export')
     parser.add_argument('--font', type=Path)
     args = parser.parse_args(argv)
-    outputs = render(args.regions_path, args.candidates, args.out_root, args.font, args.confirm_small)
+    outputs = render(args.regions_path, args.candidates, args.out_root, args.font, args.confirm_small,args.backup_existing)
     print('Rendered {} references; wrote classes.json'.format(len(outputs)))
     return 0
 

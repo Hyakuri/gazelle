@@ -336,10 +336,10 @@ JPEG steps, and serves an autosaving browser editor at `127.0.0.1`. Completed
 region definitions supply the classes. Omit `--regions-path` for a default-class
 trial dataset; an explicit unfinished region file is rejected. Each session uses
 `seed + int(session)` independently; `--sessions` defaults to the seven approved dates
-and formal segments never overlap the pilot. Labels use version 2: `viewed_ranges`
+and formal segments never overlap the pilot. Labels use version 3: `viewed_ranges`
 records displayed steps, unseen steps retain stripes, and **本段完成** explicitly
-writes `finished_at` only after every step has been viewed and labelled. Editing
-labels or other-person ranges clears completion. Replay a long span after changing its labels
+writes `finished_at` only after every step has been viewed, labelled and point-covered. Editing
+labels, points, skips or other-person ranges clears completion. Replay a long span after changing its labels
 before confirming completion: viewed only means displayed. Completion uses previously saved
 viewed ranges; new ranges in that request are saved but cannot qualify it. View-only autosaves
 are coalesced to at most once per second during playback and unplayed stepping/jumps.
@@ -349,6 +349,19 @@ and note edits save immediately. `labels validate --segment ID`
 strictly checks just that segment; repeat the option for several. It uses CPU only, with no FFmpeg executable, model, GPU, downloads
 or external network. See [usage](docs/usage/USAGE.md#15-research-data-tools) and the
 [annotation guide](tools/validation/ANNOTATION_GUIDE_CN.md).
+
+Judge visible eyes before head direction, and head direction before hand activity.
+`hands_object` takes priority over a drawn region when attention is on a hand or held object.
+With four targets, keys are 1–4 targets, 5 hands, 6 `cell_other`, 7 `away`, 8 `absent`, 0 `unknown`.
+Click the overview to add/replace a point; X deletes the current point, S toggles an `unsure` skip,
+and O toggles `out_of_view` (hands/other only). Delete still deletes a class change point.
+Each target/hands/other run needs a point or skip; extra points must be at least 5 steps (1 s) apart.
+Away/absent/unknown runs have no points. Class changes clean incompatible points/skips with a notice;
+undo restores them. Version 3 stores `points: [{step, x, y}]` in normalized 1920×1080 overview
+coordinates and `point_skips: [{step, reason}]`; datasets record `annotation_schema_version: 3`.
+Completion uses previously saved labels/points/skips as well as viewing. Versions 1 and 2 require reannotation.
+Authorized re-export with `render_roi_reference --backup-existing` renames old exports and the completion
+marker into a dated backup; it preserves the region JSON and uses local CPU only.
 
 `tools.workdata.proxies` creates three 5 Hz, 1920×1080 videos per
 session, with source-frame sidecars and full decode counts. It uses CPU PyAV and
@@ -407,8 +420,8 @@ these tools use CPU/OpenCV/Pillow, no FFmpeg executable, models, GPU, or externa
 Exported annotation classes retain region colors for the later annotation tool.
 Draw targets first and the work cell last; clicking overlapping regions selects
 the smallest region, with its vertex handles above the cell. Export requires
-1–6 targets and exactly one cell. Digit keys follow target drawing order, then
-`cell_other`, `away`, `absent` (at most 1–9); `unknown` is 0. Autosave is a draft:
+1–5 targets and exactly one cell. Digit keys follow target drawing order, then
+`hands_object`, `cell_other`, `away`, `absent` (at most 1–9); `unknown` is 0. Autosave is a draft:
 successful export writes `roi_regions.complete.json` with a timestamp and region
 SHA-256. Marker version 2 also binds `export_root` and the SHA-256 of
 `roi_reference.png` and `classes.json`; sampling verifies both before copying.

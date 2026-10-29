@@ -537,7 +537,8 @@ class UsageDocumentationTest(unittest.TestCase):
             self.assertIn('“已看”只表示显示过',self._read(path))
         for path in (ENGLISH_README, CHINESE_README, ENGLISH_GUIDE, CHINESE_GUIDE):
             text = self._read(path)
-            for token in ('roi_regions.complete.json', 'cell_other', 'away', 'absent', 'unknown', '1–6', '1–9',
+            for token in ('roi_regions.complete.json', 'hands_object', 'cell_other', 'away', 'absent', 'unknown', '1–5', '1–9',
+                          'points', 'point_skips', 'out_of_view', 'unsure', '--backup-existing', 'annotation_schema_version: 3',
                           'viewed_ranges', 'finished_at', 'keepalive', '--segment', '--sessions', 'export_root', '0.5%'):
                 self.assertIn(token, text, str(path))
 

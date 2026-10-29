@@ -609,8 +609,8 @@ Exported classes retain target colors and use configured colors for fixed labels
 Draw targets first and the work cell last. In an overlap, clicking selects the
 smallest region; its vertex handles stay above every polygon. A double-click
 closes the polygon without adding a duplicate vertex. Custom targets get distinct
-colors. Export requires 1–6 targets and exactly one cell, with no unfinished draft.
-Digit keys follow target drawing order, then `cell_other`, `away`, `absent` (at
+colors. Export requires 1–5 targets and exactly one cell, with no unfinished draft.
+Digit keys follow target drawing order, then `hands_object`, `cell_other`, `away`, `absent` (at
 most 1–9); `unknown` is 0. Deleting and redrawing a target changes that order.
 Autosave alone does not complete annotation: successful export writes
 `roi_regions.complete.json` (version 2, `completed_at`, `regions_sha256`, `export_root`,
@@ -770,10 +770,10 @@ first unfinished segment, then its first unseen step, first null step, or step 0
 
 The editor provides playback, step controls, number-key change points, deletion,
 undo, a colour timeline and other-person intervals. It waits for the current
-image before accepting a judgment. Version 2 labels record merged, monotonically
+image before accepting a judgment. Version 3 labels record merged, monotonically
 growing `viewed_ranges`. Unseen steps keep a stripe texture even when labelled.
 Only **本段完成** explicitly writes `finished_at`, after all steps have been viewed
-and labelled; changing a label or other-person range clears it. Completion checks only previously saved viewed ranges; ranges newly
+and labelled, with all required points or skips; changing labels, points, skips or other-person ranges clears it. Completion checks only previously saved viewed ranges; ranges newly
 included in the finish request are saved but do not qualify that request. Replay a long span
 after changing its labels before confirming completion: viewed only means displayed.
 View-only autosaves occur at most once per second during playback and unplayed stepping,
@@ -782,11 +782,28 @@ flush immediately. Hide/close dispatch `keepalive` without waiting for an in-fli
 server revision checks still apply. Label, people and note edits are never throttled; failed saves stop editing.
 `labels validate` errors, including non-object or excessively nested JSON, include the segment
 and reason in one line, exit 1, without traceback.
-Region save/export status comes from the server, including unchanged saves. Version 1 labels
-are rejected with instructions to reannotate. Strict validation requires all three
+Region save/export status comes from the server, including unchanged saves. Version 1 and 2 labels
+are rejected with instructions to reannotate. Strict validation requires all completion
 conditions; repeat `--segment ID` to restrict strict checks to selected segments.
 Unlabelled draft steps are distinct from intentional `unknown`; `--allow-incomplete` only validates drafts and does not
 certify completion. See the [Chinese annotation guide](../../tools/validation/ANNOTATION_GUIDE_CN.md).
+Judge visible eyes before head direction, and head direction before hand activity.
+`hands_object` takes priority over the drawn region containing the attended hand or held object.
+With four targets, keys are 1–4 targets, 5 hands, 6 `cell_other`, 7 `away`, 8 `absent`, 0 `unknown`.
+Click the overview to add/replace the current step's point. X deletes it; S toggles an `unsure` skip;
+O toggles `out_of_view` for hands/other only. Delete still removes a class change point.
+Every target/hands/other run needs a point or skip. Extra points must be at least 5 steps (1 s) apart
+within a run; away/absent/unknown have no points. Current points are bright, other points in the run
+are faint; the timeline marks points and missing runs. Class edits clean incompatible points/skips
+with a notice, and undo restores them. Merging runs retains the earlier point when spacing conflicts.
+Version 3 adds `points: [{step, x, y}]`, finite normalized 1920×1080 overview coordinates in [0, 1],
+and `point_skips: [{step, reason}]`, where step is a run start and reason is `unsure` or `out_of_view`.
+Point steps are unique. Completion requires previously saved labels/points/skips as well as viewing.
+New dataset manifests record `annotation_schema_version: 3`; old annotations require reannotation.
+For an authorized re-export, append `--backup-existing` to the `tools.validation.render_roi_reference`
+command above. It renames prior classes, reference, overlays and completion marker into a dated backup,
+then writes new exports using local CPU/Pillow and an existing font. Region JSON is unchanged;
+there is no model, GPU, FFmpeg executable or network activity.
 All videos, frames and labels remain outside Git and must not be uploaded.
 
 ## 16. Validation commands

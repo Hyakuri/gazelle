@@ -4,7 +4,7 @@
 在现有 Gazelle-next 环境、仓库根目录运行；输入是 TASK-132 的清单与有效重封装视频。
 所有候选帧、区域定义、备份、参考图和类别都留在仓库外的数据根，不提交或上传。
 区域完成后保持正式文件只读。正式逐时刻标注须等七会话同步验证与独立审查通过；
-数据集抽样排除 `sync_uncertain`（切点 ±10 s 或时间缺口/重叠）片段，在同层重抽并记录。
+数据集抽样排除 `sync_uncertain`（切点两侧最近有效证据中心各外扩半个窗长，或时间缺口/重叠）片段，在同层重抽并记录。
 后续标注若修改较长片段的类别，确认完成前请回放检查，因为“已看”只表示显示过。
 
 ```powershell
@@ -32,7 +32,7 @@ python -m tools.validation.roi_server --candidates "$data\roi\candidates.json" -
    撤销按钮或 Ctrl+Z 返回前一步；Esc 取消未闭合草稿。自定义区域填写中文名和 ASCII 英文键。
 5. 查看跨日期核对图，确认各次录制中桌面与区域仍对齐。若机位移动，记录问题交给 Claude，
    不通过扭曲区域掩盖差异。切换主参考帧会保留归一化多边形，仍可撤销。
-6. 顶部显示“草稿已自动保存”后，点“导出参考图与类别”。导出要求 1–6 个目标区域、
+6. 顶部显示“草稿已自动保存”后，点“导出参考图与类别”。导出要求 1–5 个目标区域、
    恰好一个工作区，且没有未闭合草稿。输出为 `roi_regions.json`、`roi_reference.png`、
    `overlays/<session>.png`、`classes.json`；成功后另写 `roi_regions.complete.json` 完成标记。
 
@@ -50,6 +50,8 @@ python -m tools.validation.roi_server --candidates "$data\roi\candidates.json" -
 命令行渲染可用 `--out-root` 指定其他导出目录；省略时，`roi_regions.json` 导出到文件旁，
 其他文件名导出到 `<stem>_export/`。完成标记始终写在区域 JSON 旁；抽样只读取标记指明的目录并核对哈希。
 小区域的 CLI 导出需显式 `--confirm-small`。服务端按 schema 保存区域行，丢弃多余字段。
+经授权重新导出时可加 `--backup-existing`，将旧 `classes.json`、参考图、叠加图和完成标记改名到
+带日期的备份目录，再调用同一正式导出路径；区域 JSON 的内容保持不变。仅使用本机 CPU/Pillow 和已有字体。
 
 也可单独校验和导出：
 
@@ -63,6 +65,11 @@ python -m tools.validation.render_roi_reference --regions-path "$data\roi\roi_re
 工具不安装字体。区域文件版本 1，摄像机固定为 cam_e；polygon 为 0–1 归一化坐标，
 key 唯一、cell 至多一个，多边形不能自相交。目标颜色互不重复，也不与固定类别重复；
 自定义目标自动从独立色板取色。类别按 target 绘制顺序分配数字键，之后为
-cell_other、away、absent，最多占用 1–9；unknown 固定为 0。删除后重画会改变类别顺序。
+hands_object、cell_other、away、absent，最多占用 1–9；unknown 固定为 0。删除后重画会改变类别顺序。
+四个目标时为 1–4 目标、5 手部/手中物体、6 cell_other、7 away、8 absent、0 unknown。
+逐时刻判断时眼睛优先于头部、头部优先于手部；看手或手中物体时，hands_object 优先于它所在的固定区域。
+每个目标/手部/其他类别片段在全局画面点至少一点，额外点至少相隔 5 步（1 秒）；away/absent/unknown 不点。
+拿不准可按 S 跳过（unsure），手部/其他目标在全局画面外可按 O 标画面外（out_of_view），X 删除当前注视点；
+Delete 仍删除类别变化点。细则见[标注指南](ANNOTATION_GUIDE_CN.md)，标注 schema 为 version 3。
 `classes.json` 为 `{version: 1, classes: [{key: 数字, label: 英文标签, name_zh: 中文名, color: 颜色}]}`。
 正式标记体验与区域边界仍需用户确认，工具检查不代表科研标签已经验收。

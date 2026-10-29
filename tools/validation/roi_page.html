@@ -20,7 +20,7 @@ function friendlyError(detail){
  const pairs=[
  ['self-intersect','多边形不能自相交'],['vertices must be distinct','不能重复顶点'],['nonzero area','多边形面积不能为零'],
  ['3 to 500 vertices','多边形需要 3 至 500 个顶点'],['coordinates','顶点坐标必须在画面范围内'],
- ['colors must','目标颜色不能重复或与固定类别相同'],['six target','最多六个目标区域'],
+ ['colors must','目标颜色不能重复或与固定类别相同'],['five target','最多五个目标区域'],
  ['At least one target','至少需要一个目标区域'],['Exactly one cell','完成前必须有且仅有一个工作区'],
  ['At most one cell','只能有一个工作区'],['keys must be unique','区域英文键不能重复'],
  ['non-reserved ASCII','请使用有效且未保留的英文键'],['Region name','请填写区域名称'],
@@ -68,7 +68,7 @@ $('canvas').addEventListener('pointerup',()=>{if(drag){const changed=drag.moved;
 $('canvas').addEventListener('pointercancel',()=>{vertexClick=false;if(drag){const changed=drag.moved;drag=null;render();if(changed)save()}});
 function closePolygon(){if(!draft.region||draft.points.length<3)return;snapshot();regions.push({...draft.region,polygon:draft.points});selected=regions.length-1;vertex=-1;draft={points:[],region:null};render();save()}
 $('canvas').addEventListener('dblclick',e=>{e.preventDefault();closePolygon()});$('close').onclick=closePolygon;
-function begin(region){if(draft.region){message('请先闭合或取消草稿',true);return}if(region.kind==='target'&&regions.filter(r=>r.kind==='target').length>=6){message('最多六个目标区域，数字键须保持在 1–9',true);return}if(!reference){message('请先选择主参考画面',true);return}if(regions.some(r=>r.key===region.key)){message('该区域已存在，请选中后编辑',true);return}snapshot();draft={points:[],region};selected=-1;vertex=-1;render();save()}
+function begin(region){if(draft.region){message('请先闭合或取消草稿',true);return}if(region.kind==='target'&&regions.filter(r=>r.kind==='target').length>=5){message('最多五个目标区域，数字键须保持在 1–9',true);return}if(!reference){message('请先选择主参考画面',true);return}if(regions.some(r=>r.key===region.key)){message('该区域已存在，请选中后编辑',true);return}snapshot();draft={points:[],region};selected=-1;vertex=-1;render();save()}
 $('new').onclick=()=>begin(data.defaults[Number($('type').value)]);
 $('undo').onclick=()=>{if(!history.length)return;const old=JSON.parse(history.pop());regions=old.regions;draft=old.draft;reference=old.reference;selected=-1;vertex=-1;render();save()};
 $('deleteVertex').onclick=()=>{if(selected<0||vertex<0)return;if(regions[selected].polygon.length<=3){message('至少需要三个顶点，可删除整个区域',true);return}snapshot();regions[selected].polygon.splice(vertex,1);vertex=-1;render();save()};

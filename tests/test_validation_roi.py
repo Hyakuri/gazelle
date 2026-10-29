@@ -44,6 +44,9 @@ class RoiRegionsTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             regions.make_classes(doc)
         doc['regions'].pop()
+        with self.assertRaises(ValueError):
+            regions.make_classes(doc)
+        doc['regions'].pop()
         self.assertEqual([r['key'] for r in regions.make_classes(doc)['classes']], list(range(1, 10)) + [0])
         for color in ('#c0392b', '#9B59B6', '#010101'):
             doc['regions'][1]['color'] = color
@@ -155,8 +158,8 @@ class RoiRegionsTest(unittest.TestCase):
         doc = document()
         self.assertEqual(regions.validate(doc), doc)
         classes = regions.make_classes(doc)['classes']
-        self.assertEqual([row['label'] for row in classes], ['desk', 'cell_other', 'away', 'absent', 'unknown'])
-        self.assertEqual([row['key'] for row in classes], [1, 2, 3, 4, 0])
+        self.assertEqual([row['label'] for row in classes], ['desk', 'hands_object', 'cell_other', 'away', 'absent', 'unknown'])
+        self.assertEqual([row['key'] for row in classes], [1, 2, 3, 4, 5, 0])
         self.assertEqual(classes[0]['color'], '#11aa33')
         self.assertTrue(all(row['color'].startswith('#') for row in classes))
 
