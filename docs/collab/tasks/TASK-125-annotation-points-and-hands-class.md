@@ -183,6 +183,64 @@ git status --short
 - 状态标签：**已实施、已静态检查、已离线验证、已实际运行；ready-for-review；未独立验收。**
 - 双语发布报告：[PR #6 / TASK-125](https://github.com/Hyakuri/gazelle/pull/6#issuecomment-6495066389)。
 
+### 第 6 轮实施报告：第 2 轮修订（2026-10-29）
+
+- **实施提交**：`ac89a66f726bc3a2efcfa777d0c8910010d7834b` — `Enforce exclusive annotation points and safe input handling`，已正常推送现有分支与 draft PR #6。接手基线 `f14b36b`；先提交并推送 Claude 协调文档 `60464e2a335df4cca3d41d8ad79b4958204c77bc` — `Record coordinator updates`，按 STATE 用 `gh pr edit 6 --repo Hyakuri/gazelle --body-file docs/collab/STAGE2_PR_BODY.md` 同步正文。主线程 Inline Execution，无子代理、新分支或新 PR。
+- **状态**：实现、静态检查、离线验证及下述可见浏览器检查完成，提交供独立审查。第 9 条中的真实 `visibilitychange` 和真实按住重复事件未验证，不能算全部浏览器验收通过；具体障碍与建议见 B 级。正式标注继续暂停，未开始第 7 轮。
+- **修复**：保存与严格校验均拒绝同一类别片段的 points/skips 并存；已有标记时加点被拒并说明取消键；S/O 清除整段点、显示数量，撤销恢复；合并保留点并清理冲突标记。Ctrl/Meta/Alt 组合键保留浏览器行为（Ctrl/Cmd+Z 除外），非方向快捷键忽略重复事件。隐藏按正常保存队列，pagehide/beforeunload 仍直接 keepalive；版本冲突保护保留。共享 LabelStore 在读取标签前要求整数 schema 3。慢帧就绪后等满一个步长；左侧视图点选给出提示；旧标签启动服务时单行报错。
+- **文档**：四份英中用户文档与两份中文指南同步默认点位、互斥、整段画面外/部分可见/拿不准规则、区域内桌面或物体的分类、快捷键、版本门与保存边界；USAGE 两语重复的重新标注说明已去掉。未修改受控设计与审查正文。
+
+#### 环境、命令与证据
+
+所有 Python 使用 `C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe`（3.14.8），`PYTHONPYCACHEPREFIX=$env:TEMP\gazelle-r6-pycache`、`PYTHONIOENCODING=utf-8`。日志与临时标签在仓库外 `C:\Users\yun\Documents\Claude_Code\gazelle_runs\codex-round6`。
+
+- 预检：默认 cwd/Git 根目录均为 Claude_Code 新仓库。普通 `codexsandboxonline` 上下文的仓库、三个派生目录与 TEMP 创建/读写/删除探针通过；只读列出原始目录的九次录制，不运行 inventory。项目 TOML 可解析，三个 writable roots 与 network_access=true；以实际读写和 `git ls-remote` 结果单独确认生效能力。普通 gh 认证仍无效，按既有限定批准在 yun 上下文验证 Hyakuri 认证和 draft PR，并仅在那里运行 Git 写入/GitHub 命令；没有将该例外记作普通 gh 通过。
+- FFmpeg/ffprobe 仅运行版本查询（2025-03-31-git-35c091f4b7）；GPU 仅查询：RTX 4080 SUPER，driver 617.14，2500/16376 MiB。未修改环境、配置或凭据。
+
+| 检查 | 命令或日志 | 结果 |
+| --- | --- | --- |
+| 修复前反证 | `python -m unittest tests.test_validation_points -v`；`points-red.log` | 14 tests，7 failures / 1 error：互斥、版本门及旧标签启动错误路径被捕获；未放宽断言 |
+| 页面反证 | `node tests/annotation_page_test.cjs`；`ui-red.log` | exit 1：已有标记仍可加点 |
+| 针对性检查 | `python -m unittest tests.test_validation_points tests.test_validation_labels tests.test_validation_server -v`；`points-green.log` | 24 tests / 0.899s / 0 skip，exit 0 |
+| 完整离线门 | `python -m unittest discover -s tests -v`；`offline.log` | **715 tests / 19.108s / 0 skip，exit 0** |
+| 静态与入口 | `python -m compileall main.py gazelle tests tools`；`python main.py --help`；`python main.py --list-models` | 全部 exit 0，日志 `compileall.log`、`help.log`、`models.log` |
+| 两个页面 harness | `node tests/annotation_page_test.cjs`；`node tests/roi_page_test.cjs` | 全部 exit 0；`annotation-node.log`、`roi-node.log` |
+| pilot 严格校验 | `python -m tools.validation.labels validate --dataset-root ..\gazelle_validation\roi_r2 --labels-path ..\gazelle_runs\codex-round6\browser-labels.json --segment 20260911_pilot` | 完成前 exit 1 / 一行未完成错误；确认后 exit 0。`pilot-before.log`、`pilot-after.log` |
+| 文档与补丁 | `python -m tools.docs build`；`python -m tools.docs check`；`git diff --check`；`git diff --cached --check` | exit 0；结束按协作流程另建基线 |
+| 外部结果只读审计 | `python ..\gazelle_runs\codex-round6\audit.py` | exit 0；`browser-audit.json`，94 次成功保存连续 revision，无冲突 |
+
+- 服务端新增单规则测试：区域类 out_of_view；away/absent/unknown 中的点；非起点 skip；points+unsure、points+out_of_view；其余条件先验证合法。另检验 schema 门不创建文件、不改已有标签、CLI 单行错误与启动失败不监听端口。旧 3000 层 JSON 用例更名为顶层数组检查，**不再声称它触发 RecursionError**。
+- Node 使用真实键盘处理入口测 Delete、片段中间 S、Ctrl/Meta/Alt、repeat、S/O 清点与撤销、标记后拒点、合并清理和仅画面外可完成。fake fetch 独立维护服务端 revision，检查 points/skips 字段；隐藏遇到在途保存按序完成、不失败；pagehide/beforeunload 不等待队列，故意制造的关闭竞争仍因 revision 被拒。慢帧加载后 25/199 ms 不前进，满 200 ms 才前进。
+- 非致命输出：坏 MP4 隔离用例的 `moov atom not found` 和 Git LF/CRLF 提示。起初使用短任务文件名读取失败，随后使用 STATE 完整路径；浏览器变量/只读 DOM 能力查询失败均未改页面状态。无新增 skip，无依赖安装。
+
+#### 真实浏览器与数据保护
+
+- 测试服务 `browser_server.py` 绑定 `127.0.0.1:8786`，复用现有 AnnotationApplication/HTTP handler，使用正式 `roi_r2` 只读数据与外部临时 `browser-labels.json`。包装仅记录保存、按测试标记延迟一次响应、增加键盘/可见性日志监听；没有合成 UI 事件、注入标注状态、替换 requestAnimationFrame 或修改生产 HTML 文件以通过浏览器验收。
+- 可见 IAB 中：pilot 0–10 s 为 hands_object，step 0/5 两点；10–20 s 为 item_box + unsure；20–30 s 为 cell_other + out_of_view；30–60 s 为 unknown。S 清除两点并提示，标记后单击被拒，Ctrl+Z 恢复两点与无标记；Ctrl+S、Alt+O 不改变标签。改为 away 清除两点并提示，撤销恢复。
+- 保持真实绘制，实际显示 **300/300 步** 后按钮才启用，确认完成后切段、返回仍显示已确认完成；严格 CLI 前失败后通过。`browser-proof.png` 为返回后的截图。播放 60 次常规保存间隔 **1.039743–1.068478 s**；非播放连续逐步的 6 次常规保存间隔 **1.044421–1.061257 s**，实际显示 41 步。终点、编辑、切段等强制保存另计，不混入常规间隔。
+- 两次故意延迟约 6 秒的请求均成功，后续 revision 连续，页面没有失败。但 IAB 隐藏面板及切换临时空白标签页都没有产生 visibilitychange，因此这**不能证明实际隐藏路径通过**。按住 S 1200 ms 只产生一次 repeat=false，不能证明真实键盘重复通过。事件见 `browser-events.json`。尝试访问现有 Chrome 项目窗口以补测时，Computer Use 应用访问审批超时；没有对 Chrome 执行输入。未绕过这些限制。
+- `readonly-before.json` 与 `browser-audit.json` 对照八项只读 SHA 全相同：正式区域、类别、参考图、完成标记，以及两个数据集的 manifest/classes。区域仍为 `6511ff108c397e4d7dc474bddf6531810f505443f80cf8aca4967c8d4cddf0bb`；正式类别仍为 `2871cdb85817a4c77f00c7640a95dd451afdc551504b540473e8c0d6b72ad2d8`。两个数据集均没有正式 labels.json。未重抽样、重抽帧或重新导出；本轮没有复算全部图像哈希，上一轮独立检查属于历史证据。
+- 真实活动限 CPU 单元测试/JSON/哈希/JPEG 读取、本机 loopback HTTP、临时标签与已授权 GitHub 交付。无模型、CUDA 推理、Hub/权重下载、模型缓存更新、FFmpeg 转码或 Conda 变更，服务仅监听本机地址。临时浏览器页已关闭，服务已终止且 8786 无监听。测试输出保留仓库外供审查；既有忽略目录未删除或暂存。
+
+#### 自主决定（A 级）
+
+- 将版本门放在 LabelStore，供编辑器和 CLI 共用，在标签读写前拒绝；整数 3 才合法，缺失、2、字符串和浮点数均拒绝。两入口都有回归覆盖。
+- 采用契约第 7 条三个小项；不扩展到跨磁盘导出修复。删除原测试名对 RecursionError 覆盖的误称，保留顶层非对象回归。
+- Q-025 第 1 项仍待用户，按第 8 条明确分支跳过换色、正式重导出和数据集更新；不是把未批准的动作当成通过。
+
+#### 范围外改动
+
+无。没有 TASK-101、TASK-150、TASK-140 第 3 轮、阶段 3、Multi-Pose、GitHub Actions 或研究协议变更。
+
+#### 待 Claude 判断（B 级）
+
+- 复核实现提交、715 项离线门、两个 harness 和 A 级决定。**第 9 条验收尚有两项缺口**：真实隐藏事件发生于在途保存时的行为、真实键盘按住产生 repeat=true 的行为。IAB 未产生相应事件，桌面浏览器访问审批超时；没有修改验收标准或用 Node 证据替代实测。推荐 Claude 在可产生真实事件的可见浏览器、临时标签中补测后再接受 TASK-125，并继续保持正式标注暂停。未暂定接受，也未开始后续任务。
+- 浏览器关闭/网络中断的未送达请求仍不保证落盘；直接 keepalive 竞争可能被服务端版本门拒绝。该边界保留并同步文档。
+
+#### 待用户决定（C 级）
+
+无新增。Q-025 的颜色偏好仍按现有表等待，未重复请求授权。用户独立 checkout 验收、正式科学标注和模型精度评估均未执行。
+
 ## 3. 审查结论（Claude 追加）
 
 ### 2026-10-29 第 5 轮审查（Claude）
