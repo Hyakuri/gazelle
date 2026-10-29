@@ -43,16 +43,18 @@ Details: `docs/collab/analysis/2026-10-15-workdata-analysis.md`.
 | 3 | TASK-139 Sync protocol r2: content-calibrated alignment to the front camera | partly accepted; base maps, calibration and 18 new proxies accepted; remaining items go to TASK-140 |
 | 3 | TASK-102 Confirm new tracks on their first frame (D2) | accepted after the round-4 fix (GZ-30 closed) |
 | 3 | TASK-002 Face ray and roll sign alignment | accepted |
-| 4 | TASK-140 Sync validation and step-rule revisions; complete 20260911 | implementation accepted; all 7 recordings synchronized |
-| 4 | TASK-124 Annotation tool hardening | changes requested (manual stepping bypasses the write throttle) |
-| 5 | TASK-140 round 2: uncertainty spans at steps, same-source-frame clock reading, switch to the final proxies, build both datasets | ready; first in round 5 |
-| 5 | TASK-124 round 2 | ready |
-| 5 | TASK-125 Annotation scheme r3: hands/held-object class and attention points, plus the out-of-view mark r3.1 | ready; the user confirmed the r3 details (Q-017) and r3.1 on 2026-10-29 |
-| 6 | TASK-101 Face–pose association fix (D1, contract r2) | ready |
-| 6 | TASK-150 Intake of the two new recordings (20261016, 20261023) and the webcam | blocked on round 5; contract written |
+| 4 | TASK-140 Sync validation and step-rule revisions; complete 20260911 | accepted; all 7 recordings synchronized |
+| 4 | TASK-124 Annotation tool hardening | accepted after round 2 |
+| 5 | TASK-140 round 2: uncertainty spans at steps, same-source-frame clock reading, switch to the final proxies, build both datasets | accepted (2026-10-29) |
+| 5 | TASK-124 round 2 | accepted (2026-10-29) |
+| 5 | TASK-125 Annotation scheme r3: hands/held-object class and attention points, plus the out-of-view mark r3.1 | changes requested (2026-10-29): points and skip marks can coexist; modifier keys edit marks |
+| 6 | TASK-125 round 2: exclusive points and marks, shortcut guards, save on hide, dataset version gate, tests and docs | ready; the only task in round 6 |
+| 7 | TASK-101 Face–pose association fix (D1, contract r2) | ready |
+| 7 | TASK-150 Intake of the two new recordings (20261016, 20261023) and the webcam | blocked on TASK-125 round 2; contract r2 written |
+| 7 | TASK-140 round 3: test follow-ups only | ready |
 | — | TASK-151 Register the formal regions to each recording; the user reviews them (D27) | proposed |
 | Stage 4 | Pixel-isotropic reference rays (GZ-28) | proposed; no longer a stage-3 prerequisite because stage 3 uses 3D gaze |
-| User | Label 26 one-minute segments with scheme r3 (about 3 hours) | paused (D20) until TASK-125 and round 5 pass review |
+| User | Label 26 one-minute segments with scheme r3 (about 3 hours) | paused (D20) until TASK-125 round 2 passes review; dataset `roi_r2` is ready |
 | User | Label the 8 segments of the new recordings (about 1 hour) | after TASK-150 |
 | — | Stage acceptance by Claude, final acceptance by the user | not started |
 
@@ -105,13 +107,31 @@ New recordings and design approval on 2026-10-29 (`docs/collab/analysis/2026-10-
 - **User decisions.**
   - D22: the system design and the stage-3 design v2 are approved.
   - D23: MIT- and Apache-licensed models first, tried in a cloned sandbox environment, with each download authorized item by item; non-commercial models are not used until the user judges them at download time.
-  - D24: a new stage-3 branch and draft PR from the stage-2 acceptance point, so this PR stays stage 2 only. Round 6 and TASK-151 are stage-2 work and stay on this branch.
+  - D24: a new stage-3 branch and draft PR from the stage-2 acceptance point, so this PR stays stage 2 only. Rounds 6 and 7 and TASK-151 are stage-2 work and stay on this branch.
   - D25: the documentation records system is confirmed.
   - D26: the new recordings join as a separate cohort; the webcam is an auxiliary view; evaluation becomes leave-one-worker-out.
   - D27: the formal regions are registered to each recording and reviewed by the user.
   - Q-017: the details of labelling scheme r3 are confirmed, so r3 and r3.1 take effect together.
 - **Workers.** From face crops the user identified four workers (P1–P4). One works on four of the seven original dates, and the recordings 20260903 and 20261016 each contain a handover, so the overlap splits into 11 worker spans (`docs/collab/analysis/2026-10-29-worker-identity-analysis.md`).
 - **Plan.** Round 5 is unchanged. TASK-150 ingests the new recordings in round 6, together with TASK-101.
+
+Round 5 review on 2026-10-29 (`docs/collab/evidence/2026-10-29-round5-review.md`):
+
+- **TASK-140 round 2 is accepted.** Claude recomputed every uncertainty span from the window data and redrew the samples. Both match the sidecars and both dataset manifests exactly:
+  - 20260903 has 2059 uncertain steps and 20260911 has 451; the other recordings have none.
+  - No segment touches an uncertain step, so the exclusion changed no draw.
+  - All 16,200 JPEGs match their hashes, and 33 spot-checked steps match the decoded proxies.
+  - All 63 clock samples are readable and pass. One was read from its source frame, and Claude confirmed that reading by eye.
+- **TASK-124 round 2 is accepted.** In the browser, manual stepping and playback both write at most once per second.
+- **TASK-125 needs a second round before formal labelling.** Two defects must be fixed:
+  - A run can hold attention points and a skip or out-of-view mark at the same time, which the design rules out.
+  - Ctrl+S and other modifier or auto-repeated keys silently edit marks and points.
+  - Everything else checked out, including the formal class re-export and the dataset metadata.
+- **Coordinator clarification.** Validation design 4.2.0 states that points and skip marks are exclusive within a run, and that a run is marked out of view only when its whole target is outside the overview view. The user can overrule this (Q-025).
+- **Plan.**
+  - Round 6 is TASK-125 round 2 only, then back to Claude.
+  - Formal labelling starts after that review.
+  - Round 7 brings TASK-101, TASK-150 and the TASK-140 test follow-ups, and can run while the user labels.
 
 ## How this PR is used
 
@@ -170,16 +190,18 @@ Work videos stay read-only on the local drive. Derived data, labels, and outputs
 | 3 | TASK-139 同步协议 r2：以前方摄像机为基准的画面内容校准 | 部分通过：基础映射、校准与 18 段新代理通过，余项转入 TASK-140 |
 | 3 | TASK-102 新轨迹首帧即确认（D2） | 第 4 轮修复后 accepted（GZ-30 关闭） |
 | 3 | TASK-002 面部射线与 roll 符号对齐 | accepted |
-| 4 | TASK-140 同步验证与分段规则修订；补齐 20260911 | 实现通过；7 次录制同步全部达标 |
-| 4 | TASK-124 标注工具加固 | 退回修改（手动逐步绕过写盘降频） |
-| 5 | TASK-140 第 2 轮：台阶处的不确定区间、时钟同源帧补读、切换正式代理、生成两个数据集 | ready，第 5 轮第一项 |
-| 5 | TASK-124 第 2 轮 | ready |
-| 5 | TASK-125 标注方案 r3：“手部/手中物体”类别与注视点，以及“画面外”标记 r3.1 | ready；用户已于 2026-10-29 确认 r3 细则（Q-017）与 r3.1 |
-| 6 | TASK-101 人脸与姿态关联修正（D1，契约 r2） | ready |
-| 6 | TASK-150 两次新录制（20261016、20261023）与 webcam 的接入 | 等第 5 轮；契约已写 |
+| 4 | TASK-140 同步验证与分段规则修订；补齐 20260911 | accepted；7 次录制同步全部达标 |
+| 4 | TASK-124 标注工具加固 | 第 2 轮后 accepted |
+| 5 | TASK-140 第 2 轮：台阶处的不确定区间、时钟同源帧补读、切换正式代理、生成两个数据集 | accepted（2026-10-29） |
+| 5 | TASK-124 第 2 轮 | accepted（2026-10-29） |
+| 5 | TASK-125 标注方案 r3：“手部/手中物体”类别与注视点，以及“画面外”标记 r3.1 | 退回修改（2026-10-29）：注视点与跳过标记可以并存；组合键会改动标记 |
+| 6 | TASK-125 第 2 轮：注视点与标记互斥、快捷键防护、隐藏页面时的保存、数据集版本门、测试与文档 | ready；第 6 轮唯一一项 |
+| 7 | TASK-101 人脸与姿态关联修正（D1，契约 r2） | ready |
+| 7 | TASK-150 两次新录制（20261016、20261023）与 webcam 的接入 | 等 TASK-125 第 2 轮；契约 r2 已写 |
+| 7 | TASK-140 第 3 轮：只补测试 | ready |
 | — | TASK-151 正式区域按录制配准，由用户复核（D27） | proposed |
 | 阶段 4 | 参考射线改为像素各向同性方向（GZ-28） | proposed；阶段 3 改用三维视线，不再是其前置 |
-| 用户 | 按方案 r3 标注 26 个一分钟片段（约 3 小时） | 暂停（D20），等 TASK-125 与第 5 轮通过审查 |
+| 用户 | 按方案 r3 标注 26 个一分钟片段（约 3 小时） | 暂停（D20），等 TASK-125 第 2 轮通过审查；数据集 `roi_r2` 已就绪 |
 | 用户 | 标注新录制的 8 段（约 1 小时） | TASK-150 之后 |
 | — | Claude 阶段验收，用户最终验收 | 未开始 |
 
@@ -232,13 +254,31 @@ Work videos stay read-only on the local drive. Derived data, labels, and outputs
 - **用户的决定。**
   - D22：批准系统总体设计与阶段 3 设计 v2。
   - D23：先只用 MIT 与 Apache 许可的模型，在克隆的沙盒环境中试用，下载逐项授权；非商业许可的模型暂不使用，需要时随下载授权请用户判断。
-  - D24：从阶段 2 的验收点新建阶段 3 分支与 draft PR，本 PR 只含阶段 2；第 6 轮与 TASK-151 属于阶段 2，仍在本分支。
+  - D24：从阶段 2 的验收点新建阶段 3 分支与 draft PR，本 PR 只含阶段 2；第 6、7 轮与 TASK-151 属于阶段 2，仍在本分支。
   - D25：确认文档记录体系。
   - D26：新录制作为单独分层纳入；webcam 作辅助视角；评估改为按作业者留一。
   - D27：正式区域按录制配准，由用户复核。
   - Q-017：确认标注方案 r3 的细则，r3 与 r3.1 一起生效。
 - **作业者。** 用户看过面部截图后判定共 4 名作业者（P1 至 P4）。其中一人出现在 7 个旧日期中的 4 个；20260903 与 20261016 两次录制中各有一次换班，三机重叠段共分成 11 个作业者片段（`docs/collab/analysis/2026-10-29-worker-identity-analysis.md`）。
 - **计划。** 第 5 轮不变；第 6 轮由 TASK-150 接入新录制，同时做 TASK-101。
+
+2026-10-29 的第 5 轮审查（`docs/collab/evidence/2026-10-29-round5-review.md`）：
+
+- **TASK-140 第 2 轮通过。** Claude 从窗口数据独立重算了全部不确定区间，并重新抽样。两者都与旁注和两个数据集的 manifest 完全一致：
+  - 20260903 有 2059 个不确定步，20260911 有 451 个，其余录制为 0；
+  - 没有片段碰到不确定步，所以这次排除没有改变任何抽样；
+  - 16200 张 JPEG 的哈希全部一致，33 个抽查步与解码的代理一致；
+  - 63 个时钟样本全部可读且通过。其中一个从源帧读出，Claude 目视核对无误。
+- **TASK-124 第 2 轮通过。** 浏览器中手动逐步与播放时都是每秒最多写盘一次。
+- **TASK-125 需要第 2 轮，之后才能正式标注。** 必须修复两处：
+  - 同一片段可以同时有注视点与“跳过”或“画面外”标记，而设计不允许；
+  - Ctrl+S 等组合键与按住重复会悄悄改动标记与注视点。
+  - 其余检查都通过，包括正式类别文件的重新导出与数据集的元数据。
+- **协调者的补充说明。** 验证集设计 4.2.0 写明：同一片段内注视点与跳过标记二选一；只有整段目标都在全局画面外时才标“画面外”。用户可以推翻（Q-025）。
+- **计划。**
+  - 第 6 轮只做 TASK-125 第 2 轮，完成后交回 Claude。
+  - 正式标注在那次审查之后开始。
+  - 第 7 轮做 TASK-101、TASK-150 与 TASK-140 的测试补充，可以与用户的标注同时进行。
 
 ## 本 PR 的用法
 

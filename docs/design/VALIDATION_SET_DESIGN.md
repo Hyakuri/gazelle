@@ -1,11 +1,11 @@
 ---
 doc_id: VALSET
 title: 作业数据验证集设计
-version: 4.1.1
-status: 已确认
+version: 4.2.0
+status: 已确认（协调者）
 updated: 2026-10-29
 owner: Claude
-confirm_ref: 用户 2026-10-29（Q-017、Q-018、Q-020、Q-021、Q-022、Q-024）；待定项见 Q-023
+confirm_ref: 用户 2026-10-29（Q-017、Q-018、Q-020、Q-021、Q-022、Q-024）；§10.8 的补充说明由协调者确认（2026-10-29），见 Q-025；待定项见 Q-023
 ---
 # Work-Data Validation Set Design (D12)
 
@@ -244,6 +244,7 @@ Region labels alone cannot evaluate the attended location or moving targets. The
   - no point lies in an `away`, `absent` or `unknown` run;
   - every eligible run has a point or a skip mark;
   - the per-second limit on extra points is respected.
+  - no run has both a point and a skip mark (§10.8, clarification of 2026-10-29).
 - **Older versions**: version 2 files are rejected with a message to reannotate. No formal labels exist yet.
 - **Completion**: the explicit-completion rules of TASK-138 and TASK-124 stay. Completion also requires the point rule.
 
@@ -269,6 +270,13 @@ Proposed with the stage-3 system design v2 (`STAGE3_GAZE_ATTENTION_CN.md` §12, 
 - **Schema**: each `point_skips` entry becomes `{step, reason}`, with `reason` either `unsure` or `out_of_view`, where `step` is the run start step. The schema version stays 3 because no formal labels exist yet.
 - **Strict validation**: `out_of_view` is allowed only in `cell_other` and `hands_object` runs. A run marked out of view needs no point, and it counts as handled for completion.
 - **Evaluation**: these marks evaluate the predicted out-of-view probability (§10.5).
+- **Clarification (coordinator, 2026-10-29, after the round-5 review; Q-025 item 2)**: a run has either
+  attention points or one skip mark at its start step, never both, because the mark replaces the point.
+  Mark a run out of view only when its target stays outside the overview view for the whole run; when
+  part of the run is visible, click points for the visible part instead. Strict validation rejects a run
+  that has both. Adjacent runs of one class are merged, so a run whose target moves between the view and
+  outside it cannot record both parts; if the pilot shows such runs to be common, the scheme will be
+  extended with the user's approval.
 
 ### 10.7 中文摘要
 
@@ -278,6 +286,7 @@ Proposed with the stage-3 system design v2 (`STAGE3_GAZE_ATTENTION_CN.md` §12, 
 - **工作量**：每段约 6 至 7 分钟，共约 3 小时，可分多次。
 - **用途**：评估注意力热力图的位置误差（先按画面像素，近似标定后按厘米）、手部与物体的识别率，以及区域统计。重复标注的点距可作为人工真值本身的精度参考。
 - **r3.1（2026-10-29 你已同意，与 r3 一起生效）**：注视目标在全局画面之外时（例如左侧设备、货架），“工作区内其他”或“手部/手中物体”的片段可以按一个键标为“画面外”，不必点；“跳过”只表示拿不准。见 §10.8。
+- **补充说明（协调者，2026-10-29，第 5 轮审查后；Q-025 第 2 项）**：同一片段内，注视点与“跳过”或“画面外”标记二选一，不能并存，因为标记代替注视点。“画面外”只用于整个片段的目标都在全局画面外；部分可见时只点可见部分。严格校验拒绝两者并存的片段。
 
 ## 11. Addendum (2026-10-29): new recordings, worker-level splits, per-recording regions
 
@@ -342,7 +351,8 @@ About 6 to 7 minutes per segment, so about 1 hour for the 8 new segments.
 <!-- portal:versions -->
 | 版本 | 日期 | 状态 | 变更摘要 | 确认 | 归档 |
 | --- | --- | --- | --- | --- | --- |
-| 4.1.1 | 2026-10-29 | 已确认 | 录制的称呼统一为源文件夹名（例如 20261016），画面时钟日期只在括号中注明；你确认作业者片段表（Q-024）；内容不变 | 用户 2026-10-29（Q-017、Q-018、Q-020、Q-021、Q-022、Q-024）；待定项见 Q-023 | [v4.1.1](../archive/VALSET/VALSET_v4.1.1.md) |
+| 4.2.0 | 2026-10-29 | 已确认（协调者） | 第 5 轮审查后的补充说明：同一片段内注视点与“跳过”“画面外”标记二选一；“画面外”只用于整段目标都在全局画面外；严格校验相应增加一条（§10.4、§10.7、§10.8）。由协调者确认并告知你（Q-025 第 2 项），你可以推翻 | 用户 2026-10-29（Q-017、Q-018、Q-020、Q-021、Q-022、Q-024）；§10.8 的补充说明由协调者确认（2026-10-29），见 Q-025；待定项见 Q-023 | [v4.2.0](../archive/VALSET/VALSET_v4.2.0.md) |
+| 4.1.1 | 2026-10-29 | 已取代 | 录制的称呼统一为源文件夹名（例如 20261016），画面时钟日期只在括号中注明；你确认作业者片段表（Q-024）；内容不变 | 用户 2026-10-29（Q-017、Q-018、Q-020、Q-021、Q-022、Q-024）；待定项见 Q-023 | [v4.1.1](../archive/VALSET/VALSET_v4.1.1.md) |
 | 4.1.0 | 2026-10-29 | 已取代 | 按你 2026-10-29 的身份判定更新 §11：共 4 名作业者、11 个作业者片段，交接时段按确认的人脸界定，4 折不均衡、按作业者分别报告；§7 的依据随之更正；中文摘要同步 | 用户 2026-10-29（Q-017、Q-018、Q-020、Q-021、Q-022）；待定项见 Q-023 | [v4.1.0](../archive/VALSET/VALSET_v4.1.0.md) |
 | 4.0.0 | 2026-10-29 | 已取代 | 按 §5.1 改为主版本：3.2.0 写入的按作业者留一属于评估协议的变化，版本级别在此更正；你确认 r3 的细则（Q-017），状态改为已确认；按独立审查修正 §11：作业者片段只在换人处切分，片段按时间归属、不因归属重抽，留一的预先登记与停止规则（待你确认，Q-023），cohort 缺省为 original；§7、§8 与中文摘要的旧说法更正 | 用户 2026-10-29（Q-017、Q-018、Q-020、Q-021）；待定项见 Q-023 | [v4.0.0](../archive/VALSET/VALSET_v4.0.0.md) |
 | 3.2.0 | 2026-10-29 | 已取代 | r3.1 经你同意（Q-018）；新增 §11：两次新录制作为单独分层，另成一个 8 段的同格式数据集，规则与种子不变；按作业者留一；按录制的区域（D26、D27）；§1、§2、§3、§7、§10 相应修改；r3 的细则仍待确认（Q-017） | Q-017（r3 细则）；r3.1 与 §11 已确认（用户 2026-10-29） | [v3.2.0](../archive/VALSET/VALSET_v3.2.0.md) |

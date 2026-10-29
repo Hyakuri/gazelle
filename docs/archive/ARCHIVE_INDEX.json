@@ -202,6 +202,35 @@
         "docs/rules/COLLABORATION_PLAN_CN.md": "e9c36d5c64b7f2d3599df563eb4eb082052e18b3cecbd2233f49dadc77144a76",
         "docs/rules/DOCS_SYSTEM_CN.md": "03ef9ddd4c0982bbb6cd2f19ccf953de512ee3299e8bb9d049e5ad01b1219ff7"
       }
+    },
+    {
+      "date": "2026-10-29",
+      "documents": {
+        "COLLAB": "0.9.1",
+        "DOCS": "1.1.1",
+        "GOALS": "3.2.1",
+        "PERCEPTION": "1.1.2",
+        "STAGE3": "3.1.1",
+        "SYSTEM": "1.2.1",
+        "VALSET": "4.2.0"
+      },
+      "files": {
+        "docs/archive/baselines/B008/README.md": "eff09a40b195ddec2131781580b0244e4e46fac6c7fb0de81b7cd00c2e3bad1e",
+        "docs/archive/baselines/B008/index.html": "5dfc8c4843e38227644e64b5ebbec92ee10bab3f643c69d77c3f297a872bb472"
+      },
+      "id": "B008",
+      "note": "第 5 轮审查：验证集设计 4.2.0 的补充说明",
+      "sources": {
+        "docs/collab/ROADMAP.md": "258ea5de836b952ba9179818b4e9e4571c712f5586e5e59906289eab3c408421",
+        "docs/collab/STATE.md": "34ce01fe60b5ff72bb31d6adfb482c50b7d35f7c4756cde68c8ef725af36c1be",
+        "docs/design/PERCEPTION_D1_D2_DESIGN.md": "c3107eeeeb58d2695e1d78254f228500d3340a89430c00299b149d08e0dd5429",
+        "docs/design/STAGE3_GAZE_ATTENTION_CN.md": "318a850d72980050f3dde1f729d3a13f027b58291c848e3ecdf29ec8d90f2b4f",
+        "docs/design/SYSTEM_OVERVIEW_CN.md": "a194643961d7aa5af8d1504518f1d0467a9e429d25ae813bdcb6ad09b0a104a3",
+        "docs/design/VALIDATION_SET_DESIGN.md": "82d5a46486b6f3a2097f11979f51605783deffb192ddf19c94ba8c359fc43a20",
+        "docs/requirements/PROJECT_GOALS_CN.md": "fd39ff2e5929d9c493536ec085181f2afaffcf0c3c50e8e0f03b26954f670f97",
+        "docs/rules/COLLABORATION_PLAN_CN.md": "e9c36d5c64b7f2d3599df563eb4eb082052e18b3cecbd2233f49dadc77144a76",
+        "docs/rules/DOCS_SYSTEM_CN.md": "03ef9ddd4c0982bbb6cd2f19ccf953de512ee3299e8bb9d049e5ad01b1219ff7"
+      }
     }
   ],
   "documents": [
@@ -744,6 +773,16 @@
       "status": "已确认",
       "summary": "录制的称呼统一为源文件夹名（例如 20261016），画面时钟日期只在括号中注明；你确认作业者片段表（Q-024）；内容不变",
       "version": "4.1.1"
+    },
+    {
+      "date": "2026-10-29",
+      "doc_id": "VALSET",
+      "path": "docs/archive/VALSET/VALSET_v4.2.0.md",
+      "sha256": "82d5a46486b6f3a2097f11979f51605783deffb192ddf19c94ba8c359fc43a20",
+      "source": "worktree",
+      "status": "已确认（协调者）",
+      "summary": "第 5 轮审查后的补充说明：同一片段内注视点与“跳过”“画面外”标记二选一；“画面外”只用于整段目标都在全局画面外；严格校验相应增加一条（§10.4、§10.7、§10.8）。由协调者确认并告知你（Q-025 第 2 项），你可以推翻",
+      "version": "4.2.0"
     }
   ],
   "mirror_writes": [
@@ -842,6 +881,10 @@
     {
       "mirror": "docs/superpowers/plans/2026-07-23-project-usage-guide-implementation-plan.md",
       "sha256": "c0a583629eb663a0e7be5035bd86611239940770388bd00f94d8f0ff9ea463d7"
+    },
+    {
+      "mirror": "docs/superpowers/specs/2026-10-15-workdata-validation-set-design.md",
+      "sha256": "789aef9c2c9d61b335428d730c919f8ffe7e6fed3f187bf26ce8031e11359e60"
     }
   ],
   "version": 1
