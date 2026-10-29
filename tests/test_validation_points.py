@@ -203,6 +203,16 @@ class PointLabelsTest(unittest.TestCase):
         self.assertEqual([r['key'] for r in classes],[1,2,3,4,5,6,7,8,0])
         self.assertEqual(len({r['color'] for r in classes}),len(classes))
         self.assertEqual(defaults()['fixed_classes'][0]['name_zh'],'手部/手中物体')
+        self.assertEqual(classes[4]['color'],'#b6ff00')
+        trial=json.loads((Path(__file__).parents[1]/'tools/validation/default_classes.json').read_text(encoding='utf-8'))
+        self.assertEqual(next(row['color'] for row in trial['classes'] if row['label']=='hands_object'),'#b6ff00')
+
+    def test_export_cli_parses_backup_flag_before_rendering(self):
+        from contextlib import redirect_stdout
+        from tools.validation.render_roi_reference import main
+        with patch('tools.validation.render_roi_reference.render',return_value=[]) as render,redirect_stdout(StringIO()):
+            self.assertEqual(main(['--regions-path','regions.json','--candidates','candidates.json','--backup-existing']),0)
+        render.assert_called_once_with(Path('regions.json'),Path('candidates.json'),None,None,False,True)
 
     def test_official_reexport_preserves_regions_and_backs_up_all_old_exports(self):
         from tools.validation.render_roi_reference import render

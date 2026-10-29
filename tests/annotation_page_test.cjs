@@ -135,6 +135,10 @@ for(const [shortcut,reason] of [['s','unsure'],['o','out_of_view']]){
   run('addPoint({clientX:1280,clientY:360});');
   assert.deepEqual(plain('record().points'),[],'marked run rejects a click');
   assert.match(run("byId('pointNotice').textContent"),/先按 [SO].*取消/);
+  key(shortcut);
+  assert.deepEqual(plain('[record().points,record().point_skips]'),[[],[]],'same shortcut cancels the mark without inventing points');
+  key('z',{ctrlKey:true});
+  assert.deepEqual(plain('record().point_skips'),[{step:0,reason}],'undo restores the cancelled mark');
   key('z',{ctrlKey:true});
   assert.equal(run('record().points.length'),2,'undo restores both points');
   assert.deepEqual(plain('record().point_skips'),[],'undo restores absence of skip');
@@ -146,9 +150,41 @@ for(const modifier of ['ctrlKey','metaKey','altKey'])for(const shortcut of ['s',
 }
 for(const shortcut of ['s','o','x','Delete','1',' ']){
   const before=plain('[record(),step,playing,undoStack.length]');
-  key(shortcut,{repeat:true});
+  assert.equal(key(shortcut,{repeat:true}),true,'ignored shortcut repeats must prevent native browser actions');
   assert.deepEqual(plain('[record(),step,playing,undoStack.length]'),before,'repeated shortcut is ignored');
 }
+for(const modifier of ['ctrlKey','metaKey']){
+  for(const extra of [{shiftKey:true},{altKey:true},{repeat:true}]){
+    const before=plain('[record(),step,playing,undoStack.length]');
+    assert.equal(key('z',{[modifier]:true,...extra}),Boolean(extra.repeat),'only plain undo consumes its repeat');
+    assert.deepEqual(plain('[record(),step,playing,undoStack.length]'),before,'modified or repeated undo does not change the record');
+  }
+}
+for(const tagName of ['INPUT','TEXTAREA','SELECT'])for(const shortcut of ['s','o','x','Delete','1',' ','ArrowLeft','ArrowRight','z']){
+  for(const repeat of [false,true]){
+    const before=plain('[record(),step,playing,undoStack.length]');
+    assert.equal(key(shortcut,{target:{tagName},repeat,ctrlKey:shortcut==='z'}),false,'editing fields retain their keyboard behavior');
+    assert.deepEqual(plain('[record(),step,playing,undoStack.length]'),before,'focused editing fields do not annotate or undo');
+  }
+}
+// Each held shortcut has exactly its first effect, including undo on either platform.
+const baseline=plain('record()');
+for(const shortcut of ['s','o','x','Delete','1',' ','z'])for(const modifier of (shortcut==='z'?['ctrlKey','metaKey']:[null])){
+  context.baseline=structuredClone(baseline);
+  run("pause();Object.assign(record(),baseline);undoStack=[];go(5);change(row=>row.note='undo me');");
+  if(shortcut==='Delete')run('go(0);');
+  const extra=modifier?{[modifier]:true}:{};
+  const before=plain('[record(),step,playing,undoStack.length]');
+  assert.equal(key(shortcut,extra),true);
+  const once=plain('[record(),step,playing,undoStack.length]');
+  assert.notDeepEqual(once,before,'initial shortcut has an observable effect');
+  for(let i=0;i<3;i++){
+    assert.equal(key(shortcut,{...extra,repeat:true}),true);
+    assert.deepEqual(plain('[record(),step,playing,undoStack.length]'),once,'holding a key acts only once');
+  }
+}
+context.baseline=baseline;
+run('pause();Object.assign(record(),baseline);go(7);');
 key('ArrowRight',{repeat:true});assert.equal(run('step'),8,'arrows still repeat');
 key('o');assert.equal(run("byId('finish').disabled"),false,'out-of-view alone can cover the complete run');
 run('addPoint({clientX:100,clientY:100});');

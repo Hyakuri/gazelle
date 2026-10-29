@@ -114,7 +114,7 @@ def main(argv=None):
     parser.add_argument('--regions-path', type=Path, required=True)
     parser.add_argument('--candidates', type=Path, required=True)
     parser.add_argument('--out-root', type=Path)
-    parser.add_argument('--confirm-small', action='store_true', help='Confirm regions below 0.5% of the image')
+    parser.add_argument('--confirm-small', action='store_true', help='Confirm regions below 0.5%% of the image')
     parser.add_argument('--backup-existing', action='store_true', help='Rename existing exports and completion marker into a dated backup before export')
     parser.add_argument('--font', type=Path)
     args = parser.parse_args(argv)

@@ -546,14 +546,21 @@ class UsageDocumentationTest(unittest.TestCase):
         for path in (ENGLISH_README,ENGLISH_GUIDE):
             text=self._read(path)
             for token in ('first step','clearest','mutually exclusive','entire run','partly visible',
-                          'tabletop','Ctrl/Meta/Alt','TASK-125 section 5'):
+                          'tabletop','Ctrl/Meta/Alt','TASK-125 section 5',
+                          'no redo','without Shift or Alt','only once','#b6ff00'):
                 self.assertIn(token,text,str(path))
         for path in (CHINESE_README,CHINESE_GUIDE,
                      REPOSITORY_ROOT/'tools/validation/ANNOTATION_GUIDE_CN.md',REPOSITORY_ROOT/'tools/validation/ROI_GUIDE_CN.md'):
             text=self._read(path)
             for token in ('片段的第一步','最清楚','互斥','整个片段','部分可见','桌面或物体',
-                          'Ctrl/Meta/Alt','TASK-125 第 5 条'):
+                          'Ctrl/Meta/Alt','TASK-125 第 5 条',
+                          '没有重做','不带 Shift 或 Alt','只执行一次','#b6ff00'):
                 self.assertIn(token,text,str(path))
+
+    def test_usage_guides_explain_old_label_reannotation_once(self):
+        import re
+        self.assertEqual(len(re.findall(r'\breannotat\w*\b',self._read(ENGLISH_GUIDE),re.I)),1)
+        self.assertEqual(self._read(CHINESE_GUIDE).count('重新标注'),1)
 
     def test_argument_validation_precedes_overwrite_in_both_guides(self):
         for path in (ENGLISH_GUIDE, CHINESE_GUIDE):

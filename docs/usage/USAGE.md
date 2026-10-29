@@ -781,7 +781,7 @@ jumps or change-point navigation. Pausing active playback, switch, finish, hide 
 flush without throttling. Hiding queues behind in-flight saves; only pagehide/beforeunload dispatch
 direct `keepalive` requests. Delivery on close or network interruption is not guaranteed, so wait for saved status
 before closing. Server revision checks still apply. Label, people and note edits are never throttled; failed saves stop editing.
-`labels validate` errors, including non-object or excessively nested JSON, include the segment
+`labels validate` errors, including non-object JSON, include the segment
 and reason in one line, exit 1, without traceback.
 Region save/export status comes from the server, including unchanged saves. Version 1 and 2 labels
 are rejected with instructions to reannotate. Strict validation requires all completion
@@ -796,8 +796,10 @@ within each run. Out-of-view replaces points only when the target is outside the
 if partly visible, point only at the visible portion, without out-of-view. If uncertain, skip the whole run.
 S/O removes all points in the run and reports the count; undo restores both. Cancel the mark before adding a point.
 On merging runs, points take priority and conflicting marks are removed with a notice and can be undone.
-Except Ctrl/Cmd+Z, Ctrl/Meta/Alt combinations retain browser behavior and do not annotate. Held-key repeats
-are ignored for S/O/X/Delete/digits/space; arrows can repeat. Slow frames receive a full step after loading.
+Only Ctrl/Cmd+Z without Shift or Alt performs keyboard undo; there is no redo. Other Ctrl/Meta/Alt
+combinations retain browser behavior and do not annotate. Holding S/O/X/Delete/digits/space or Ctrl/Cmd+Z
+acts only once and suppresses repeated browser actions; arrows can repeat. Slow frames receive a full step
+after loading. The `hands_object` class uses bright yellow-green `#b6ff00`.
 With four targets, keys are 1–4 targets, 5 hands, 6 `cell_other`, 7 `away`, 8 `absent`, 0 `unknown`.
 Click the overview to add/replace the current step's point. X deletes it; S toggles an `unsure` skip;
 O toggles `out_of_view` for hands/other only. Delete still removes a class change point.
