@@ -18,7 +18,7 @@ def now():
 
 
 def validate_classes(classes):
-    if classes.get('version') != 1 or not isinstance(classes.get('classes'), list):
+    if not isinstance(classes,dict) or classes.get('version') != 1 or not isinstance(classes.get('classes'), list):
         raise ValueError('Invalid class configuration')
     labels=set();keys=set();colors=set()
     for row in classes['classes']:
@@ -134,6 +134,7 @@ class LabelStore:
         self.root=Path(dataset);self.path=Path(path);self.annotator=annotator
         if not annotator.strip():raise ValueError('Annotator must not be empty')
         self.manifest=json.loads((self.root/'manifest.json').read_text(encoding='utf-8'))
+        if not isinstance(self.manifest,dict):raise ValueError('Invalid dataset manifest')
         self.classes=json.loads((self.root/'classes.json').read_text(encoding='utf-8'))
         validate_classes(self.classes)
         self.fingerprint=dict(manifest_sha256=hash_file(self.root/'manifest.json'),
@@ -141,6 +142,7 @@ class LabelStore:
         self.lock=threading.RLock()
         if self.path.exists():
             document=json.loads(self.path.read_text(encoding='utf-8'))
+            if not isinstance(document,dict):raise ValueError('Annotation document must be an object')
             if any(document.get(k)!=v for k,v in self.fingerprint.items()):
                 raise ValueError('Labels belong to a different manifest or class configuration')
         else:
@@ -230,7 +232,7 @@ def main(argv=None):
         if not path.is_file():raise ValueError('Labels file does not exist')
         store=LabelStore(args.dataset_root,path,'validator')
         validate_document(store.document(),store.manifest,store.classes,args.allow_incomplete,args.segment)
-    except (ValueError,TypeError,KeyError,OSError) as error:
+    except (ValueError,TypeError,KeyError,AttributeError,RecursionError,OSError) as error:
         message=' '.join(str(error).splitlines())
         print('Invalid labels [{}]: {}'.format(','.join(args.segment or ['all']),message),file=sys.stderr)
         return 1

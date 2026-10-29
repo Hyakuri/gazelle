@@ -84,7 +84,7 @@ console.log('PASS: label boundaries, explicit unknown, deletion/undo, people int
   for(const [id,timer] of [...timers])if(timer.due<=clock){timers.delete(id);timer.fn();}
   await run('saveQueue');assert.equal(writes.length,2);
   assert.deepEqual(writes[1].payload.viewed_ranges,[{start_step:0,end_step_exclusive:5}]);
-  clock=1200;add(5);run('pause()');await run('saveQueue');assert.equal(writes.length,3,'pause flushes immediately');
+  clock=1200;add(5);run('playing=true;pause()');await run('saveQueue');assert.equal(writes.length,3,'pausing playback flushes immediately');
   clock=1400;add(6);await run("switchSegment('s2')");await run('saveQueue');
   assert.equal(writes.length,4,'switch flushes old segment immediately');
   assert.equal(writes[3].payload.segment_id,'s');
@@ -95,5 +95,34 @@ console.log('PASS: label boundaries, explicit unknown, deletion/undo, people int
   assert.equal(writes.at(-1).clock,1500,'hidden page flushes immediately');
   clock=1550;add(2);windowEvents.beforeunload({preventDefault(){}});await run('saveQueue');
   assert.equal(writes.at(-1).keepalive,true,'closing starts a keepalive flush');
+  document.visibilityState='visible';timers.clear();writes.length=0;
+  run("segmentId='s';step=0;requestedKey=null;record().viewed_ranges=[];viewDirty=false;lastSavedAt=-Infinity;playing=false;go(0);");
+  await run('saveQueue');
+  const begin=clock;
+  for(let i=1;i<=20;i++){
+    clock=begin+i*100;
+    for(const [id,timer] of [...timers])if(timer.due<=clock){timers.delete(id);timer.fn();}
+    events.keydown({key:'ArrowRight',target:{tagName:'BODY'},preventDefault(){}});
+    await run('saveQueue');
+  }
+  assert.ok(writes.length<=3,`unplayed 10Hz stepping wrote ${writes.length} times in two seconds`);
+  assert.ok(writes.length>=2,'manual progression is actually persisted');
+  for(let i=1;i<writes.length;i++)assert.ok(writes[i].clock-writes[i-1].clock>=1000);
+  await run("switchSegment('s2')");
+  assert.equal(writes.at(-1).payload.viewed_ranges[0].end_step_exclusive,21,'switch keeps final unplayed viewed step');
+
+  const originalFetch=context.fetch;
+  let resolveBusy;
+  context.fetch=(url,options)=>{
+    if(options.keepalive)return originalFetch(url,options);
+    return new Promise(resolve=>{resolveBusy=()=>originalFetch(url,options).then(resolve);});
+  };
+  run("save();");await Promise.resolve();await Promise.resolve();
+  assert.equal(typeof resolveBusy,'function');
+  add(3);const before=writes.length;
+  windowEvents.beforeunload({preventDefault(){}});
+  assert.equal(writes.length,before+1,'keepalive dispatches while a prior save is still unresolved');
+  assert.equal(writes.at(-1).keepalive,true);
+  resolveBusy();await run('saveQueue');
   console.log('PASS: fake-clock save coalescing, pause/switch/hide/close flush, immediate edits');
 })().catch(error=>{console.error(error);process.exitCode=1;});

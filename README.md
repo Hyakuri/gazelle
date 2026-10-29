@@ -342,8 +342,10 @@ writes `finished_at` only after every step has been viewed and labelled. Editing
 labels or other-person ranges clears completion. Replay a long span after changing its labels
 before confirming completion: viewed only means displayed. Completion uses previously saved
 viewed ranges; new ranges in that request are saved but cannot qualify it. View-only autosaves
-are coalesced to at most once per second, with immediate pause/switch/finish/hide/close flushes;
-label, people and note edits save immediately. `labels validate --segment ID`
+are coalesced to at most once per second during playback and unplayed stepping/jumps.
+Pausing active playback, switch/finish/hide/close flush immediately. Hide/close `keepalive`
+requests bypass in-flight saves while retaining server revision checks; label, people
+and note edits save immediately. `labels validate --segment ID`
 strictly checks just that segment; repeat the option for several. It uses CPU only, with no FFmpeg executable, model, GPU, downloads
 or external network. See [usage](docs/usage/USAGE.md#15-research-data-tools) and the
 [annotation guide](tools/validation/ANNOTATION_GUIDE_CN.md).

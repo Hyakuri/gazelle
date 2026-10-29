@@ -17,6 +17,22 @@ def fixture():
 
 
 class LabelTest(unittest.TestCase):
+    def test_cli_rejects_top_level_array_and_excessively_nested_json(self):
+        from tools.validation.labels import main
+        manifest,classes=fixture()
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            for name,data in [('manifest.json',manifest),('classes.json',classes)]:
+                (root/name).write_text(json.dumps(data))
+            for contents in ('[]','['*3000+'0'+']'*3000):
+                (root/'bad.json').write_text(contents)
+                output=StringIO()
+                with redirect_stderr(output):
+                    status=main(['validate','--dataset-root',str(root),'--labels-path',str(root/'bad.json')])
+                self.assertEqual(status,1)
+                self.assertEqual(len(output.getvalue().splitlines()),1)
+                self.assertNotIn('Traceback',output.getvalue())
+
     def test_finish_only_counts_previously_saved_viewing_but_preserves_new_ranges(self):
         manifest,classes=fixture()
         with tempfile.TemporaryDirectory() as directory:
