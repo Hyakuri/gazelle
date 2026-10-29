@@ -11,8 +11,8 @@ from gazelle.runtime.media import SUPPORTED_VIDEO_SUFFIXES, detect_media_type
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-ENGLISH_GUIDE = REPOSITORY_ROOT / "docs" / "USAGE.md"
-CHINESE_GUIDE = REPOSITORY_ROOT / "docs" / "USAGE_CN.md"
+ENGLISH_GUIDE = REPOSITORY_ROOT / "docs" / "usage" / "USAGE.md"
+CHINESE_GUIDE = REPOSITORY_ROOT / "docs" / "usage" / "USAGE_CN.md"
 ENGLISH_README = REPOSITORY_ROOT / "README.md"
 CHINESE_README = REPOSITORY_ROOT / "README_CN.md"
 IMPLEMENTATION_PLAN = (
@@ -178,8 +178,8 @@ class UsageDocumentationTest(unittest.TestCase):
     def test_readmes_link_to_the_matching_usage_guides(self):
         english_readme = self._read(REPOSITORY_ROOT / "README.md")
         chinese_readme = self._read(REPOSITORY_ROOT / "README_CN.md")
-        self.assertIn("(docs/USAGE.md)", english_readme)
-        self.assertIn("(docs/USAGE_CN.md)", chinese_readme)
+        self.assertIn("(docs/usage/USAGE.md)", english_readme)
+        self.assertIn("(docs/usage/USAGE_CN.md)", chinese_readme)
 
     def test_fenced_video_template_is_complete_and_parseable(self):
         required_options = {
@@ -511,7 +511,7 @@ class UsageDocumentationTest(unittest.TestCase):
                           '--sample-cache', '--reuse-samples', 'delta_distribution', 'abs(1+c1)',
                           '--keyframes-root','--sampling-provenance','INTER_AREA','insufficient_evidence',
                           'sync_uncertain','T(b) = b - L(b)','d = base_X(pts) - reading',
-                          '--allow-internal-gaps', '../tools/workdata/README_CN.md'):
+                          '--allow-internal-gaps', '../../tools/workdata/README_CN.md'):
                 self.assertIn(token, text, str(path))
 
     def test_region_tool_entry_points_are_documented(self):
@@ -519,7 +519,7 @@ class UsageDocumentationTest(unittest.TestCase):
             text = self._read(path)
             for token in ('tools.validation.extract_roi_candidates', 'tools.validation.roi_server',
                           'tools.validation.roi_regions', 'tools.validation.render_roi_reference',
-                          '../tools/validation/ROI_GUIDE_CN.md', '127.0.0.1'):
+                          '../../tools/validation/ROI_GUIDE_CN.md', '127.0.0.1'):
                 self.assertIn(token, text, str(path))
 
     def test_annotation_tool_entry_points_are_documented(self):
@@ -528,7 +528,7 @@ class UsageDocumentationTest(unittest.TestCase):
             for token in ('tools.validation.sample_segments', 'tools.validation.extract_frames',
                           'tools.validation.annotate_server', 'tools.validation.labels validate',
                           '--labels-path', '--allow-incomplete', 'roi_r2_trial',
-                          '../tools/validation/ANNOTATION_GUIDE_CN.md'):
+                          '../../tools/validation/ANNOTATION_GUIDE_CN.md'):
                 self.assertIn(token, text, str(path))
         for path in (ENGLISH_README,ENGLISH_GUIDE):
             self.assertIn('viewed only means displayed',self._read(path))
