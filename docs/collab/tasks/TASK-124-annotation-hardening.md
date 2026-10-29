@@ -1,6 +1,6 @@
 # TASK-124：标注工具加固（TASK-138 的应修项，正式标注前完成）
 
-状态：changes-requested（2026-10-18 第 4 轮审查；第 2 轮在第 5 轮执行，正式标注之前完成）
+状态：第 2 轮 ready-for-review（Codex，2026-10-29；尚待 Claude 独立审查）
 创建：2026-10-17（Asia/Tokyo）　协调者：Claude　实现者：Codex　验收：Claude，之后用户在独立 checkout 验收
 依据：TASK-138 §3 第 3 轮审查结论与一份独立代码审查。
 授权：2026-10-14 本地修改与本地运算授权；作业数据只读。
@@ -114,6 +114,23 @@ git status --short
 
 - 提交并推送：`2dc76beddaee04b92ec1967d50eca0b6a212cb3a` — `Harden saved annotation completion and autosave`，19 个实现/测试/文档文件。双语报告见 [PR #6 评论](https://github.com/Hyakuri/gazelle/pull/6#issuecomment-6235471387)。
 - 精确浏览器统计：连续播放期间 revisions 3–41 的 39 次写入，间隔 1.032907–1.293548 s；暂停强制保存 revision 42，距前一次 0.237614 s，保留已看 193 步。页面已关闭；仅本任务的临时 server 已按精确脚本路径核对后终止，未留下浏览器测试服务。WMI 查询无权限，改用普通沙盒 psutil 检查并结束自己的进程，没有提权或停止其他服务。
+
+### 第 2 轮实施报告（Codex，2026-10-29）
+
+- 实现提交：`21b3233` — `Throttle manual annotation viewing and flush closing pages promptly`。本报告与 TASK-140 数据交付报告一并推送到原分支、PR #6；不代表验收。
+- `pause()` 仅在此前正在播放时立即保存；未播放的逐步/跳转/变化点定位保持每秒一次的已看队列。换段显式清空队列。隐藏、pagehide、关闭用立即发出的 keepalive，不等待已有请求；revision 检查保留。
+- CLI 在进入对象操作前拒绝顶层数组，捕获嵌套过深等结构错误，输出一行、退出 1。四份用户文档与标注指南同步，删除英文指南的重复 version 1 句。
+- 回归先失败：顶层数组触发 AttributeError；Node 未播放 10 Hz 连续 2 秒写入 20 次。修复后 `python -m unittest tests.test_validation_labels -v` 和 `node tests/annotation_page_test.cjs` 均 exit 0；Node 验证两秒不超过 3 次、间隔至少 1000 ms，以及已有保存未返回时仍立即发送 keepalive。
+- 完整离线门：Gazelle-next Python 3.14.8，外部 `PYTHONPYCACHEPREFIX`；`python -m unittest discover -s tests -v` **700 tests / 35.275s / 0 skip**；`python -m compileall -q main.py gazelle tests tools`、`python main.py --help`、`python main.py --list-models`、`git diff --check` 均 exit 0。合成坏 MP4 的 moov 警告与 Git LF/CRLF 提示为非致命输出。
+- 浏览器实测：临时服务 `127.0.0.1:8785`，只读旧试用集备份，用 `gazelle_runs/codex-round5/124-browser-labels.json` 保存。原生按住键 5 秒只产生一次事件，因此改为 5.039 秒连续发送 39 次方向键；自动保存间隔 **1.048912–1.064701 秒**。换段前后 pilot 的已看集合相同，共 40 步（0–6、8–40）；第 7 步未实际显示，没有伪造为已看。截图 `124-browser.jpg`，逐次落盘证据 `124-browser-writes.json`。浏览器与服务已关闭。
+- 外部活动：仅本地浏览器/loopback HTTP、读既有 JPEG、写临时标签；无模型、外部网络、CUDA、FFmpeg 可执行程序、下载或环境改动。没有创建正式标签。
+- 反证式复核：旧实现确实被新增两项回归拒绝；已看队列之外的类别/他人区间/备注保存仍立即执行；服务端原有完成与 revision 门未放宽。
+- 自主决定（A 级）：关闭时直接启动同一保存处理函数，并将其完成纳入队列；请求仍用已知 revision，冲突按原规则报错，不猜测版本号。真实浏览器键盘保持动作不自动重复，以连续真实按键替代并记录实际频率。
+- 范围外改动：无；测试仅补同模块 CLI/harness，指南为契约要求。
+- 待 Claude 判断（B 级）：无新的协议决定。浏览器关闭时若碰到 revision 冲突，keepalive 不能保证最终写入；按契约保留冲突检查，新增测试证明的是立即发出请求，不宣称并发请求必成功。
+- 待用户决定（C 级）：无。
+- 未运行：本轮没有真实推理或正式标注；独立代码/浏览器验收交 Claude，用户独立 checkout 最终验收仍待完成。
+- 状态标签：已实现、离线验证通过、临时浏览器实测通过、待独立审查。
 
 ## 3. 审查结论（Claude 追加）
 

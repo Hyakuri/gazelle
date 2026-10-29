@@ -1,6 +1,6 @@
 # TASK-140：同步协议 r2 的验证与分段修订（TASK-139 后续）
 
-状态：实现通过（2026-10-18 第 4 轮审查）；第 2 轮 ready（第 5 轮执行：切点不确定区间、时钟同源帧补读、正式切换与数据集）
+状态：第 1 轮实现通过；第 2 轮 ready-for-review（Codex，2026-10-29；正式切换与两套数据集已验证，待 Claude 独立审查）
 创建：2026-10-17（Asia/Tokyo）　协调者：Claude　实现者：Codex　验收：Claude，之后用户在独立 checkout 验收
 依据：TASK-139 §3 第 3 轮审查结论；[第 3 轮同步验证复核](../evidence/2026-10-17-sync-validation-r3.md)；Q-012；GZ-29。
 授权：2026-10-14 本地修改与本地运算授权；作业数据只读；D18（用户 2026-10-17 批准）。
@@ -319,6 +319,36 @@ git status --short
 - **待用户决定（C 级）：无。** 独立审查、两个 B 级协议决定、正式目录切换、两个数据集生成/校验与用户独立 checkout 验收均未完成。状态为已实施、已静态检查、已实际运行、待独立审查；不标记 accepted。
 - 核心提交 `745309bfc46b26fdcc21af09b1898ae6b8eb1b75` — `Revise synchronization masking and piecewise calibration`，检查点评论：[PR #6](https://github.com/Hyakuri/gazelle/pull/6#issuecomment-6235313696)。最终加固与本报告的提交 SHA 随后记录于 STATE 与 PR 评论。
 - 最终加固与报告已提交、推送：`e9b37443f102e1956827c68d7ba4d87eab631016` — `Verify sampling provenance and report synchronization limits`；[最终双语报告](https://github.com/Hyakuri/gazelle/pull/6#issuecomment-6236482278)。最后只读检查确认本任务代理/验证 PID 89800、354996、317144 与临时标注服务 PID 342104 均不存在；未终止其他进程。
+
+### 第 2 轮实施报告（Codex，2026-10-29）
+
+- 接手时以实时 STATE/Git 为准：writer=none、next_actor=codex，随后声明 writer=codex。主线程 Inline Execution、无子代理。协调文档与文档工具分别提交推送为 `6a3989a`、`139a51f`，PR #6 正文已同步。实现提交 `d041669` — `Cover synchronization evidence gaps and read exact source clocks`；本报告随 TASK-124 报告推送。
+- 普通权限预检：仓库、三个外部输出根与 TEMP 创建/写入/读取/删除成功；E 盘仅只读访问。Gazelle-next Python 3.14.8、FFmpeg/ffprobe 2025-03-31 构建可用；RTX 4080 SUPER / driver 617.14 只查询，不推理。普通 Git 网络读取通过，普通 gh 身份仍不可用；沿用用户授权的 yun Git/GitHub 限定例外，不复制凭据、不改配置。实际普通写入探针与 TOML 文本解析分别记录，不以提权成功代替普通权限结果。
+- 不确定区间：从最近有效长/短窗中心各扩半窗，转换到网格时间，并包含原台阶缺口/重叠。只改 0903、0911 映射的区间元数据与 E 旁注的 `sync_uncertain`；系数、切点、选帧、源 PTS、视频、原生成指纹均保持不变。旧文件先改名 `.before-round5`，报告分别记录旧/新 SHA。抽样与下游均由同一旁注读取标记。
+
+| 会话 / 切点 | 自身基础时间区间（秒） | 网格 epoch 区间（秒） | 网格步（含端点） | 步数 | localized |
+| --- | --- | --- | --- | --- | --- |
+| 0903 E / 1 | 781.146047–1141.349574 | 1788307979.820093–1788308340.347546 | 3900–5701 | 1802 | false |
+| 0903 E / 2 | 1810.157551–1861.233072 | 1788309009.065858–1788309060.484052 | 9046–9302 | 257 | true |
+| 0911 E / 1 | 518.977456–548.611316 | 1788818905.445323–1788818935.314252 | 2595–2743 | 149 | true |
+| 0911 E / 2 | 868.967691–929.070418 | 1788819255.107793–1788819315.444052 | 4343–4644 | 302 | true |
+
+- 合并后 0903 **2059** 步、0911 **451** 步，其余五次为 0。0903 与参考约 1903 步不同，是因为第二切点同样按新规则扩为 257 步；没有为了靠近参考数缩短区间。
+- 七次录制重新执行固定时钟抽查：**63/63 可评估、63/63 差值通过**，每次均 100%。62 次代理帧识别，0911 E k=15804 用精确源 PTS 补读，`d=+0.023192167282104492 s`。每个尝试记录来源与两帧 96×54 平均绝对差。原固定 k、识别阈值、差值门槛未变；有读数但失败时不继续寻找可通过的邻帧。
+- 同步运动结果复用第 4 轮已验收、像素不变的验证：A–B/E–B 全部通过，0903 A–E 证据不足；本轮没有重新计算运动残差或重新目视事件条图，不将历史证据写成新测量。新验证文件在 `gazelle_data/workdata/sync_validation_r5/`，绑定旧报告 SHA、当前时钟实现/版本、代理证据及新区间。
+- 正式切换：旧 `proxies` → `proxies_v1_20261029`，旧 `timemaps` → `timemaps_v1_20261029`。正式映射保留目录名 `timemaps_v3`；五次保留代理与两次 v3 代理移入新的 `proxies`，**没有重新编码或删除**。`proxies/manifest.json` 逐次记录原目录、原生成映射 SHA、正式 v3 SHA、比较差值、验证位置、区间、备份；0911 无既有 v2 代理，差值为 null 且说明原因，不编造比较值。
+- 数据集：`roi_r2_trial` 旧目录改名 `roi_r2_trial.backup-20261029T101440589132Z`；新试用集与正式 `roi_r2` 各 **27 段（26 正式 + 1 pilot）、8100 JPEG**。固定分层/种子本次无需重抽，每段仍记录第一次尝试及 0 个不确定步。两个提取命令均完成帧数/哈希/尺寸检查，exit 0；正式区域 JSON、完成标记、参考图、classes 与既有导出一致。
+- 正式 `labels.json` 未创建。因现有 CLI 要求标签文件存在，在 `gazelle_runs/codex-round5/140-formal-empty-labels.json` 保存仅供结构校验的空白文档；`python -m tools.validation.labels validate --dataset-root .../roi_r2 --labels-path .../140-formal-empty-labels.json --allow-incomplete` exit 0。未将结构通过称为标注完成。TASK-125 随后会按授权更新类别与 schema 元数据，保留本次帧与片段选择。
+- 旧采样凭据与代码来源证明先保留备份，再明确注明“采样时库版本未记录”；后来核验的版本单独说明，原样本 JSON/像素不动。
+- 测试：新增用例先红 **24 tests / 6 failures**，修复后 focused **45 / 2.149s**。默认门包含真实 0911 的 53 个数值窗口、24 个固定种子纯直线、随机噪声缩略图、A 相对 B/E 晚 0.4 秒的正号、实际切点、精确 PTS 拒绝及补读次序。完整离线门 **699 / 16.262s / 0 skip**；compileall main.py gazelle tests tools、help、list-models、diff-check 均 exit 0。随后 TASK-124 的最终门 **700 / 35.275s / 0 skip** 同样通过。合成坏 MP4 的 moov 警告与 Git LF/CRLF 提示保留。
+- 命令与日志：外部 `gazelle_runs/codex-round5/` 的 `140-*.log`、`clock_recheck.py`、`revise_uncertainty.py`、`switch_and_sample.py`、`audit_datasets.py`、`clock-summary.json`、`uncertainty-summary.json`、`140-dataset-audit.json`。两个真实提取入口为 `python -m tools.validation.extract_frames --dataset-root .../roi_r2_trial` 和同命令 `.../roi_r2`。
+- 真实活动：CPU/PyAV/OpenCV 读取源帧、代理、提取/校验 JPEG；最多两个本轮长 CPU 作业、BelowNormal。没有模型、缓存下载、CUDA、FFmpeg 可执行程序转码、外部数据网络或环境修改。GitHub 仅代码/文档/汇总报告；没有媒体、标签、权重、缓存、凭据上传。所有本任务长进程正常退出。
+- 反证式复核：源 PTS 仅偏 1 微秒也拒绝；差值失败不挑邻帧；随机像素能区分缩略图插值；旁注除 sync_uncertain 外逐行相等、映射系数逐项相等；正式 labels 缺省路径不存在。原始数据和正式区域没有写入。
+- 自主决定（A 级）：选用备份后改写旁注，使抽样/下游统一；不重新拟合/编码；复用不变的已验收运动证据并明确标为历史。初版外部时钟循环读取六次比较清单，随后增加七次完整性断言并单独补跑 0911。区间脚本第一次因路径拼接 TypeError 在首个会话写入前退出，修正后完整执行，失败日志保留。
+- 范围外改动：无；新增测试文件与中文标注指南是同一契约的必要覆盖/文档。
+- 待 Claude 判断（B 级）：无新协议变更；请独立复核 2059/451 步、目录 manifest、63 个时钟读数与两套数据集。当前仅 Codex 验证，不代替独立验收。
+- 待用户决定（C 级）：无。正式标注仍等 TASK-125 与本轮审查。
+- 状态标签：已实现、离线验证通过、CPU 数据检查通过、已切换并生成数据集、待独立审查。
 
 ## 3. 审查结论（Claude 追加）
 

@@ -12,12 +12,19 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 | pr | [#6](https://github.com/Hyakuri/gazelle/pull/6)（draft）；正文来源 `docs/collab/STAGE2_PR_BODY.md` |
 | writer | codex |
 | next_actor | codex |
-| current_task | 第 5 轮第一项：`docs/collab/tasks/TASK-140-sync-validation-and-steps.md` 第 2 轮（见该任务 §3「第 2 轮要求」）。用户 2026-10-29 已确认 Q-018 至 Q-021，开发暂停结束 |
-| after_current | TASK-140 第 2 轮之后：`docs/collab/tasks/TASK-124-annotation-hardening.md` 第 2 轮 → `docs/collab/tasks/TASK-125-annotation-points-and-hands-class.md`（用户 2026-10-29 已确认 r3 与 r3.1，含第 2 条正式类别的重新导出与第 8 条“画面外”标记）；然后结束本轮并把 `next_actor` 改为 `claude`。本轮不做 TASK-101 与 TASK-150（第 6 轮），也不开始阶段 3 的任务 |
+| current_task | 第 5 轮：`docs/collab/tasks/TASK-125-annotation-points-and-hands-class.md`（r3、r3.1 已授权）。TASK-140 第 2 轮与 TASK-124 第 2 轮已完成 Codex 验证，ready-for-review |
+| after_current | TASK-125 完成后结束本轮并把 `next_actor` 改为 `claude`。本轮不做 TASK-101 与 TASK-150（第 6 轮），也不开始阶段 3 的任务 |
 | environment | `Gazelle-next`：`C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe`（用户 2026-10-17 决定 D16）。现有 `Gazelle` 作为回退保留，不改动 |
-| last_pushed | `e9b37443f102e1956827c68d7ba4d87eab631016`（本轮全部实现及最终报告；其后仅任务状态/报告链接与本 STATE 交接提交，以实时 Git HEAD 为准） |
+| last_pushed | `21b3233bf48019aa04e016151200c476d7ee7957`（第 5 轮 TASK-140/124 实现；随后报告与 STATE 提交以实时 Git HEAD 为准） |
 | last_accepted | `745309b`。2026-10-18 第 4 轮审查：此前全部提交已通过，包括 TASK-139 的实现（经 TASK-140 修订）、TASK-102 的实现与 TASK-002；TASK-140 的实现在第 4 轮通过，其第 2 轮未完成。其后：`97ef104`（TASK-102 第 2 轮修复）与 `e9b3744`（TASK-140 来源加固）单独通过；`2dc76be`（TASK-124）changes-requested |
 | 更新 | 2026-10-29 17 至 18 时，Claude：用户确认 Q-018 至 Q-021（“Q-018至Q-021 我已经确认，请按你的推荐进行。”）。归档 D22 至 D27；发布 SYSTEM 1.1.0、STAGE3 2.1.0、VALSET 3.2.0、GOALS 3.1.0、COLLAB 0.9.0、DOCS 1.1.1（基线 B003）；写 TASK-150 契约（第 6 轮）；新增 Q-022。17 时 40 分用户确认 r3（Q-017）；按独立审查修正后发布 STAGE3 3.0.0、VALSET 4.0.0、SYSTEM 1.1.1、GOALS 3.1.1、COLLAB 0.9.1（基线 B004），新增 Q-023。18 时 10 分按用户要求给出 Q-022 的暂定编号 P1 至 P10，并在本机生成面部截图供用户确认，图像不入库、不上传。18 时 20 分用户判定共 4 名作业者；18 时 30 分起按此分析换班，写[作业者分析](analysis/2026-10-29-worker-identity-analysis.md)，新增 Q-024，并发布 SYSTEM 1.2.0、STAGE3 3.1.0、VALSET 4.1.0、GOALS 3.2.0（基线 B005）。18 时 45 分用户确认片段表（Q-024）；按用户的提醒，把文档中录制的称呼统一为文件夹名（基线 B006）。第 5 轮交给 Codex |
+
+## 第 5 轮执行进展（Codex，2026-10-29）
+
+- 已提交协调文档 `6a3989a`、文档工具 `139a51f`；TASK-140 实现 `d041669`、TASK-124 实现 `21b3233`。主线程 Inline Execution，无子代理；独立验收待 Claude。
+- TASK-140：固定时钟 63/63 通过，0911 E k15804 同源补读 +0.023192 秒。新区间 0903 2059 步、0911 451 步；其余为 0。七次代理仅移动/改名切换，旧目录与旧旁注保留备份，`timemaps_v3` 为正式映射。新 `roi_r2_trial` 与 `roi_r2` 各 27 段、8100 JPEG，通过哈希/帧数/结构/区域导出检查；没有正式 labels。
+- TASK-124：默认门 700 项、0 skip；临时浏览器未播放连续逐步保存间隔 1.049–1.065 秒，换段保留 40 个实际已看步。临时服务与本轮数据提取进程均已退出。
+- 证据与日志：仓库外 `gazelle_runs/codex-round5/`；两项任务 §2 有详细报告。本轮没有模型推理、下载、环境修改或视频重编码。TASK-125 将按既有授权重新导出类别并更新两个数据集的 schema 元数据，保留片段与帧。
 
 ## 设计已确认（2026-10-29）
 
@@ -77,9 +84,9 @@ Claude 实际运行的检查：
 <!-- portal:table queue -->
 | 轮次 | 任务 | 状态 | 说明 |
 | --- | --- | --- | --- |
-| Codex 第 5 轮 | [TASK-140](tasks/TASK-140-sync-validation-and-steps.md) 第 2 轮：切点不确定区间、时钟同源帧补读、正式切换与两个数据集 | ready | 第 5 轮第一项 |
-| Codex 第 5 轮 | [TASK-124](tasks/TASK-124-annotation-hardening.md) 第 2 轮：手动逐步的写盘降频等 | ready | 正式标注之前完成 |
-| Codex 第 5 轮 | [TASK-125](tasks/TASK-125-annotation-points-and-hands-class.md) 标注方案 r3 与 r3.1 | ready | r3 已确认（Q-017），含 r3.1 |
+| Codex 第 5 轮 | [TASK-140](tasks/TASK-140-sync-validation-and-steps.md) 第 2 轮：切点不确定区间、时钟同源帧补读、正式切换与两个数据集 | ready-for-review | Codex 验证通过，待独立审查 |
+| Codex 第 5 轮 | [TASK-124](tasks/TASK-124-annotation-hardening.md) 第 2 轮：手动逐步的写盘降频等 | ready-for-review | Codex 验证通过，待独立审查 |
+| Codex 第 5 轮 | [TASK-125](tasks/TASK-125-annotation-points-and-hands-class.md) 标注方案 r3 与 r3.1 | in-progress | r3 已确认（Q-017），含 r3.1 |
 | Codex 第 6 轮 | [TASK-101](tasks/TASK-101-face-pose-association.md) 人脸与姿态关联修正（D1，契约 r2） | ready | 阶段 3 的作业者锁定依赖它 |
 | Codex 第 6 轮 | [TASK-150](tasks/TASK-150-new-sessions-and-webcam-intake.md) 新录制与 webcam 接入（D26） | blocked（第 5 轮） | 契约已写；第 5 轮审查时复核 |
 | 用户 | 回复 Q-023（协调者的细化） | 待你确认 | 不阻塞第 5 轮 |
