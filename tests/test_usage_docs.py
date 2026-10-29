@@ -510,7 +510,8 @@ class UsageDocumentationTest(unittest.TestCase):
                           'tools.workdata.sync_validate', 'tools.workdata.proxies',
                           '--sample-cache', '--reuse-samples', 'delta_distribution', 'abs(1+c1)',
                           '--keyframes-root','--sampling-provenance','INTER_AREA','insufficient_evidence',
-                          'sync_uncertain','T(b) = b - L(b)','d = base_X(pts) - reading',
+                          'sync_uncertain','localized: false','96×54','k−1/k+1/k−2/k+2',
+                          'T(b) = b - L(b)','d = base_X(pts) - reading',
                           '--allow-internal-gaps', '../../tools/workdata/README_CN.md'):
                 self.assertIn(token, text, str(path))
 

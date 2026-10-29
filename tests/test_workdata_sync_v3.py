@@ -158,8 +158,7 @@ class SynchronizationV3Test(unittest.TestCase):
     def test_antialiased_thumbnail_paths_agree_on_high_frequency_pattern(self):
         import av
         from tools.workdata.keyframes import validation_thumbnail
-        y,x=np.indices((1080,1920))
-        gray=np.where((x+y)%2,240,16).astype(np.uint8)
+        gray=np.random.default_rng(140).integers(16,241,(1080,1920),dtype=np.uint8)
         image=np.repeat(gray[:,:,None],3,axis=2)
         frame=av.VideoFrame.from_ndarray(image,format='bgr24')
         sampled=frame.reformat(width=96,height=54,format='gray').to_ndarray()
@@ -242,7 +241,10 @@ class SynchronizationV3Test(unittest.TestCase):
         measured.assert_called_once()
         point=fit['breakpoints'][0]
         self.assertTrue(point['refined'])
-        self.assertEqual(point['uncertainty_seconds'],[point['seconds']-10,point['seconds']+10])
+        good=[r['t_mid_seconds'] for r in local]
+        left=max(t for t in good if t<point['seconds'])
+        right=min(t for t in good if t>=point['seconds'])
+        self.assertEqual(point['uncertainty_seconds'],[left-10,right+10])
 
 
 if __name__=='__main__':

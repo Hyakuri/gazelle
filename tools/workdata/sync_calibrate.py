@@ -80,7 +80,23 @@ def _line(t,y):
 
 
 def _window_time(row):
-    return row.get('b_mid_seconds',row['t_mid_seconds'])
+    return row['b_mid_seconds'] if 'b_mid_seconds' in row else row['t_mid_seconds']
+
+
+def update_uncertainty(fit):
+    """Cover the evidence gap, including half of each bracketing window."""
+    long_windows=[(_window_time(r),30.) for r in fit['windows'] if r['valid']]
+    for point in fit['breakpoints']:
+        short_windows=[(_window_time(r),10.) for r in point.get('refinement_windows',[]) if r['valid']]
+        evidence=long_windows+short_windows
+        before=[r for r in evidence if r[0]<point['seconds']]
+        after=[r for r in evidence if r[0]>=point['seconds']]
+        if not before or not after:
+            raise ValueError('Cut uncertainty requires valid evidence on both sides')
+        left=max(before,key=lambda r:r[0]);right=min(after,key=lambda r:r[0])
+        point.update(uncertainty_seconds=[left[0]-left[1],right[0]+right[1]],
+                     uncertainty_evidence=[dict(center=t,window_seconds=2*half) for t,half in (left,right)],
+                     localized=bool(short_windows))
 
 
 def _mad(values):
@@ -152,6 +168,7 @@ def fit_calibration(windows,duration):
             uncertainty_seconds=[at-10,at+10],
             step_seconds=(right['c0']+right['c1']*at)-(left['c0']+left['c1']*at)))
     _fit_gate(base,np.concatenate([piece(lo,hi)[1] for lo,hi in partitions]))
+    update_uncertainty(base)
     return base
 
 
@@ -192,7 +209,6 @@ def refine_breakpoints(fit,reference,other,hz=5.):
             point['refined']=True
         else:
             point['refined']=False
-        point['uncertainty_seconds']=[point['seconds']-10,point['seconds']+10]
     if fit['breakpoints']:
         residual=[]
         for segment in fit['segments']:
@@ -205,6 +221,7 @@ def refine_breakpoints(fit,reference,other,hz=5.):
         for point,left,right in zip(fit['breakpoints'],fit['segments'],fit['segments'][1:]):
             at=point['seconds']
             point['step_seconds']=(right['c0']-left['c0'])+(right['c1']-left['c1'])*at
+    update_uncertainty(fit)
 
 
 def corrected_time(base,calibration):
@@ -253,20 +270,27 @@ def select_signals(cells):
     return signals,selection
 
 
-def clock_sample(k,count,t0,step,camera,read,base_at):
+def clock_sample(k,count,t0,step,camera,read,base_at,read_source=None,comparison_at=None):
     attempts=[]
     for candidate in (k,k-1,k+1,k-2,k+2):
         if not 0<=candidate<count:
             continue
-        reading=read(candidate);attempts.append(dict(k=candidate,reading=reading))
-        if reading is not None:
-            target=t0+candidate*step
-            base=float(base_at(candidate));delta=base-float(reading['wall_time'])
-            lower,upper=(-1.5,2.5) if camera=='cam_e' else (-.5,1.5)
-            return dict(k=k,used_k=candidate,camera=camera,evaluable=True,reading=reading,
-                        t_k=target,base_time=base,delta_seconds=delta,
-                        reading_minus_grid_seconds=float(reading['wall_time']-target),
-                        passed=lower<=delta<upper,attempts=attempts)
+        for source,callback in (('proxy',read),('source',read_source)):
+            if callback is None:
+                continue
+            reading=callback(candidate)
+            difference=comparison_at(candidate) if comparison_at else None
+            attempts.append(dict(k=candidate,source=source,reading=reading,
+                                 thumbnail_mean_absolute_difference=difference))
+            if reading is not None:
+                target=t0+candidate*step
+                base=float(base_at(candidate));delta=base-float(reading['wall_time'])
+                lower,upper=(-1.5,2.5) if camera=='cam_e' else (-.5,1.5)
+                return dict(k=k,used_k=candidate,camera=camera,evaluable=True,reading=reading,
+                            reading_source=source,thumbnail_mean_absolute_difference=difference,
+                            t_k=target,base_time=base,delta_seconds=delta,
+                            reading_minus_grid_seconds=float(reading['wall_time']-target),
+                            passed=lower<=delta<upper,attempts=attempts)
     return dict(k=k,used_k=None,camera=camera,evaluable=False,passed=False,attempts=attempts)
 
 

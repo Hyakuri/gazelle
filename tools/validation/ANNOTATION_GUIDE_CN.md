@@ -31,7 +31,7 @@ python -m tools.validation.extract_frames --dataset-root $dataset --validate-onl
 若任一机位标记缺口的时间步合计超过 2 秒（同一步只计一次），在同层最多重抽 10 次，记录每次尝试；耗尽则失败，不降低标准。
 另加入画面时钟 2026-09-07 22:20:00 的一分钟 pilot，置于列表最前，排除于正式评估。
 正式片段与 pilot 重叠时在同层重抽，并在 attempts 中记录 `pilot_overlap`。
-若任一机位的片段包含 `sync_uncertain`（切点 ±10 s 或时间缺口/重叠范围），也在同层重抽，
+若任一机位的片段包含 `sync_uncertain`（切点两侧最近有效证据中心各外扩半个窗长，或时间缺口/重叠范围），也在同层重抽，
 逐次记录 `sync_uncertain_steps`；沿用最多 10 次重抽，不放宽标准。固定 pilot 若相交则交协调者复核。
 只有七会话同步验证全部通过后才备份、切换代理并重建数据集；正式标注等待独立同步验收。
 

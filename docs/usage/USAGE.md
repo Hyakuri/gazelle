@@ -646,8 +646,13 @@ L1 cost must decrease ≥25% and every jump must reach max(0.2 s, 4 × candidate
 Refine each cut within ±120 s using 20 s windows / 10 s strides and minimum two-sided L1.
 v3 fits use camera base centers b = t + L and explicitly compute `T(b) = b - L(b)`.
 Negative jumps leave gaps; positive jumps exclude pre-cut frames whose T is at least
-the actual first post-cut T. The selectable timeline strictly increases. Cut ±10 s
-uncertainty and gap/overlap ranges are flagged `sync_uncertain` in sidecars.
+the actual first post-cut T. The selectable timeline strictly increases. Cut uncertainty
+extends from the nearest valid window center before the cut to the nearest after it,
+adding half of each window's length (60 s long / 20 s refinement). If all refinement
+windows are invalid, `localized: false` retains the full evidence gap. These intervals
+and gap/overlap ranges are flagged `sync_uncertain` in sidecars for both sampling and downstream use.
+Historical receipts explicitly say sampling-time library versions were not recorded
+when unavailable; later verification versions do not establish sampling-time versions.
 It is B's displayed-clock axis, not calibrated UTC. Calibration needs visible worker
 motion; empty or stationary periods cannot calibrate themselves. Uncalibratable cameras
 remain explicit failures and cannot generate calibrated proxies. The optional legacy `sync_check`
@@ -700,8 +705,11 @@ Multiple common-coverage intervals are rejected by default. The explicit
 `--allow-internal-gaps` option retains one continuous clock grid
 across the entire range and records every coverage gap and nearest-frame gap flag;
 it does not compress time. Keep old proxies in place until all seven sessions pass;
-then rename them to dated backups and switch the validated directories. `sync_validate` reuses the saved fixed k indices, tries k−1/k+1/k−2/k+2
-only for missing clock reads, and records unevaluable samples (≥90% must be evaluable).
+then rename them to dated backups and switch the validated directories. `sync_validate`
+reuses the saved fixed k indices: proxy k, then its recorded source frame, then the same
+pairs at k−1/k+1/k−2/k+2, stopping at the first recognized reading. The decoded source PTS
+must match the sidecar exactly. Each attempt records its source and the 96×54 thumbnail
+mean absolute difference. Missing reads remain unevaluable (≥90% must be evaluable).
 `delta_distribution` groups evaluable/unevaluable/pass counts, signed minimum/median/maximum
 and absolute p90 clock differences by camera. Failed differences remain included;
 statistics are null when no readings are evaluable.

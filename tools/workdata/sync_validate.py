@@ -14,6 +14,7 @@ from .osd_clock import ClockReader
 from .proxies import validate_sidecar
 from .keyframes import source_keyframes,scan_keyframes,step_mask,validation_thumbnail
 from .timemap import map_time
+from .video_source import VideoSource
 from .sync_calibrate import corrected_time
 from .sync_calibrate import (
     _line, clock_sample, clock_summary, implementation_hash, motion_cells,
@@ -48,6 +49,62 @@ def read_frame(capture,k):
     if not ok or abs(capture.get(cv2.CAP_PROP_POS_FRAMES)-(k+1))>.5:
         raise ValueError('Proxy frame index could not be verified')
     return image
+
+
+class ProxyClockReader:
+    """Read a proxy and exactly its recorded source PTS, keeping one pair cached."""
+
+    def __init__(self,capture,rows,sources,camera,source_factory=VideoSource,reader=None):
+        self.capture,self.rows,self.sources,self.camera=capture,rows,sources,camera
+        self.source_factory,self.reader=source_factory,reader or ClockReader()
+        self.cached_k=None
+
+    def _pair(self,k):
+        if self.cached_k==k:
+            return
+        row=self.rows[k];source=self.sources[row['source']]
+        if source['camera']!=self.camera:
+            raise ValueError('Sidecar source camera mismatch')
+        proxy=read_frame(self.capture,k)
+        with self.source_factory(source['media_path']) as media:
+            frames=media.frames(start=row['pts'])
+            try:
+                item=next(frames,None)
+                if item is None or item[0]!=row['pts']:
+                    raise ValueError('Source frame PTS does not exactly match proxy sidecar')
+                original=item[1].to_ndarray(format='bgr24')
+            finally:
+                if hasattr(frames,'close'):
+                    frames.close()
+        self.proxy,self.original=proxy,original
+        self.difference=float(np.abs(validation_thumbnail(proxy).astype(np.int16)-
+                                     validation_thumbnail(original).astype(np.int16)).mean())
+        self.cached_k=k
+
+    def read_proxy(self,k):
+        self._pair(k)
+        return self.reader.read(self.proxy,self.camera)
+
+    def read_source(self,k):
+        self._pair(k)
+        return self.reader.read(self.original,self.camera)
+
+    def comparison_at(self,k):
+        self._pair(k)
+        return self.difference
+
+    def base_at(self,k):
+        self._pair(k)
+        row=self.rows[k]
+        return map_time(self.sources[row['source']]['segments'],row['pts'])
+
+
+def residual_pairs(signals,duration):
+    pairs={}
+    for name,reference,other in (('A-B','cam_b','cam_a'),('E-B','cam_b','cam_e'),('A-E','cam_e','cam_a')):
+        windows=window_lags(signals[reference],signals[other])
+        pairs[name]=dict(windows=windows,**residual_summary(windows,duration))
+    return pairs
 
 
 def session_passed(pairs):
@@ -177,13 +234,11 @@ def _run(proxies,out_root,session_name,clock_samples,timemaps,keyframes_root,sta
                 count+=1
             if count!=session['N']:
                 raise ValueError('Proxy decoded count differs from sidecar')
+            clock_reader=ProxyClockReader(capture,sidecar['frames'],sources,camera,reader=reader)
             for k in indices:
-                def base_at(n):
-                    row=sidecar['frames'][n];source=sources[row['source']]
-                    if source['camera']!=camera:raise ValueError('Sidecar source camera mismatch')
-                    return map_time(source['segments'],row['pts'])
                 clock_rows.append(clock_sample(k,count,session['grid']['t0'],session['grid']['step'],camera,
-                                               lambda n:reader.read(read_frame(capture,n),camera),base_at))
+                                               clock_reader.read_proxy,clock_reader.base_at,
+                                               clock_reader.read_source,clock_reader.comparison_at))
         finally:
             capture.release()
         images.flush()
@@ -201,10 +256,7 @@ def _run(proxies,out_root,session_name,clock_samples,timemaps,keyframes_root,sta
             sync_uncertain_steps=sum(r.get('sync_uncertain',False) for r in sidecar['frames']))
     signals,selection=select_signals(cells)
     duration=(session['N']-1)*.2
-    pairs={}
-    for name,reference,other in (('A-B','cam_b','cam_a'),('E-B','cam_b','cam_e'),('A-E','cam_e','cam_a')):
-        windows=window_lags(signals[reference],signals[other])
-        pairs[name]=dict(windows=windows,**residual_summary(windows,duration))
+    pairs=residual_pairs(signals,duration)
     events=export_events(session,root,output,signals,thumbnails,mapping['calibration'])
     clock=dict(indices=indices,rows=clock_rows,**clock_summary(clock_rows))
     result=dict(session=session_name,version=3,implementation_sha256=implementation_hash(),

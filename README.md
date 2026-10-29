@@ -377,8 +377,14 @@ Reuse compares the actual sampling implementation hash; a mismatch is rejected. 
 keyframe scans mask motion steps crossing a source keyframe or source-file boundary;
 validation also masks proxy keyframes and uses `INTER_AREA` thumbnails. v3 fits use
 `T(b) = b - L(b)` in each camera's base time, an L1 step search with ≥25% gain,
-and explicit overlap exclusion. Cut uncertainty (±10 s) and gaps/overlaps carry
-`sync_uncertain`; annotation sampling redraws those segments within the same stratum.
+and explicit overlap exclusion. Cut uncertainty covers the nearest valid window centers
+on both sides, extended by each window's half length (60 s long / 20 s refinement).
+Without valid refinement windows, `localized: false` preserves the full evidence gap.
+These intervals and gaps/overlaps carry `sync_uncertain` in sidecars; sampling redraws
+affected segments within the same stratum. Clock reads try proxy k, its exact source PTS,
+then the same pairs at k−1/k+1/k−2/k+2; each attempt records its source and the 96×54
+thumbnail mean absolute difference. Sampling-time library versions absent from old
+receipts are explicitly recorded as unknown, separately from later verification versions.
 Residual results are passed, failed, or `insufficient_evidence` (<10 windows or <30% coverage).
 A–B/E–B must pass; A–E may lack evidence, with closure inference reported. Clock checks use
 `d = base_X(pts) - reading`: A/B −0.5 ≤ d <1.5 s, E −1.5 ≤ d <2.5 s.
