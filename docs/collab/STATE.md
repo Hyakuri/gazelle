@@ -10,14 +10,24 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 | stage | 阶段 2：作业数据可用、多机同步、正确性修复，建立区域标注 |
 | branch | `feature/stage2-correctness`（基于 PR #5 head `bbec056`） |
 | pr | [#6](https://github.com/Hyakuri/gazelle/pull/6)（draft）；正文来源 `docs/collab/STAGE2_PR_BODY.md` |
-| writer | codex |
-| next_actor | codex |
+| writer | none |
+| next_actor | claude |
 | current_task | 第 7 轮：`docs/collab/tasks/TASK-125-annotation-points-and-hands-class.md` §3 的“第 3 轮要求”第 1 至 7 条：按住空格的回归、撤销键、测试与文档的小项，以及已获批准的手部类换色（Q-025 第 1 项，改为 `#b6ff00`） |
 | after_current | TASK-125 第 3 轮完成后立即结束本轮，把 `next_actor` 改为 `claude`。本轮不做 TASK-101、TASK-150 与 TASK-140 第 3 轮（第 8 轮），也不开始阶段 3 的任务 |
 | environment | `Gazelle-next`：`C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe`（用户 2026-10-17 决定 D16）。现有 `Gazelle` 作为回退保留，不改动 |
-| last_pushed | `a9f07387daeef71d15fc1504e532e0a65b4ca829`（第 6 轮报告；实现为 `ac89a66f726bc3a2efcfa777d0c8910010d7834b`。本文件与基线的交接提交随后推送，以实时 Git HEAD 为准） |
+| last_pushed | `342f5ed0764afbf6c3f2ba3c3d3245f09abff348`（第 7 轮报告；实现为 `806068cc4f255ccc6673c8c0350ae26aa9e2eb8b`。本文件与基线的交接提交随后推送，以实时 Git HEAD 为准） |
 | last_accepted | `44bacea`。2026-10-29 第 6 轮审查：`60464e2`（协调文档）核对无误；`ac89a66`（TASK-125 第 2 轮）changes-requested，一处回归；`a9f0738` 与 `e605687` 只含报告与交接。第 5 轮审查：`6a3989a`、`139a51f`、`d041669`、`21b3233` 与 `44bacea` 通过，`daeebc9`（TASK-125）changes-requested，`f14b36b` 只含报告与交接 |
 | 更新 | 2026-10-29 22 时 55 分起，Claude 第 6 轮审查：复跑离线门（715 tests，0 skip）；用 Edge 的真实事件做浏览器实测（37 项，含按住重复与保存中隐藏页面），并用第 5 轮页面做对照；命令行的版本门；只读子代理的代码审查与变异测试。TASK-125 第 2 轮 changes-requested（按住空格会点击获得焦点的按钮）；记录 Q-025 的确认（手部类改为 `#b6ff00`）；第 5 轮记录与第 6 轮开始时的说明移入 HISTORY；第 7 轮交给 Codex。此前同日的更新记录见 HISTORY |
+
+## 第 7 轮交接记录（Codex，2026-10-30）
+
+- 仅执行 TASK-125 第 3 轮，主线程 Inline Execution，无子代理。协调文档 `36aa643`、实现 `806068c`、完整报告 `342f5ed` 已推送现有分支；PR #6 正文按来源同步，已发[英中双语评论](https://github.com/Hyakuri/gazelle/pull/6#issuecomment-6501255581)。任务 §2 第 7 轮报告有命令、失败/跳过、前后哈希、13 色 CIE76 与 A/B/C 记录。
+- 重复页面快捷键先阻止默认动作；撤销只允许不带 Shift/Alt 的 Ctrl/Cmd+Z，按住只执行一次；补输入焦点、S/O 取消等测试。六份使用文档同步。最终离线门 **717 tests / 32.143s / 0 skip**，两个 Node harness、compileall、help、list-models 与 docs build/check 通过。小项 A 级修复：Python 3.14 的 argparse 帮助字符串 `%` 转义；不改区域阈值或导出语义。
+- Q-025 已实施：手部类 `#b6ff00`，唯一一次实际正式导出成功，旧导出备份 `roi/export-backup-20261029T152657019554Z`。首次 CLI 在解析帮助文本阶段失败，核对零改写后才修复并导出。区域 SHA `6511ff108c397e4d7dc474bddf6531810f505443f80cf8aca4967c8d4cddf0bb`、参考图及七张叠加图逐字节不变。新颜色最小色差 58.0235，高于其余颜色两两最小 21.4303。
+- `roi_r2` 与 `roi_r2_trial` 只更新类别和 manifest 的类别哈希，旧元数据改名 `*.before-task125-r3-20261030` 保留。各 **27 段 / 8,100 帧** 的 `--validate-only` 通过；片段与帧不变、无正式 `labels.json`。
+- **仍待 Claude 独立验收**：内置浏览器 7 项通过（颜色、撤销组合键、S/O 取消、焦点按钮上的一次空格长按结果），但不能证明真实 repeat=true。独立 Edge 155 在页面控制阶段 CDP 1006 断开，未取得有效真实重复测试结果；请按现有审查计划复测。推荐沿用 Claude 已成功的环境，不扩大本轮权限。正式标注继续暂停，用户独立 checkout 未验收。
+- 外部证据 `gazelle_runs/codex-round7/`。实际 CPU/本机 HTTP/浏览器/Pillow 导出/JPEG 校验及 GitHub 活动；没有模型推理、下载、FFmpeg 转码、Conda/全局配置修改。GPU/FFmpeg/ffprobe 仅查询。普通权限探针与 yun Git/GitHub 例外分开记录。页面已关闭，8797/8798 服务已停止，临时 Edge 配置清理；旧缓存及未知文件保留。
+- 本轮按 build → snapshot“第 7 轮结束” → check 交接，`last_accepted` 不变。`next_actor=claude`，第 8 轮及阶段 3 未开始。
 
 ## 第 6 轮审查结论（Claude，2026-10-29）
 
@@ -61,7 +71,7 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 | Codex 第 5 轮 | [TASK-124](tasks/TASK-124-annotation-hardening.md) 第 2 轮：手动逐步的写盘降频等 | accepted | 页面隐藏时的保存冲突并入 TASK-125 第 2 轮 |
 | Codex 第 5 轮 | [TASK-125](tasks/TASK-125-annotation-points-and-hands-class.md) 标注方案 r3 与 r3.1 | changes-requested | 见 TASK-125 §3 |
 | Codex 第 6 轮 | TASK-125 第 2 轮：注视点与标记互斥、组合键与按住重复、页面隐藏时的保存、数据集版本门、测试与文档 | changes-requested | 一处回归：按住空格会点击获得焦点的按钮；其余通过真实浏览器实测 |
-| Codex 第 7 轮 | TASK-125 第 3 轮：按住按键与撤销键、测试与文档的小项、手部类换色（Q-025） | ready | 本轮唯一一项，完成后立即交回 Claude |
+| Codex 第 7 轮 | TASK-125 第 3 轮：按住按键与撤销键、测试与文档的小项、手部类换色（Q-025） | ready-for-review | 实现与数据校验已提交；真实按住重复事件待 Claude 复测，正式标注仍暂停 |
 | Codex 第 8 轮 | [TASK-101](tasks/TASK-101-face-pose-association.md) 人脸与姿态关联修正（D1，契约 r2） | ready | 阶段 3 的作业者锁定依赖它 |
 | Codex 第 8 轮 | [TASK-150](tasks/TASK-150-new-sessions-and-webcam-intake.md) 新录制与 webcam 接入（D26） | blocked（等 TASK-125 第 3 轮） | 契约 r2；新数据集复制换色后的正式类别文件；你标注期间不碰 `roi_r2` 的标签 |
 | Codex 第 8 轮 | TASK-140 第 3 轮：只补测试与正式字段说明 | ready | 见 TASK-140 §3 |
