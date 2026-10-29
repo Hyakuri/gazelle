@@ -48,13 +48,14 @@ Details: `docs/collab/analysis/2026-10-15-workdata-analysis.md`.
 | 5 | TASK-140 round 2: uncertainty spans at steps, same-source-frame clock reading, switch to the final proxies, build both datasets | accepted (2026-10-29) |
 | 5 | TASK-124 round 2 | accepted (2026-10-29) |
 | 5 | TASK-125 Annotation scheme r3: hands/held-object class and attention points, plus the out-of-view mark r3.1 | changes requested (2026-10-29): points and skip marks can coexist; modifier keys edit marks |
-| 6 | TASK-125 round 2: exclusive points and marks, shortcut guards, save on hide, dataset version gate, tests and docs | ready; the only task in round 6 |
-| 7 | TASK-101 Face–pose association fix (D1, contract r2) | ready |
-| 7 | TASK-150 Intake of the two new recordings (20261016, 20261023) and the webcam | blocked on TASK-125 round 2; contract r2 written |
-| 7 | TASK-140 round 3: test follow-ups only | ready |
+| 6 | TASK-125 round 2: exclusive points and marks, shortcut guards, save on hide, dataset version gate, tests and docs | changes requested (2026-10-29): one regression, holding Space clicks the focused button |
+| 7 | TASK-125 round 3: held-key and undo fixes, small test and doc items, hands colour change (Q-025) | ready; the only task in round 7 |
+| 8 | TASK-101 Face–pose association fix (D1, contract r2) | ready |
+| 8 | TASK-150 Intake of the two new recordings (20261016, 20261023) and the webcam | blocked on TASK-125 round 3; contract r2 written |
+| 8 | TASK-140 round 3: test follow-ups only | ready |
 | — | TASK-151 Register the formal regions to each recording; the user reviews them (D27) | proposed |
 | Stage 4 | Pixel-isotropic reference rays (GZ-28) | proposed; no longer a stage-3 prerequisite because stage 3 uses 3D gaze |
-| User | Label 26 one-minute segments with scheme r3 (about 3 hours) | paused (D20) until TASK-125 round 2 passes review; dataset `roi_r2` is ready |
+| User | Label 26 one-minute segments with scheme r3 (about 3 hours) | paused (D20) until TASK-125 round 3 passes review; dataset `roi_r2` is ready |
 | User | Label the 8 segments of the new recordings (about 1 hour) | after TASK-150 |
 | — | Stage acceptance by Claude, final acceptance by the user | not started |
 
@@ -133,6 +134,21 @@ Round 5 review on 2026-10-29 (`docs/collab/evidence/2026-10-29-round5-review.md`
   - Formal labelling starts after that review.
   - Round 7 brings TASK-101, TASK-150 and the TASK-140 test follow-ups, and can run while the user labels.
 
+Round 6 review on 2026-10-29 (`docs/collab/evidence/2026-10-29-round6-review.md`):
+
+- **TASK-125 round 2 fixes both round-5 defects.** The server and the page now keep points and skip marks exclusive within a run, and modifier combinations and held keys no longer edit labels.
+- **Claude tested it in a real browser.** Headless Microsoft Edge received trusted input, real auto-repeat and real page-hide events, with real `requestAnimationFrame`. The formal dataset was read-only and the labels went to a temporary file. 36 of 37 checks passed; the remaining one was a wrong expectation in the test script.
+  - With a save held in flight for 6 s, hiding the page by switching tabs or by minimizing queued the next save correctly.
+  - Slow frames stayed on screen for at least one step.
+  - Saves stayed at most one per second.
+- **A negative control confirms the tests.** The same harness, run against the round-5 page, reproduced all four old defects.
+- **One regression must be fixed.** After a mouse click, a button keeps focus. If the user then holds Space, the browser clicks that button on release, because the ignored repeat events are no longer prevented. This can undo one more step or delete a run's points. The independent reviewer inferred it, and Claude reproduced it in the browser.
+- **Q-025 is answered.** The user approved recolouring `hands_object` to `#b6ff00`. Its smallest CIE76 difference to any other class or palette colour is 58, against about 12 before.
+- **Plan.**
+  - Round 7 is TASK-125 round 3 only: the regression, small items and the recolour. Then back to Claude.
+  - Formal labelling starts after that review.
+  - Round 8 brings TASK-101, TASK-150 and the TASK-140 test follow-ups, and can run while the user labels.
+
 ## How this PR is used
 
 - Both agents start from `docs/collab/STATE.md`.
@@ -195,13 +211,14 @@ Work videos stay read-only on the local drive. Derived data, labels, and outputs
 | 5 | TASK-140 第 2 轮：台阶处的不确定区间、时钟同源帧补读、切换正式代理、生成两个数据集 | accepted（2026-10-29） |
 | 5 | TASK-124 第 2 轮 | accepted（2026-10-29） |
 | 5 | TASK-125 标注方案 r3：“手部/手中物体”类别与注视点，以及“画面外”标记 r3.1 | 退回修改（2026-10-29）：注视点与跳过标记可以并存；组合键会改动标记 |
-| 6 | TASK-125 第 2 轮：注视点与标记互斥、快捷键防护、隐藏页面时的保存、数据集版本门、测试与文档 | ready；第 6 轮唯一一项 |
-| 7 | TASK-101 人脸与姿态关联修正（D1，契约 r2） | ready |
-| 7 | TASK-150 两次新录制（20261016、20261023）与 webcam 的接入 | 等 TASK-125 第 2 轮；契约 r2 已写 |
-| 7 | TASK-140 第 3 轮：只补测试 | ready |
+| 6 | TASK-125 第 2 轮：注视点与标记互斥、快捷键防护、隐藏页面时的保存、数据集版本门、测试与文档 | 退回修改（2026-10-29）：一处回归，按住空格会点击获得焦点的按钮 |
+| 7 | TASK-125 第 3 轮：按住按键与撤销键的修复、测试与文档的小项、手部类换色（Q-025） | ready；第 7 轮唯一一项 |
+| 8 | TASK-101 人脸与姿态关联修正（D1，契约 r2） | ready |
+| 8 | TASK-150 两次新录制（20261016、20261023）与 webcam 的接入 | 等 TASK-125 第 3 轮；契约 r2 已写 |
+| 8 | TASK-140 第 3 轮：只补测试 | ready |
 | — | TASK-151 正式区域按录制配准，由用户复核（D27） | proposed |
 | 阶段 4 | 参考射线改为像素各向同性方向（GZ-28） | proposed；阶段 3 改用三维视线，不再是其前置 |
-| 用户 | 按方案 r3 标注 26 个一分钟片段（约 3 小时） | 暂停（D20），等 TASK-125 第 2 轮通过审查；数据集 `roi_r2` 已就绪 |
+| 用户 | 按方案 r3 标注 26 个一分钟片段（约 3 小时） | 暂停（D20），等 TASK-125 第 3 轮通过审查；数据集 `roi_r2` 已就绪 |
 | 用户 | 标注新录制的 8 段（约 1 小时） | TASK-150 之后 |
 | — | Claude 阶段验收，用户最终验收 | 未开始 |
 
@@ -279,6 +296,21 @@ Work videos stay read-only on the local drive. Derived data, labels, and outputs
   - 第 6 轮只做 TASK-125 第 2 轮，完成后交回 Claude。
   - 正式标注在那次审查之后开始。
   - 第 7 轮做 TASK-101、TASK-150 与 TASK-140 的测试补充，可以与用户的标注同时进行。
+
+2026-10-29 的第 6 轮审查（`docs/collab/evidence/2026-10-29-round6-review.md`）：
+
+- **TASK-125 第 2 轮修好了第 5 轮的两处缺陷。** 服务端与页面都只允许同一片段内注视点与跳过标记二选一；组合键与按住按键不再改动标注。
+- **Claude 在真实浏览器中实测。** 用无界面模式的 Microsoft Edge 发出可信输入、真实的按住重复与页面隐藏事件，`requestAnimationFrame` 未替换；正式数据集只读，标签写在临时文件。37 项检查中 36 项通过，未通过的一项是测试脚本的预期写错：
+  - 一次保存被延迟 6 秒时，切换标签或最小化窗口，下一次保存正确排队；
+  - 慢帧至少停留一个步长；
+  - 写盘每秒最多一次。
+- **对照实验说明测试有效。** 同一套测试用于第 5 轮的页面，4 个旧缺陷全部复现。
+- **有一处回归必须修复。** 鼠标点击后按钮保留焦点。这时如果按住空格，因为被忽略的重复事件不再阻止默认行为，松开时浏览器会点击这个按钮，可能多撤销一次，或者删掉一个片段的注视点。独立审查者推断出这一点，Claude 在浏览器中复现。
+- **Q-025 已答复。** 用户同意把“手部/手中物体”换成 `#b6ff00`，它与其他类别和调色板颜色的 CIE76 色差最小为 58，原来约 12。
+- **计划。**
+  - 第 7 轮只做 TASK-125 第 3 轮：修复回归、几个小项与换色，完成后交回 Claude。
+  - 正式标注在那次审查之后开始。
+  - 第 8 轮做 TASK-101、TASK-150 与 TASK-140 的测试补充，可以与用户的标注同时进行。
 
 ## 本 PR 的用法
 
