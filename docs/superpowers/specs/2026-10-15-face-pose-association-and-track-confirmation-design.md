@@ -1,3 +1,12 @@
+---
+doc_id: PERCEPTION
+title: 人脸与姿态关联、新轨迹确认设计（D1、D2）
+version: 1.1.2
+status: 已确认（协调者）
+updated: 2026-10-18
+owner: Claude
+confirm_ref: 用户 2026-10-15（方向）；协调者 2026-10-18（§4.4）
+---
 # Face/Pose Association and Spawn-Frame Track Confirmation Design
 
 Status: direction approved by the user on 2026-10-15 (decisions D1 and D2 as
@@ -202,6 +211,15 @@ Video mode stores the selected `(person_id, head_bbox)` pairs after each frame
 and calls `bridge.retain_person_ids(selected ids)` for every `max_heads`, not
 only for one.
 
+Amendment, 2026-10-18 (TASK-101 contract r2, after D2 and the GZ-30 fix in
+TASK-102): bridge maintenance is provisional-neutral. Each frame runs a second
+selection over the confirmed (non-provisional) perceptions only, with the same
+rules and the same `previous_selection`, and passes those IDs to
+`retain_person_ids`. The output still uses the full selection, which may include
+provisional heads. A one-frame spawn therefore never changes which bridges are
+kept, and a real identity change prunes the old bridge on the frame where the
+new identity is confirmed, one frame later than the original wording.
+
 Image mode passes no previous selection. It selects from the pool by the
 existing priority key and then assigns `person_id` values `0..n−1` in the
 selected order.
@@ -224,7 +242,7 @@ No schema change beyond §3.4. Observable differences:
 
 ## 5. Documentation
 
-Update `README.md`, `README_CN.md`, `docs/USAGE.md`, and `docs/USAGE_CN.md`
+Update `README.md`, `README_CN.md`, `docs/usage/USAGE.md`, and `docs/usage/USAGE_CN.md`
 together: the `tracking.provisional` field; first-frame behavior; the anchor
 rule; the candidate pool of at least three; continuity selection; the
 non-contiguous video IDs. Add tokens for these statements to
@@ -293,3 +311,13 @@ Run on local hardware with cached resources only, outputs outside the repository
   candidate and the highest-quality pose candidate” is replaced by §4.3–§4.4.
 - 07-21 §15: tracker IDs are converted to public IDs starting on the spawn frame
   (§3), not on the first upstream-confirmed frame.
+
+## 版本记录
+
+<!-- portal:versions -->
+| 版本 | 日期 | 状态 | 变更摘要 | 确认 | 归档 |
+| --- | --- | --- | --- | --- | --- |
+| 1.1.2 | 2026-10-18 | 已确认（协调者） | 文件移入 `docs/design/` 并改为稳定文件名，链接与路径随之更新；内容不变 | 用户 2026-10-15（方向）；协调者 2026-10-18（§4.4） | [v1.1.2](../../archive/PERCEPTION/PERCEPTION_v1.1.2.md) |
+| 1.1.1 | 2026-10-18 | 已取代 | 加入文件头与版本记录，内容不变 | 用户 2026-10-15（方向）；协调者 2026-10-18（§4.4） | [v1.1.1](../../archive/PERCEPTION/PERCEPTION_v1.1.1.md) |
+| 1.1.0 | 2026-10-18 | 已取代 | §4.4 修订：临时头中立的保留集合（TASK-101 契约 r2） | 协调者 2026-10-18（B 级） | [v1.1.0](../../archive/PERCEPTION/PERCEPTION_v1.1.0.md) |
+| 1.0.0 | 2026-10-15 | 已取代 | D1、D2 设计：单人模式的人脸与姿态关联、新轨迹首帧确认 | 用户 2026-10-15（方向） | [v1.0.0](../../archive/PERCEPTION/PERCEPTION_v1.0.0.md) |

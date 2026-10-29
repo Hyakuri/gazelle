@@ -40,7 +40,7 @@
 ### 依据材料
 
 - 作业数据分析 §1 至 §3.1；本任务的命令即分析中已验证的命令。
-- `docs/collab/COLLABORATION_PLAN_CN.md` §5 的数据规则。
+- `docs/rules/COLLABORATION_PLAN_CN.md` §5 的数据规则。
 
 ### 不可变约束
 
@@ -81,7 +81,7 @@ git status --short
 
 - 需独立审查：是（数据完整性）。
 - 需真实运行：是，仅 CPU 与磁盘。
-- 文档同步：需要。在四份用户文档中新建「研究数据工具」小节：写明用途、在仓库根目录运行的入口命令、读取什么、写到哪里、是否调用 FFmpeg、是否使用 GPU 或网络，并链接 `tools/workdata/README_CN.md`。`README.md` 与 `README_CN.md` 只放简介与指向 USAGE 的链接；`docs/USAGE.md` 与 `docs/USAGE_CN.md` 放工具表。中英文语义一致；`tests/test_usage_docs.py` 在两份 USAGE 中锁定本任务的入口模块名。原因：这些工具由用户或 Codex 直接运行，属于用户可见的用法，适用 AGENTS.md 的文档同步规则（2026-10-15 按 Codex 接手核对修正）。
+- 文档同步：需要。在四份用户文档中新建「研究数据工具」小节：写明用途、在仓库根目录运行的入口命令、读取什么、写到哪里、是否调用 FFmpeg、是否使用 GPU 或网络，并链接 `tools/workdata/README_CN.md`。`README.md` 与 `README_CN.md` 只放简介与指向 USAGE 的链接；`docs/usage/USAGE.md` 与 `docs/usage/USAGE_CN.md` 放工具表。中英文语义一致；`tests/test_usage_docs.py` 在两份 USAGE 中锁定本任务的入口模块名。原因：这些工具由用户或 Codex 直接运行，属于用户可见的用法，适用 AGENTS.md 的文档同步规则（2026-10-15 按 Codex 接手核对修正）。
 - 风险与回退：重封装只复制视频流，源文件不变；问题只影响缓存，删除缓存即可重建。
 - 依赖：无。
 

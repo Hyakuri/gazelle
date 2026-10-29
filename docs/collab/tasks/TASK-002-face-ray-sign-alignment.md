@@ -3,7 +3,7 @@
 状态：accepted（2026-10-17 第 3 轮审查；真实样例的验收输入与旋转判据按 §3 澄清）
 创建：2026-10-15（Asia/Tokyo）　协调者：Claude　实现者：Codex　验收：用户（独立 checkout）
 问题来源：GZ-02（登记表 C001，主线程复现），见 [分析报告 §5](../analysis/2026-10-14-codebase-analysis.md)。
-依据：已批准规范 `docs/superpowers/specs/2026-07-21-mediapipe-head-perception-design.md` §14。AGENTS.md 的来源优先级中，已批准规范高于现有代码，因此本任务修正代码，不修改规范。
+依据：已批准规范 `docs/design/history/2026-07-21-mediapipe-head-perception-design.md` §14。AGENTS.md 的来源优先级中，已批准规范高于现有代码，因此本任务修正代码，不修改规范。
 
 ## 1. 契约
 
@@ -41,7 +41,7 @@ MediaPipe 的 facial transformation matrix 位于 Y 向上、Z 朝向摄像机�
 
 - 代码：`gazelle/runtime/perception/mediapipe_backend.py:222-260`、`gazelle/runtime/perception/reference_rays.py:91-182`、`gazelle/runtime/perception/fusion.py:116-123`（只用 |yaw|，不受影响）。
 - 测试：`tests/test_reference_rays.py`、`tests/test_mediapipe_backend.py:406-431`、`tests/test_head_fusion.py:139-195`、`tests/test_usage_docs.py`。
-- 文档：`docs/USAGE.md` 第 12 节 `head_pose` 行（约 `:343`）及中文同行、README 相应段落。
+- 文档：`docs/usage/USAGE.md` 第 12 节 `head_pose` 行（约 `:343`）及中文同行、README 相应段落。
 
 ### 不可变约束
 

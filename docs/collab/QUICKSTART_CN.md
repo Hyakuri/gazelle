@@ -2,7 +2,13 @@
 
 两个 agent 都从 `docs/collab/STATE.md` 读取当前阶段与下一步，你不需要粘贴任何文件。
 进展与每个任务的报告汇总在 GitHub 上阶段分支的 draft PR 页面，编号见 STATE.md 控制块的 `pr`。
-完整规则见 [COLLABORATION_PLAN_CN.md](COLLABORATION_PLAN_CN.md)。
+完整规则见 [COLLABORATION_PLAN_CN.md](../rules/COLLABORATION_PLAN_CN.md)。
+
+**项目总览网页**：用浏览器打开仓库中的 `docs/portal/index.html`（同内容的 Markdown 是 `docs/README.md`，在 GitHub 上打开 `docs` 文件夹时自动显示）。
+- 网页集中显示系统设计、数据流程、开发进展、待你确认的事项，以及各设计文档的版本历史与基线快照。
+- 文档按类别分文件夹：需求、设计、规则、协同记录、使用说明、交接、归档；结构图见网页“文档与版本”。
+- 每份设计文档都有版本号，每次修改都留档。想看旧版本或回档，直接告诉 Claude，例如“回档到阶段 3 设计的 v2.0.0”。
+- 规则见 [文档记录体系与版本规则](../rules/DOCS_SYSTEM_CN.md)。
 
 ## Codex
 

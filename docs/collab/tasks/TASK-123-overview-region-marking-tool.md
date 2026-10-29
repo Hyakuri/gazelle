@@ -2,7 +2,7 @@
 
 状态：changes-requested（2026-10-16，必须修复 5 项，见 §3）
 创建：2026-10-15（Asia/Tokyo）　协调者：Claude　实现者：Codex　验收：用户（标记体验）与 Claude（工具审查）
-依据：用户 2026-10-15 对 Q8 的回答：之后在設備カメラ的画面中标记取货台、作业台、放置区、工作区等区域。[验证集规范 r2](../../superpowers/specs/2026-10-15-workdata-validation-set-design.md) §4；[多摄像机设计](../../superpowers/specs/2026-10-15-multicamera-attention-design.md) §3.2。
+依据：用户 2026-10-15 对 Q8 的回答：之后在設備カメラ的画面中标记取货台、作业台、放置区、工作区等区域。[验证集规范 r2](../../design/VALIDATION_SET_DESIGN.md) §4；[多摄像机设计](../../design/history/2026-10-15-multicamera-attention-design.md) §3.2。
 授权：2026-10-14 本地运算授权；2026-10-15 用户提供 `E:\Gazelle_Workdata` 供分析，只读使用。
 
 ## 1. 契约
@@ -78,7 +78,7 @@ git status --short
 
 - 需独立审查：是（区域定义决定类别与特征）。
 - 需真实运行：抽取候选帧，仅 CPU。
-- 文档同步：需要。在四份用户文档的「研究数据工具」小节（TASK-132 建立）中加入本任务的工具：写明用途、在仓库根目录运行的入口命令、读取什么、写到哪里、是否调用 FFmpeg、是否使用 GPU 或网络，并链接 `tools/validation/ROI_GUIDE_CN.md`。`README.md` 与 `README_CN.md` 只放简介与指向 USAGE 的链接；`docs/USAGE.md` 与 `docs/USAGE_CN.md` 放工具表。中英文语义一致；`tests/test_usage_docs.py` 在两份 USAGE 中锁定本任务的入口模块名。原因：这些工具由用户或 Codex 直接运行，属于用户可见的用法，适用 AGENTS.md 的文档同步规则（2026-10-15 按 Codex 接手核对修正）。
+- 文档同步：需要。在四份用户文档的「研究数据工具」小节（TASK-132 建立）中加入本任务的工具：写明用途、在仓库根目录运行的入口命令、读取什么、写到哪里、是否调用 FFmpeg、是否使用 GPU 或网络，并链接 `tools/validation/ROI_GUIDE_CN.md`。`README.md` 与 `README_CN.md` 只放简介与指向 USAGE 的链接；`docs/usage/USAGE.md` 与 `docs/usage/USAGE_CN.md` 放工具表。中英文语义一致；`tests/test_usage_docs.py` 在两份 USAGE 中锁定本任务的入口模块名。原因：这些工具由用户或 Codex 直接运行，属于用户可见的用法，适用 AGENTS.md 的文档同步规则（2026-10-15 按 Codex 接手核对修正）。
 - 风险与回退：工具问题只影响标记效率；区域文件可随时重画。回退方式是 `git revert`。
 - 依赖：TASK-132。
 

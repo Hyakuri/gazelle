@@ -1,9 +1,9 @@
 # Gaze-LLE
 #### CVPR 2025 (Highlight)
 
-For complete runtime setup, every CLI option, input/output schemas, and runnable image/video workflows, see the [Project Usage Guide](docs/USAGE.md).
+For complete runtime setup, every CLI option, input/output schemas, and runnable image/video workflows, see the [Project Usage Guide](docs/usage/USAGE.md).
 
-For another computer or agent, start with the [Handoff Guide](docs/HANDOFF.md) and [Shared Agent Workflow](docs/AGENT_WORKFLOW.md).
+For another computer or agent, start with the [Handoff Guide](docs/handoff/HANDOFF.md) and [Shared Agent Workflow](docs/rules/AGENT_WORKFLOW.md).
 
 [中文说明](README_CN.md)
 
@@ -345,13 +345,13 @@ viewed ranges; new ranges in that request are saved but cannot qualify it. View-
 are coalesced to at most once per second, with immediate pause/switch/finish/hide/close flushes;
 label, people and note edits save immediately. `labels validate --segment ID`
 strictly checks just that segment; repeat the option for several. It uses CPU only, with no FFmpeg executable, model, GPU, downloads
-or external network. See [usage](docs/USAGE.md#15-research-data-tools) and the
+or external network. See [usage](docs/usage/USAGE.md#15-research-data-tools) and the
 [annotation guide](tools/validation/ANNOTATION_GUIDE_CN.md).
 
 `tools.workdata.proxies` creates three 5 Hz, 1920×1080 videos per
 session, with source-frame sidecars and full decode counts. It uses CPU PyAV and
 FFmpeg/libx264, writes outside the repository, and uses no model, GPU or network.
-See [Research data tools](docs/USAGE.md#15-research-data-tools) for commands and
+See [Research data tools](docs/usage/USAGE.md#15-research-data-tools) for commands and
 the explicit policy for internal coverage gaps.
 
 The clock tools `tools.workdata.osd_clock`, `tools.workdata.timemap`, and
@@ -389,11 +389,11 @@ remux AVI empty packets. Run `python -m tools.workdata.inventory` and
 `python -m tools.workdata.remux` from the repository root; these read the source
 videos and write derived files outside the repository, invoking ffprobe/FFmpeg
 on CPU without GPU, models, or network access. See the research data tools in
-[USAGE](docs/USAGE.md) and the [Chinese tool guide](tools/workdata/README_CN.md).
+[USAGE](docs/usage/USAGE.md) and the [Chinese tool guide](tools/workdata/README_CN.md).
 
 Overview region tools extract local candidate frames and provide a browser editor
 at `127.0.0.1`, with autosave and reference/class export. Read the
-[region guide](tools/validation/ROI_GUIDE_CN.md) and [USAGE](docs/USAGE.md) for
+[region guide](tools/validation/ROI_GUIDE_CN.md) and [USAGE](docs/usage/USAGE.md) for
 repository-root commands. Images and region files stay in the external data root;
 these tools use CPU/OpenCV/Pillow, no FFmpeg executable, models, GPU, or external network.
 Exported annotation classes retain region colors for the later annotation tool.

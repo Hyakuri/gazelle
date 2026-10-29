@@ -1,7 +1,7 @@
 # TASK-NNN：<短标题>
 
 > 模板。由 Claude 填写并作为「契约」段的唯一编辑者；Codex 只追加「实施报告」段；
-> Claude 追加「审查结论」段。状态流转见 `docs/collab/COLLABORATION_PLAN_CN.md` §3。
+> Claude 追加「审查结论」段。状态流转见 `docs/rules/COLLABORATION_PLAN_CN.md` §3。
 
 状态：proposed | active | ready-for-review | changes-requested | accepted | handed-off | merged | blocked
 创建：YYYY-MM-DD（Asia/Tokyo）　协调者：Claude　实现者：Codex　验收：用户（独立 checkout）
@@ -30,7 +30,7 @@
   ```
 - 需独立审查：是/否（指标/坐标/时序/阈值/接口/兼容性改动 = 是）
 - 需真实 smoke（L3）：否 | 是（命令、输入、输出根目录、授权依据）
-- 文档同步：不需要（原因）| 需要（README.md / README_CN.md / docs/USAGE.md / docs/USAGE_CN.md / tests/test_usage_docs.py）
+- 文档同步：不需要（原因）| 需要（README.md / README_CN.md / docs/usage/USAGE.md / docs/usage/USAGE_CN.md / tests/test_usage_docs.py）
 - 风险与回退：
 - 依赖任务：
 

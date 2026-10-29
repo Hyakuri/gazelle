@@ -1,8 +1,8 @@
 # TASK-102：新轨迹首帧立即确认（决策 D2）
 
-状态：ready-for-review（2026-10-18 第 2 轮修复已提交；真实 smoke 计数预期差异待 Claude 判断，见 §2）
+状态：accepted（2026-10-18 第 4 轮审查；第 3 轮的必须修复项已完成）
 创建：2026-10-15（Asia/Tokyo）　协调者：Claude　实现者：Codex　验收：用户（独立 checkout）
-问题来源：GZ-03（登记表 C007、C011）。设计：[2026-10-15 规范 §3](../../superpowers/specs/2026-10-15-face-pose-association-and-track-confirmation-design.md)。
+问题来源：GZ-03（登记表 C007、C011）。设计：[2026-10-15 规范 §3](../../design/PERCEPTION_D1_D2_DESIGN.md)。
 授权：用户 2026-10-15 批准 D2 按 Claude 的推荐执行。
 
 ## 1. 契约
@@ -33,7 +33,7 @@
 
 ### 依据材料
 
-- 规范：`docs/superpowers/specs/2026-10-15-face-pose-association-and-track-confirmation-design.md` §1.1、§3、§6、§8。
+- 规范：`docs/design/PERCEPTION_D1_D2_DESIGN.md` §1.1、§3、§6、§8。
 - 代码：`gazelle/runtime/perception/tracking.py`（全文）、`gazelle/runtime/perception/contracts.py:108-136`、`gazelle/runtime/perception/provider.py:152-182`、`gazelle/runtime/perception/outputs.py:134-160`。
 - 上游语义：`C:\Users\yun\anaconda3\envs\Gazelle\Lib\site-packages\trackers\core\bytetrack\tracker.py` 的 `update`、`_spawn_new_tracks`，以及 `bytetrack\utils.py` 的 `_get_alive_tracklets`。
 - 受影响测试：`tests/test_head_tracking.py`（`FakeTracker._echo` 在 `:90-99`；`test_filters_untracked_sentinel_and_returns_stable_candidates` 在 `:370`；`test_untracked_sentinel_never_consumes_public_id` 在 `:639`），`tests/test_mediapipe_head_provider.py`，`tests/test_outputs.py`，`tests/test_usage_docs.py`。
@@ -48,7 +48,7 @@
 ### 允许动作
 
 - 修改：`gazelle/runtime/perception/tracking.py`、`gazelle/runtime/perception/contracts.py`、`gazelle/runtime/perception/provider.py`（仅为传递 `provisional`）、`gazelle/runtime/perception/outputs.py`、对应测试文件、`tests/test_usage_docs.py`、四份用户文档的相关段落。
-- 按 [协作方案](../COLLABORATION_PLAN_CN.md) §4 在阶段分支提交并推送。
+- 按 [协作方案](../../rules/COLLABORATION_PLAN_CN.md) §4 在阶段分支提交并推送。
 - 运行下方离线验证；运行下方真实 smoke（已获本地运算授权，仅用缓存资源，输出写到仓库外）。可只读使用作业数据补充真实 smoke：TASK-131 合入后，用 FFmpeg 流复制从 MP4 分段或 TASK-134 的代理视频截取 15 秒片段到 `C:\Users\yun\Documents\Claude_Code\gazelle_runs\` 再运行，不写入 `E:\Gazelle_Workdata\`。sample1 只作冒烟输入；sample2 不属于目标场景，不再使用。运行任何 GPU 推理前按协作方案 §5 检查空闲显存。
 
 ### 禁止
@@ -213,6 +213,30 @@ smoke A 复用原 30 帧 `sunny.mp4`，SHA-256 `d342b0ea8304d7bf46bc9276b6a22f50
      - 新测试的代码风格比文件其余部分紧凑。
      - 报告中“新版未确认轨迹漏检后可能更早被清理”与 2.6.1 不符：spawn 的计数从 1 开始，能撑过一帧漏检。这不影响结果。
 - **结论**：**changes-requested**（必须修复 1 项）。按“第 2 轮修复”在本文件追加报告，排入第 4 轮。TASK-101 继续等本任务通过。
+
+### 2026-10-18 第 4 轮审查（Claude）
+
+- **审查目标**：`97ef104`（第 2 轮修复与报告），在 HEAD `5882791` 上审查。
+- **独立复跑结果**：
+  - 完整离线门 668 tests，0 skip。
+  - 一份只读代码审查（子代理）：聚焦测试 114 项通过。在 CPU 上用真实 trackers 2.6.1 的 ByteTrack 做了探针：
+    - **S1**（契约场景）：f5 为 provisional，f6–f8 为 P0/`tracked_only`；模拟旧规则则为 `no_head`，复现了 GZ-30。
+    - **S2**（X 在 f6 确认）：f6 才修剪，P0 不会复活。
+    - **S5**（连续多帧 provisional 胜出）：P0 的桥接保留，并照常按时限过期。
+    - 多人模式不受影响。
+- **Q-016 的判断**：Codex 的解释成立，是 Claude 第 3 轮的预期有误。
+  - 逐帧比较 smoke A：基线中 f6、f7、f13 的三行 `tracked_only`，在 TASK-102 之后分别被合法的 provisional 观测替代，而它们的下一帧都有真实观测。
+  - 修复后没有任何一帧变成 `no_head`。
+  - 修复前后 30 帧的 `person_id`、状态与 provisional 字段完全相同；只有射线的 y 与 roll 不同，那是 TASK-002 的符号修正。
+  - Codex 的仲裁前诊断显示，f6、f7 的 P0/`tracked_only` 桥接仍在。
+  - 所以 smoke A 无法体现这个修复，只能由 S1 这类“临时头之后没有观测”的场景证明。
+- **更正**：Claude 第 3 轮审查写道“smoke A 中 `tracked_only` 由 3 行变为 0 行，原因相同”。这是错误归因：那三行减少是 TASK-102 的设计结果，即临时观测优先于桥接行，并非桥接被删。
+- **发现（低，转入 TASK-101）**：
+  - 当本帧还有另一个已确认的观测时，provisional 胜出会改变“哪条旧桥接被保留”。
+  - 场景 S4：A 在 f0–f4 有人脸姿态；B 只有姿态，f3–f5 可见、f4 确认；f5 出现一帧 spawn X。修复后 f6–f8 输出 A/`tracked_only`，去掉 X 时则输出 B/`tracked_only`。
+  - 只影响 `tracked_only` 行，默认的 `eligible` 选择器不会选它们。
+  - TASK-101 本来就要重写这段逻辑，因此把“临时头中立”的规则写进 TASK-101 契约 r2：只用已确认感知做一次选择来决定保留哪些桥接。
+- **结论**：**accepted**。GZ-30 已修复。TASK-101 解除阻塞。
 
 ## 4. 验收记录（用户反馈后由 Claude 填写）
 

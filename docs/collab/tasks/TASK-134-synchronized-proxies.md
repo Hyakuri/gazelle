@@ -2,7 +2,7 @@
 
 状态：ready（依赖 TASK-133）
 创建：2026-10-15（Asia/Tokyo）　协调者：Claude　实现者：Codex　验收：Claude
-依据：[作业数据分析](../analysis/2026-10-15-workdata-analysis.md) §4、§6；[验证集规范 r2](../../superpowers/specs/2026-10-15-workdata-validation-set-design.md)；[多摄像机设计提案](../../superpowers/specs/2026-10-15-multicamera-attention-design.md) §3.1。
+依据：[作业数据分析](../analysis/2026-10-15-workdata-analysis.md) §4、§6；[验证集规范 r2](../../design/VALIDATION_SET_DESIGN.md)；[多摄像机设计提案](../../design/history/2026-10-15-multicamera-attention-design.md) §3.1。
 决策：D13（画面时钟上的 5 Hz、1920×1080）用户 2026-10-15 批准。参数仍保持可配置，以后改频率只需重新运行。
 摄像机角色：前方 `cam_b`、右侧 `cam_a`、全局 `cam_e`（用户 2026-10-15 确认）。代理视频文件名使用角色名，例如 `proxy_front.mp4`、`proxy_right.mp4`、`proxy_overview.mp4`，旁注与 `session.json` 同时记录角色与物理编号。
 授权：2026-10-14 本地运算授权；2026-10-15 用户提供 `E:\Gazelle_Workdata` 供分析，只读使用。
@@ -72,7 +72,7 @@ git status --short
 
 - 需独立审查：是（同步正确性）。
 - 需真实运行：是，仅 CPU。
-- 文档同步：需要。在四份用户文档的「研究数据工具」小节（TASK-132 建立）中加入本任务的工具：写明用途、在仓库根目录运行的入口命令、读取什么、写到哪里、是否调用 FFmpeg、是否使用 GPU 或网络，并链接 `tools/workdata/README_CN.md`。`README.md` 与 `README_CN.md` 只放简介与指向 USAGE 的链接；`docs/USAGE.md` 与 `docs/USAGE_CN.md` 放工具表。中英文语义一致；`tests/test_usage_docs.py` 在两份 USAGE 中锁定本任务的入口模块名。原因：这些工具由用户或 Codex 直接运行，属于用户可见的用法，适用 AGENTS.md 的文档同步规则（2026-10-15 按 Codex 接手核对修正）。
+- 文档同步：需要。在四份用户文档的「研究数据工具」小节（TASK-132 建立）中加入本任务的工具：写明用途、在仓库根目录运行的入口命令、读取什么、写到哪里、是否调用 FFmpeg、是否使用 GPU 或网络，并链接 `tools/workdata/README_CN.md`。`README.md` 与 `README_CN.md` 只放简介与指向 USAGE 的链接；`docs/usage/USAGE.md` 与 `docs/usage/USAGE_CN.md` 放工具表。中英文语义一致；`tests/test_usage_docs.py` 在两份 USAGE 中锁定本任务的入口模块名。原因：这些工具由用户或 Codex 直接运行，属于用户可见的用法，适用 AGENTS.md 的文档同步规则（2026-10-15 按 Codex 接手核对修正）。
 - 风险与回退：编码耗时长，与用户的其他实验争用 CPU，以低优先级运行；代理视频可删除重建。
 - 依赖：TASK-133。
 

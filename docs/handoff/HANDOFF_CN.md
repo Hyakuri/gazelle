@@ -1,12 +1,12 @@
 # 跨电脑与跨 Agent 交接指南
 
-[English](HANDOFF.md) | [当前项目快照](handoff/CURRENT_STATE.md) |
-[共用协作流程](AGENT_WORKFLOW_CN.md) | [完整使用指南](USAGE_CN.md)
+[English](HANDOFF.md) | [当前项目快照](CURRENT_STATE.md) |
+[共用协作流程](../rules/AGENT_WORKFLOW_CN.md) | [完整使用指南](../usage/USAGE_CN.md)
 
 ## 1. 阅读顺序
 
 1. 根目录 `AGENTS.md`：长期规则、范围、环境与验证边界。
-2. `handoff/CURRENT_STATE.md`：分支/PR 快照、已完成能力、证据、未提交修改、
+2. `CURRENT_STATE.md`：分支/PR 快照、已完成能力、证据、未提交修改、
    已知问题和未包含在迁移包中的资源。
 3. 换电脑阅读本指南；切换或协作 agent 阅读 `AGENT_WORKFLOW_CN.md`。
 4. 开展下一项具体任务时再按需读取 `USAGE_CN.md`、相关代码和设计。
@@ -159,7 +159,7 @@ Gate D：agent 接手。核对指令加载，再以一个真实小任务演练�
 
 ```text
 你正在接手 Hyakuri/gazelle。先读取 AGENTS.md、
-docs/handoff/CURRENT_STATE.md、docs/HANDOFF_CN.md、docs/AGENT_WORKFLOW_CN.md。
+docs/handoff/CURRENT_STATE.md、docs/handoff/HANDOFF_CN.md、docs/rules/AGENT_WORKFLOW_CN.md。
 检查实际分支、HEAD、工作区修改和指令来源，区分版本元数据、历史验证和本轮证据。
 保留已有修改；没有对应授权时不要创建分支/PR、合并、force push、安装依赖、
 下载模型、运行真实推理或发布。
@@ -169,4 +169,4 @@ docs/handoff/CURRENT_STATE.md、docs/HANDOFF_CN.md、docs/AGENT_WORKFLOW_CN.md�
 ```
 
 使用前填写角色和任务两行；仅接管时将任务填为“只读检查”。多阶段任务采用
-[TASK_TEMPLATE](handoff/TASK_TEMPLATE.md)，无需重复粘贴完整历史对话。
+[TASK_TEMPLATE](TASK_TEMPLATE.md)，无需重复粘贴完整历史对话。

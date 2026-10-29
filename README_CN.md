@@ -1,9 +1,9 @@
 # Gaze-LLE
 #### CVPR 2025 Highlight
 
-有关完整的 runtime 环境设置、全部 CLI 选项、输入/输出 schema 以及可运行的图像/视频工作流，请参阅[项目使用指南](docs/USAGE_CN.md)。
+有关完整的 runtime 环境设置、全部 CLI 选项、输入/输出 schema 以及可运行的图像/视频工作流，请参阅[项目使用指南](docs/usage/USAGE_CN.md)。
 
-迁移电脑或切换 agent 时，请先阅读[交接指南](docs/HANDOFF_CN.md)和[跨 Agent 协作流程](docs/AGENT_WORKFLOW_CN.md)。
+迁移电脑或切换 agent 时，请先阅读[交接指南](docs/handoff/HANDOFF_CN.md)和[跨 Agent 协作流程](docs/rules/AGENT_WORKFLOW_CN.md)。
 
 [English README](README.md)
 
@@ -343,13 +343,13 @@ python main.py `
 完成条件只认此前已保存的已看范围；同请求的新范围会保存，但不能用于本次确认。
 仅已看变化最多每秒保存一次，暂停/换段/完成/隐藏/关闭前立即写入；类别、他人区间、备注立即保存。
 `labels validate --segment ID` 只严格检查指定段，可重复给出。仅使用 CPU，不启动 FFmpeg
-可执行程序，不使用模型、GPU、下载或外部网络。入口见[用法](docs/USAGE_CN.md#15-研究数据工具)
+可执行程序，不使用模型、GPU、下载或外部网络。入口见[用法](docs/usage/USAGE_CN.md#15-研究数据工具)
 与[标注指南](tools/validation/ANNOTATION_GUIDE_CN.md)。
 
 `tools.workdata.proxies` 为每次录制生成三段 5 Hz、1920×1080 视频，
 附源帧旁注和全长解码计数。使用 CPU PyAV 与 FFmpeg/libx264，输出在仓库外，
 不使用模型、GPU 或网络。命令与内部覆盖缺口的显式规则见
-[研究数据工具](docs/USAGE_CN.md#15-研究数据工具)。
+[研究数据工具](docs/usage/USAGE_CN.md#15-研究数据工具)。
 
 时钟工具 `tools.workdata.osd_clock`、`tools.workdata.timemap` 与
 `tools.workdata.sync_check` 读取画面时钟、拟合原生视频 PTS 并检查运动对齐。
@@ -377,10 +377,10 @@ A/B −0.5 ≤ d <1.5 s，E −1.5 ≤ d <2.5 s。七会话全部通过后才改
 本地研究数据工具可生成只读源清单并无损重封装 AVI 空包。从仓库根目录运行
 `python -m tools.workdata.inventory` 和 `python -m tools.workdata.remux`，读取源视频、
 将派生文件写到仓库外；调用 ffprobe/FFmpeg，仅使用 CPU，不使用 GPU、模型或网络。
-完整命令见 [USAGE 研究数据工具](docs/USAGE_CN.md) 与[中文工具指南](tools/workdata/README_CN.md)。
+完整命令见 [USAGE 研究数据工具](docs/usage/USAGE_CN.md) 与[中文工具指南](tools/workdata/README_CN.md)。
 
 全局摄像机区域工具可抽取候选帧，并在 `127.0.0.1` 提供自动保存、参考图与类别导出的浏览器编辑器。
-仓库根目录启动命令见[区域指南](tools/validation/ROI_GUIDE_CN.md) 和 [USAGE](docs/USAGE_CN.md)。
+仓库根目录启动命令见[区域指南](tools/validation/ROI_GUIDE_CN.md) 和 [USAGE](docs/usage/USAGE_CN.md)。
 图像与区域文件留在外部数据根；仅使用 CPU/OpenCV/Pillow，不调用 FFmpeg 可执行程序、模型、GPU 或外部网络。
 导出的标注类别保留区域颜色，供后续标注工具使用。
 先画目标区域，最后画工作区；重叠处点击选中最小区域，顶点始终显示在工作区上方。

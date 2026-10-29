@@ -1,6 +1,15 @@
 # Multi-Camera Attention Region Design
 
-Status: approved. The coordinator (Claude) proposed it on 2026-10-15 and the
+Status (2026-10-18): **superseded in direction by the project goals v3**
+(`docs/collab/PROJECT_GOALS_CN.md` §0). The user clarified three requirements:
+high-precision gaze including eye movements; the attended location as a heatmap
+including hands and held objects; and no reliance on head direction alone.
+This region-classification design does not meet them. Its method is
+superseded by the stage-3 system design v2,
+`2026-10-18-gaze-attention-system-design.md`, pending the user's approval
+(Q-018 in `docs/collab/STATE.md`). Kept below as the 2026-10-15 record.
+
+Original status: approved. The coordinator (Claude) proposed it on 2026-10-15 and the
 user approved decisions D13, D14, and D15 as recommended on the same day.
 Nothing here is implemented yet. The stage-3 task contracts (TASK-141 to
 TASK-144) will be written at stage 2 acceptance, against the actual output

@@ -1,6 +1,6 @@
 # Project Usage Guide
 
-For machine migration and cross-agent development, see the [Handoff Guide](HANDOFF.md) and [Shared Agent Workflow](AGENT_WORKFLOW.md).
+For machine migration and cross-agent development, see the [Handoff Guide](../handoff/HANDOFF.md) and [Shared Agent Workflow](../rules/AGENT_WORKFLOW.md).
 
 ## 1. Scope and current capabilities
 
@@ -552,7 +552,7 @@ There is no webcam/real-time mode, automatic ROI/process logic, Multi-Pose integ
 Run from the repository root in the existing Gazelle-next environment. Keep the source
 read-only and choose a data root outside both the repository and source root.
 These tools use CPU/disk only: no models, CUDA, network access, or downloads.
-Use low process priority for long runs. See the [Chinese guide](../tools/workdata/README_CN.md).
+Use low process priority for long runs. See the [Chinese guide](../../tools/workdata/README_CN.md).
 Remux validation requires 30 decoded frames at the start and middle, then a tail
 window ending at EOF (30 or more consecutive frames, at most 120 reads). The last
 decoded timestamp must be within one `r_frame_rate` interval of the last packet PTS.
@@ -591,7 +591,7 @@ PTS and head/middle/tail decode checks pass. Derived data must never enter Git.
 
 Region tools do not call models, GPU, an FFmpeg executable, or external network
 services. The editor uses only loopback HTTP and inline page resources. See the
-[region guide](../tools/validation/ROI_GUIDE_CN.md); run from the repository root:
+[region guide](../../tools/validation/ROI_GUIDE_CN.md); run from the repository root:
 
 ```powershell
 python -m tools.validation.extract_roi_candidates --inventory "$data\inventory\inventory.json" --remux-root "$data\remux" --out-root "$data\roi"
@@ -653,7 +653,7 @@ motion; empty or stationary periods cannot calibrate themselves. Uncalibratable 
 remain explicit failures and cannot generate calibrated proxies. The optional legacy `sync_check`
 keeps three 120 s, 10 Hz diagnostic windows, reports boundary/non-prominent peaks separately,
 and requires a valid peak with |lag| ≤0.5 s. It is not the r2 residual acceptance gate.
-Caches bind mapping and sampling implementation hashes. See the [Chinese guide](../tools/workdata/README_CN.md).
+Caches bind mapping and sampling implementation hashes. See the [Chinese guide](../../tools/workdata/README_CN.md).
 `timemap --sample-cache <previous-v2-root>` refits previously decoded/OCR evidence into a
 different `--out-root`. Source/media signatures, camera identity and sampling settings must match;
 the old sample hash and implementation fingerprint are retained. It performs no video decoding
@@ -722,7 +722,7 @@ Only after all seven sessions pass, regenerate trial and completed-ROI datasets;
 redraw segments containing `sync_uncertain` in the same stratum and record every attempt.
 Never create formal labels automatically. Formal annotation waits
 for independent synchronization acceptance. See the
-[Chinese tool guide](../tools/workdata/README_CN.md).
+[Chinese tool guide](../../tools/workdata/README_CN.md).
 
 Three-view annotation, from the repository root in Gazelle-next:
 
@@ -776,7 +776,7 @@ Region save/export status comes from the server, including unchanged saves. Vers
 are rejected with instructions to reannotate. Strict validation requires all three
 conditions; repeat `--segment ID` to restrict strict checks to selected segments.
 Unlabelled draft steps are distinct from intentional `unknown`; `--allow-incomplete` only validates drafts and does not
-certify completion. See the [Chinese annotation guide](../tools/validation/ANNOTATION_GUIDE_CN.md).
+certify completion. See the [Chinese annotation guide](../../tools/validation/ANNOTATION_GUIDE_CN.md).
 All videos, frames and labels remain outside Git and must not be uploaded.
 
 ## 16. Validation commands

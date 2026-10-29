@@ -1,6 +1,6 @@
 # 项目使用指南
 
-迁移电脑和跨 agent 开发请参阅[交接指南](HANDOFF_CN.md)与[共用协作流程](AGENT_WORKFLOW_CN.md)。
+迁移电脑和跨 agent 开发请参阅[交接指南](../handoff/HANDOFF_CN.md)与[共用协作流程](../rules/AGENT_WORKFLOW_CN.md)。
 
 ## 1. 范围和当前能力
 
@@ -543,7 +543,7 @@ Perception quality 依赖 visible-face evidence。`pose_only` 使用近似 pose-
 
 在现有 Gazelle-next 环境、仓库根目录运行。源目录只读，数据根放在仓库与源目录之外。
 工具只使用 CPU 与磁盘，不构造模型、不使用 CUDA、不联网、不下载。
-长时间任务以低优先级运行。参见[中文指南](../tools/workdata/README_CN.md)。
+长时间任务以低优先级运行。参见[中文指南](../../tools/workdata/README_CN.md)。
 重封装校验要求开头、中间各连续 30 帧；尾部窗口最多读取 120 帧，必须读到 EOF 且连续成功
 不少于 30 帧。最后解码时间与最后一个包的 PTS 相差不得超过 `r_frame_rate` 的一个标称帧间隔。
 报告包含 `last_pts`、实际窗口解码数与 `tail_eof`。
@@ -579,7 +579,7 @@ python -m tools.workdata.remux --inventory "$data\inventory\inventory.json" --ou
 所有派生数据不得进入 Git。
 
 区域工具不调用模型、GPU、FFmpeg 可执行程序或外部网络。编辑器只使用本机回环 HTTP，页面资源内联。
-参见[区域指南](../tools/validation/ROI_GUIDE_CN.md)，从仓库根目录运行：
+参见[区域指南](../../tools/validation/ROI_GUIDE_CN.md)，从仓库根目录运行：
 
 ```powershell
 python -m tools.validation.extract_roi_candidates --inventory "$data\inventory\inventory.json" --remux-root "$data\remux" --out-root "$data\roi"
@@ -646,7 +646,7 @@ python -m tools.workdata.sync_calibrate --timemaps "$data\timemaps_v2_base" --ou
 采样与拟合分开记录指纹；旧缓存须提供独立核实来源的 `--sampling-provenance` 凭据，绑定原旁注/像素 SHA
 与相同采样哈希，不能放行哈希不一致。复用仅用于拟合修复，不用于采样变更。
 旧 v2 读取保留两次迭代及方程残差 / `abs(1+c1)` 的保护。
-详见[中文工具指南](../tools/workdata/README_CN.md)。
+详见[中文工具指南](../../tools/workdata/README_CN.md)。
 
 代理生成沿用外部 `$data`：
 
@@ -677,7 +677,7 @@ A–B/E–B 必须通过；A–E 可证据不足，但须报告闭合推算。�
 已有代理逐会话比较 v3/v2 全时长滞后：所有机位差 ≤0.05 s 时保留 v2 代理及原 SHA，否则重建，并记录来源。
 仅七会话全通过后重建试用集和已完成 ROI 的正式集；含 `sync_uncertain` 的片段在同层重抽、逐次记录。
 不自动生成正式 labels。正式标注等待同步独立验收。详见
-[中文工具指南](../tools/workdata/README_CN.md)。
+[中文工具指南](../../tools/workdata/README_CN.md)。
 
 三视角标注在仓库根目录、Gazelle-next 环境中运行：
 
@@ -718,7 +718,7 @@ python -m tools.validation.labels validate --dataset-root $dataset --labels-path
 `labels validate` 失败时输出包含段号与原因的一行错误、退出码 1，不打印 traceback。区域保存/导出状态以服务端为准，含无变化保存。
 version 1 标注明确拒绝，需用新工具重新标注。严格校验要求这三项同时满足；可重复给出 `--segment ID`
 只对指定段严格检查，其余段检查结构。草稿中的未标注与主动选择 `unknown` 不同；`--allow-incomplete` 只检查草稿，
-不代表完成。详见[中文标注指南](../tools/validation/ANNOTATION_GUIDE_CN.md)。
+不代表完成。详见[中文标注指南](../../tools/validation/ANNOTATION_GUIDE_CN.md)。
 视频、帧和标注都保存在 Git 之外，不上传。
 
 ## 16. 验证命令

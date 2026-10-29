@@ -1,0 +1,819 @@
+{
+  "baselines": [
+    {
+      "date": "2026-10-18",
+      "documents": {
+        "COLLAB": "0.7.0",
+        "DOCS": "1.0.0",
+        "GOALS": "3.0.1",
+        "PERCEPTION": "1.1.1",
+        "STAGE3": "2.0.1",
+        "SYSTEM": "1.0.0",
+        "VALSET": "3.1.1"
+      },
+      "files": {
+        "docs/archive/baselines/B001/PROJECT_OVERVIEW_CN.md": "2e6d7be1067288146b7bb4da5b738df7adc209000d7eca707f629c9c147fdad7",
+        "docs/archive/baselines/B001/index.html": "6eba5076fdba7b1b8f4266f41adfa20c1495bf18599eb6d4e5f332cfeed65251"
+      },
+      "id": "B001",
+      "note": "建立文档记录体系：全部受控文档的首个受控版本与历史版本归档",
+      "sources": {
+        "docs/DOCS_SYSTEM_CN.md": "96e8caca529a6afd0af80e65b64f180a8352e6213117b2d3290391c78eb89ecd",
+        "docs/collab/COLLABORATION_PLAN_CN.md": "1b7ce5a195f97df5b1e836e9ee8d4ba49a0c15707f3ddc900150c74a9ec5ed39",
+        "docs/collab/PROJECT_GOALS_CN.md": "d6d25a9e9261087e7c30effdc74623fb7bafdbe8cef998b22b22cbabc2bcd729",
+        "docs/collab/ROADMAP.md": "83cd71fa990fff55ab5c8770c7f87a9ff1ca9f1adaeedb6300b6540c52930219",
+        "docs/collab/STATE.md": "6b083acdf880c4ac32a4b4f0ce25361916e0e3ac9df42bdbe75480e05f054504",
+        "docs/superpowers/specs/2026-10-15-face-pose-association-and-track-confirmation-design.md": "8b6085b8888dc250d89e152688c2c99f974fb69a38ea6cfd4fe64f65f033630f",
+        "docs/superpowers/specs/2026-10-15-workdata-validation-set-design.md": "d4cf39b6c5fde796fb4aea3b6834efb984afbb512cc81d6be9e0a98bfa7e0eac",
+        "docs/superpowers/specs/2026-10-18-gaze-attention-system-design.md": "6ef916d2198b4570e61adf682e55f5312e6043645813dcd5cb6acf8329e216dd",
+        "docs/superpowers/specs/2026-10-18-system-overview-design.md": "a2bdc29a4fd3dc78f91f61cafc9549e008685201f2c37bb3a91abfd9630e165c"
+      }
+    },
+    {
+      "date": "2026-10-18",
+      "documents": {
+        "COLLAB": "0.8.0",
+        "DOCS": "1.1.0",
+        "GOALS": "3.0.2",
+        "PERCEPTION": "1.1.2",
+        "STAGE3": "2.0.2",
+        "SYSTEM": "1.0.1",
+        "VALSET": "3.1.2"
+      },
+      "files": {
+        "docs/archive/baselines/B002/README.md": "5e824a8185d4321dc02eb4204bf451747148f0e9af3e139afe60aabd9617349d",
+        "docs/archive/baselines/B002/index.html": "4f3b83d425862a4f4e12492e0ab82051d8c228636d8caa5d2a0e9c57c8ccecdb"
+      },
+      "id": "B002",
+      "note": "文档按类别分文件夹；superpowers 技能副本同步；网页表格列宽与文档架构图",
+      "sources": {
+        "docs/collab/ROADMAP.md": "55e59a2c96637d894b7abde0181c58fbf562178b0e8ded9de332529bb0768a22",
+        "docs/collab/STATE.md": "c5bf6e31844a9f0f92f1dfa6397d0da0a06d1007d682a407586a0b71afa84b1a",
+        "docs/design/PERCEPTION_D1_D2_DESIGN.md": "c3107eeeeb58d2695e1d78254f228500d3340a89430c00299b149d08e0dd5429",
+        "docs/design/STAGE3_GAZE_ATTENTION_CN.md": "aefc2af13066431fc27c5508f61edf1eb9650bfb24508f0803123d5c58a6e575",
+        "docs/design/SYSTEM_OVERVIEW_CN.md": "b1b15affdec03ea6faac4bee924f82091692fb6422fee355325e48b4350afcb3",
+        "docs/design/VALIDATION_SET_DESIGN.md": "425fe31230e787918d1117a8b20b72b1907da2815bca79a95917fc5d3d548c82",
+        "docs/requirements/PROJECT_GOALS_CN.md": "7f8c49243fd3e64db258648584387d536f3340b4fd20cc290d9813ab42ffc8ac",
+        "docs/rules/COLLABORATION_PLAN_CN.md": "6d2b7d7e7ed7b66f457a84486de661f67431c2be3624872ba8bace4762116670",
+        "docs/rules/DOCS_SYSTEM_CN.md": "0e983a41546e0416d3aa9ae599639af119ca46e98fe40790f93ec0c7ad915bdc"
+      }
+    },
+    {
+      "date": "2026-10-29",
+      "documents": {
+        "COLLAB": "0.9.0",
+        "DOCS": "1.1.1",
+        "GOALS": "3.1.0",
+        "PERCEPTION": "1.1.2",
+        "STAGE3": "2.1.0",
+        "SYSTEM": "1.1.0",
+        "VALSET": "3.2.0"
+      },
+      "files": {
+        "docs/archive/baselines/B003/README.md": "c1fd5c06e708cb491077fa7eb40b22ad2c284cbbf7af87d58138c7dfd5eadf07",
+        "docs/archive/baselines/B003/index.html": "93c27df9947a7515abbc56b8e457df5a883ff70fbd927d67a1d6d34e4edd4ce7"
+      },
+      "id": "B003",
+      "note": "用户确认 Q-018 至 Q-021（2026-10-29）；新增录制写入设计",
+      "sources": {
+        "docs/collab/ROADMAP.md": "ef1f6366f5069a28fc06857ce56399321b680a842add780d6e8708ac40163512",
+        "docs/collab/STATE.md": "54c52cab1b999cf4f1caafac389f0174dfc31ff746ef7ada265fcc52b64dd003",
+        "docs/design/PERCEPTION_D1_D2_DESIGN.md": "c3107eeeeb58d2695e1d78254f228500d3340a89430c00299b149d08e0dd5429",
+        "docs/design/STAGE3_GAZE_ATTENTION_CN.md": "a2e096c837115c28616f45dea3ebe645107640c3b47f13e494dffb481dc0e7fb",
+        "docs/design/SYSTEM_OVERVIEW_CN.md": "f4543ac6c6b5da9050d389b139142fea6b4ab3c5ea75cd76c38772baa8b764c4",
+        "docs/design/VALIDATION_SET_DESIGN.md": "98a3a1d8fdf45f885b98dc58b48956e0f50fe86405d65950f39aa483a4b37864",
+        "docs/requirements/PROJECT_GOALS_CN.md": "1cf38a9e8e26e6cff88a8497ca935d09472df7b78660d041d9a837df76d770f7",
+        "docs/rules/COLLABORATION_PLAN_CN.md": "a6aa001dabc1863d32deaf89cdd6fda9e5cd33af69da7ed8653429ce5ff07a63",
+        "docs/rules/DOCS_SYSTEM_CN.md": "03ef9ddd4c0982bbb6cd2f19ccf953de512ee3299e8bb9d049e5ad01b1219ff7"
+      }
+    },
+    {
+      "date": "2026-10-29",
+      "documents": {
+        "COLLAB": "0.9.1",
+        "DOCS": "1.1.1",
+        "GOALS": "3.1.1",
+        "PERCEPTION": "1.1.2",
+        "STAGE3": "3.0.0",
+        "SYSTEM": "1.1.1",
+        "VALSET": "4.0.0"
+      },
+      "files": {
+        "docs/archive/baselines/B004/README.md": "d7ae1fb76a5622ef5873f53e8239185215cab06c47a0879645877900dbfeab40",
+        "docs/archive/baselines/B004/index.html": "e60b9a11d56a6f9c1b516c14ccde0cf8b95eb8238b48f81629162d33cf43d949"
+      },
+      "id": "B004",
+      "note": "用户确认 r3（Q-017）与独立审查的修正（2026-10-29）",
+      "sources": {
+        "docs/collab/ROADMAP.md": "255b14a7f671729abc297b0c18fe49e74accb9b361b5ee8ab0b99786149dc315",
+        "docs/collab/STATE.md": "6369350e5e80ac1641a6ed817713a3c5060e5717aca6022f6af1f3ed5dcb4bc3",
+        "docs/design/PERCEPTION_D1_D2_DESIGN.md": "c3107eeeeb58d2695e1d78254f228500d3340a89430c00299b149d08e0dd5429",
+        "docs/design/STAGE3_GAZE_ATTENTION_CN.md": "dd0f58bb9de875f0f196cb8cba36dd1100be27ebf4a1a1b8c25ea1558e250817",
+        "docs/design/SYSTEM_OVERVIEW_CN.md": "5368fca3e184b791390a0d07c537fae34fa41d9ec5c17de939ba70a8a2ac6b79",
+        "docs/design/VALIDATION_SET_DESIGN.md": "cb6e3a92280112dfe83fe9dbf985012eae08c8eeefddbe25aa19bbb4f4ca8f2e",
+        "docs/requirements/PROJECT_GOALS_CN.md": "5170fc63716dee0152764b578fcd79ff0def978a2f493cea21bb9034bc2ec223",
+        "docs/rules/COLLABORATION_PLAN_CN.md": "e9c36d5c64b7f2d3599df563eb4eb082052e18b3cecbd2233f49dadc77144a76",
+        "docs/rules/DOCS_SYSTEM_CN.md": "03ef9ddd4c0982bbb6cd2f19ccf953de512ee3299e8bb9d049e5ad01b1219ff7"
+      }
+    },
+    {
+      "date": "2026-10-29",
+      "documents": {
+        "COLLAB": "0.9.1",
+        "DOCS": "1.1.1",
+        "GOALS": "3.2.0",
+        "PERCEPTION": "1.1.2",
+        "STAGE3": "3.1.0",
+        "SYSTEM": "1.2.0",
+        "VALSET": "4.1.0"
+      },
+      "files": {
+        "docs/archive/baselines/B005/README.md": "6017a41f5d2040689bb4d7a9baf285fee409cdc5bfe4b1158ca64d96e1347861",
+        "docs/archive/baselines/B005/index.html": "a36d0efbb280ce89753e7a6b1e4a718b91a720a7a8c2171953a3ce073e81be76"
+      },
+      "id": "B005",
+      "note": "用户判定 4 名作业者与换班分析（2026-10-29）",
+      "sources": {
+        "docs/collab/ROADMAP.md": "4f4e9d85dd71a9f82059fff05afa3bd47d06d866a6eba40453801dd016f3c2d7",
+        "docs/collab/STATE.md": "641278872333fb23fecbb04148ca048feee4f7b78843af68030fdbdc20abe746",
+        "docs/design/PERCEPTION_D1_D2_DESIGN.md": "c3107eeeeb58d2695e1d78254f228500d3340a89430c00299b149d08e0dd5429",
+        "docs/design/STAGE3_GAZE_ATTENTION_CN.md": "b11e584f919591e19cdc1d84c465948b688c968a6a4e75d1f30064f32558b717",
+        "docs/design/SYSTEM_OVERVIEW_CN.md": "b6c414c0e0f93e4f022b9553103bce44660f7cd05256dfd0747ed20411cc93cd",
+        "docs/design/VALIDATION_SET_DESIGN.md": "b0f8bd016781e957e29cff0fcb6a573220ea53281222eb2cf04fd04b5775c5b8",
+        "docs/requirements/PROJECT_GOALS_CN.md": "9614d67a75d5fcf34751ec614debf4dc3c2387b8059365db70b1005f7f38cbb4",
+        "docs/rules/COLLABORATION_PLAN_CN.md": "e9c36d5c64b7f2d3599df563eb4eb082052e18b3cecbd2233f49dadc77144a76",
+        "docs/rules/DOCS_SYSTEM_CN.md": "03ef9ddd4c0982bbb6cd2f19ccf953de512ee3299e8bb9d049e5ad01b1219ff7"
+      }
+    },
+    {
+      "date": "2026-10-29",
+      "documents": {
+        "COLLAB": "0.9.1",
+        "DOCS": "1.1.1",
+        "GOALS": "3.2.1",
+        "PERCEPTION": "1.1.2",
+        "STAGE3": "3.1.1",
+        "SYSTEM": "1.2.1",
+        "VALSET": "4.1.1"
+      },
+      "files": {
+        "docs/archive/baselines/B006/README.md": "99eba413826d73585bff1fec054b1cfed902f606b87e82e51c84ace73d73ce48",
+        "docs/archive/baselines/B006/index.html": "66383c6a4c2272fbfae57eda4f2807df3c381721583df090d835cdedb30207fb"
+      },
+      "id": "B006",
+      "note": "录制称呼统一为文件夹名；Q-024 已确认（2026-10-29）",
+      "sources": {
+        "docs/collab/ROADMAP.md": "43b17260a670f665a2c852e9fb720d33d97eda8b0e40e05199c73a4d3c0034f4",
+        "docs/collab/STATE.md": "ff7fff3f48cb4a777a272e299f239fda66b61b8c9d8d3afeaed41b899079d4a4",
+        "docs/design/PERCEPTION_D1_D2_DESIGN.md": "c3107eeeeb58d2695e1d78254f228500d3340a89430c00299b149d08e0dd5429",
+        "docs/design/STAGE3_GAZE_ATTENTION_CN.md": "318a850d72980050f3dde1f729d3a13f027b58291c848e3ecdf29ec8d90f2b4f",
+        "docs/design/SYSTEM_OVERVIEW_CN.md": "a194643961d7aa5af8d1504518f1d0467a9e429d25ae813bdcb6ad09b0a104a3",
+        "docs/design/VALIDATION_SET_DESIGN.md": "b1c15a60ae3826ee4ca4d348b81d1c970faeadfd035cd1c696605e343490ee1d",
+        "docs/requirements/PROJECT_GOALS_CN.md": "fd39ff2e5929d9c493536ec085181f2afaffcf0c3c50e8e0f03b26954f670f97",
+        "docs/rules/COLLABORATION_PLAN_CN.md": "e9c36d5c64b7f2d3599df563eb4eb082052e18b3cecbd2233f49dadc77144a76",
+        "docs/rules/DOCS_SYSTEM_CN.md": "03ef9ddd4c0982bbb6cd2f19ccf953de512ee3299e8bb9d049e5ad01b1219ff7"
+      }
+    }
+  ],
+  "documents": [
+    {
+      "date": "2026-10-15",
+      "doc_id": "COLLAB",
+      "path": "docs/archive/COLLAB/COLLAB_v0.3.0.md",
+      "sha256": "bc8efe4c155a8085641854179b5c0e555b133c79d3ac3a27fe17813fc6fd12c0",
+      "source": "git:e4c6f6c:docs/collab/COLLABORATION_PLAN_CN.md",
+      "status": "已确认",
+      "summary": "v0.3：首版协作方案",
+      "version": "0.3.0"
+    },
+    {
+      "date": "2026-10-15",
+      "doc_id": "COLLAB",
+      "path": "docs/archive/COLLAB/COLLAB_v0.4.0.md",
+      "sha256": "e7357fa6a5199d3b6c222fd4bdad2ca2648904e6c77eb52e15a6e29c5fbece2c",
+      "source": "git:7f743c3:docs/collab/COLLABORATION_PLAN_CN.md",
+      "status": "已确认",
+      "summary": "v0.4：阶段分支与 draft PR",
+      "version": "0.4.0"
+    },
+    {
+      "date": "2026-10-15",
+      "doc_id": "COLLAB",
+      "path": "docs/archive/COLLAB/COLLAB_v0.4.1.md",
+      "sha256": "191a2b341c78007115dd064ebadc10dca370660d89ec694302438911730d30bb",
+      "source": "git:ef203a4:docs/collab/COLLABORATION_PLAN_CN.md",
+      "status": "已确认",
+      "summary": "授权记录加入用户决定",
+      "version": "0.4.1"
+    },
+    {
+      "date": "2026-10-15",
+      "doc_id": "COLLAB",
+      "path": "docs/archive/COLLAB/COLLAB_v0.5.0.md",
+      "sha256": "40dc536f47441581bf4073df730e079bc5839f63eb75fd6cb5556e0af1842c31",
+      "source": "git:42d1e48:docs/collab/COLLABORATION_PLAN_CN.md",
+      "status": "已确认",
+      "summary": "v0.5：Codex 接手核对后修订",
+      "version": "0.5.0"
+    },
+    {
+      "date": "2026-10-16",
+      "doc_id": "COLLAB",
+      "path": "docs/archive/COLLAB/COLLAB_v0.6.0.md",
+      "sha256": "1fa88b595d34cd1d22deadd281d19a6a149a42a1eabd58113e7323814599db73",
+      "source": "git:1972b20:docs/collab/COLLABORATION_PLAN_CN.md",
+      "status": "已确认",
+      "summary": "v0.6：分级自主与常设批准",
+      "version": "0.6.0"
+    },
+    {
+      "date": "2026-10-17",
+      "doc_id": "COLLAB",
+      "path": "docs/archive/COLLAB/COLLAB_v0.6.1.md",
+      "sha256": "62826b1397922a7889afaace839b4205272b4f7e7e400a0e46d0c407c3a1467c",
+      "source": "git:7580849:docs/collab/COLLABORATION_PLAN_CN.md",
+      "status": "已确认",
+      "summary": "预检解释器改为 Gazelle-next",
+      "version": "0.6.1"
+    },
+    {
+      "date": "2026-10-18",
+      "doc_id": "COLLAB",
+      "path": "docs/archive/COLLAB/COLLAB_v0.7.0.md",
+      "sha256": "1b7ce5a195f97df5b1e836e9ee8d4ba49a0c15707f3ddc900150c74a9ec5ed39",
+      "source": "worktree",
+      "status": "待确认",
+      "summary": "加入文档记录体系：受控文档的版本发布、视图生成与检查、每轮结束的基线快照；STATE 与 HISTORY 的分工；文档索引更新；文件头与版本记录",
+      "version": "0.7.0"
+    },
+    {
+      "date": "2026-10-18",
+      "doc_id": "COLLAB",
+      "path": "docs/archive/COLLAB/COLLAB_v0.8.0.md",
+      "sha256": "6d2b7d7e7ed7b66f457a84486de661f67431c2be3624872ba8bace4762116670",
+      "source": "worktree",
+      "status": "待确认",
+      "summary": "文档按类别分文件夹后更新路径；Claude 留下的文档改动与每轮提交范围包括新文件夹与 `docs/superpowers/**`；文档索引改为指向文档记录体系 §2",
+      "version": "0.8.0"
+    },
+    {
+      "date": "2026-10-29",
+      "doc_id": "COLLAB",
+      "path": "docs/archive/COLLAB/COLLAB_v0.9.0.md",
+      "sha256": "a6aa001dabc1863d32deaf89cdd6fda9e5cd33af69da7ed8653429ce5ff07a63",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "你确认本方案（Q-019）；§7 记入 2026-10-29 的决定与 D24 新建阶段 3 分支的授权；§4 写明阶段 3 分支；§5 预检改为 9 个文件夹",
+      "version": "0.9.0"
+    },
+    {
+      "date": "2026-10-29",
+      "doc_id": "COLLAB",
+      "path": "docs/archive/COLLAB/COLLAB_v0.9.1.md",
+      "sha256": "e9c36d5c64b7f2d3599df563eb4eb082052e18b3cecbd2233f49dadc77144a76",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "§7 记入你确认 r3（Q-017，含正式类别文件的一次重新导出）；D24 一行改为阶段 2 验收之后建立阶段 3 分支，新分支上的常设批准待你确认（Q-023）；D23 一行补上“需要时请用户判断”",
+      "version": "0.9.1"
+    },
+    {
+      "date": "2026-10-18",
+      "doc_id": "DOCS",
+      "path": "docs/archive/DOCS/DOCS_v1.0.0.md",
+      "sha256": "96e8caca529a6afd0af80e65b64f180a8352e6213117b2d3290391c78eb89ecd",
+      "source": "worktree",
+      "status": "待确认",
+      "summary": "首版：原则、分层、受控文档清单、版本号与状态、归档、基线、回档、生成视图、活文档约定、工作流程、命令",
+      "version": "1.0.0"
+    },
+    {
+      "date": "2026-10-18",
+      "doc_id": "DOCS",
+      "path": "docs/archive/DOCS/DOCS_v1.1.0.md",
+      "sha256": "0e983a41546e0416d3aa9ae599639af119ca46e98fe40790f93ec0c7ad915bdc",
+      "source": "worktree",
+      "status": "待确认",
+      "summary": "按类别分文件夹（requirements、design、rules、collab、usage、handoff）；superpowers 改为技能工作区，技能副本自动同步，技能修改用 adopt 并入；文档管理架构图与流程图；Markdown 总览改为 `docs/README.md`；新增 adopt 命令",
+      "version": "1.1.0"
+    },
+    {
+      "date": "2026-10-29",
+      "doc_id": "DOCS",
+      "path": "docs/archive/DOCS/DOCS_v1.1.1.md",
+      "sha256": "03ef9ddd4c0982bbb6cd2f19ccf953de512ee3299e8bb9d049e5ad01b1219ff7",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "你确认本规则（Q-019）；内容不变",
+      "version": "1.1.1"
+    },
+    {
+      "date": "2026-10-15",
+      "doc_id": "GOALS",
+      "path": "docs/archive/GOALS/GOALS_v1.0.0.md",
+      "sha256": "8bb4c09e2e129a7abfa9003d6b5f2b4f98fdbebd49d6411d11d99b2e98ddfde2",
+      "source": "git:e4c6f6c:docs/collab/PROJECT_GOALS_CN.md",
+      "status": "待确认",
+      "summary": "v1：依据交接材料与 sample1、sample2 的历史输出",
+      "version": "1.0.0"
+    },
+    {
+      "date": "2026-10-15",
+      "doc_id": "GOALS",
+      "path": "docs/archive/GOALS/GOALS_v2.0.0.md",
+      "sha256": "08a76ba08e4738ebe62437f3b4b5496bdf122fc50f1552e7a3d779cfc237e913",
+      "source": "git:5034bae:docs/collab/PROJECT_GOALS_CN.md",
+      "status": "已确认",
+      "summary": "v2：依据你的回答与作业数据分析重写",
+      "version": "2.0.0"
+    },
+    {
+      "date": "2026-10-15",
+      "doc_id": "GOALS",
+      "path": "docs/archive/GOALS/GOALS_v2.1.0.md",
+      "sha256": "9607e722a222451ae78017bc0f5c47d37c4a2020e8fb0c7192560789d38375f4",
+      "source": "git:ef203a4:docs/collab/PROJECT_GOALS_CN.md",
+      "status": "已确认",
+      "summary": "记录你对摄像机角色、区域标记与阶段 3（D13–D15）的决定",
+      "version": "2.1.0"
+    },
+    {
+      "date": "2026-10-17",
+      "doc_id": "GOALS",
+      "path": "docs/archive/GOALS/GOALS_v2.2.0.md",
+      "sha256": "2004dfdc1fa0bba6b8c76e78330b1a0b510dae3085b8142fdf0b426af948dc41",
+      "source": "git:51659db:docs/collab/PROJECT_GOALS_CN.md",
+      "status": "已确认",
+      "summary": "记录 2026-10-17 的决定：D16、D17、D18 与正式区域",
+      "version": "2.2.0"
+    },
+    {
+      "date": "2026-10-18",
+      "doc_id": "GOALS",
+      "path": "docs/archive/GOALS/GOALS_v3.0.0.md",
+      "sha256": "dfda9c0e89adecbb0e2d99b243a505368c2f077f3ee5dd7ad4b86a8f843835bc",
+      "source": "worktree:docs/collab/PROJECT_GOALS_CN.md（2026-10-18 体系建立前的工作区副本）",
+      "status": "已确认",
+      "summary": "v3：开发目的修订，记录 D19–D21",
+      "version": "3.0.0"
+    },
+    {
+      "date": "2026-10-18",
+      "doc_id": "GOALS",
+      "path": "docs/archive/GOALS/GOALS_v3.0.1.md",
+      "sha256": "d6d25a9e9261087e7c30effdc74623fb7bafdbe8cef998b22b22cbabc2bcd729",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "结构调整：加入文件头与版本记录；§1 的“当前状态”移到 ROADMAP「目标进展」，改为“对应阶段与任务”；目标内容不变",
+      "version": "3.0.1"
+    },
+    {
+      "date": "2026-10-18",
+      "doc_id": "GOALS",
+      "path": "docs/archive/GOALS/GOALS_v3.0.2.md",
+      "sha256": "7f8c49243fd3e64db258648584387d536f3340b4fd20cc290d9813ab42ffc8ac",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "文件移入 `docs/requirements/`，链接与路径随之更新；内容不变",
+      "version": "3.0.2"
+    },
+    {
+      "date": "2026-10-29",
+      "doc_id": "GOALS",
+      "path": "docs/archive/GOALS/GOALS_v3.1.0.md",
+      "sha256": "1cf38a9e8e26e6cff88a8497ca935d09472df7b78660d041d9a837df76d770f7",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "记录新增录制与你 2026-10-29 的决定（D22–D27）；§2 数据现状更新为 9 次录制，并更正“画面时钟彼此一致”的旧说法；G3 增加交接时切分作业者片段；§5 匿名作业者编号改为需要（Q-022）；目标本身不变",
+      "version": "3.1.0"
+    },
+    {
+      "date": "2026-10-29",
+      "doc_id": "GOALS",
+      "path": "docs/archive/GOALS/GOALS_v3.1.1.md",
+      "sha256": "5170fc63716dee0152764b578fcd79ff0def978a2f493cea21bb9034bc2ec223",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "记录你同日确认 r3（Q-017），D24 的建立时点随之写明；内容不变",
+      "version": "3.1.1"
+    },
+    {
+      "date": "2026-10-29",
+      "doc_id": "GOALS",
+      "path": "docs/archive/GOALS/GOALS_v3.2.0.md",
+      "sha256": "9614d67a75d5fcf34751ec614debf4dc3c2387b8059365db70b1005f7f38cbb4",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "记录你 2026-10-29 的身份判定：共 4 名作业者，同一日期、同一段视频中也会换班（§2、§4）；匿名作业者编号已提供（§5）",
+      "version": "3.2.0"
+    },
+    {
+      "date": "2026-10-29",
+      "doc_id": "GOALS",
+      "path": "docs/archive/GOALS/GOALS_v3.2.1.md",
+      "sha256": "fd39ff2e5929d9c493536ec085181f2afaffcf0c3c50e8e0f03b26954f670f97",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "录制的称呼统一为源文件夹名（例如 20260903），画面时钟日期只在括号中注明；内容不变",
+      "version": "3.2.1"
+    },
+    {
+      "date": "2026-10-15",
+      "doc_id": "PERCEPTION",
+      "path": "docs/archive/PERCEPTION/PERCEPTION_v1.0.0.md",
+      "sha256": "be252598fc11404a5df29c015d3821a2c6f52545565ba46d36cd0be3a9e0cb79",
+      "source": "git:9e59c90:docs/superpowers/specs/2026-10-15-face-pose-association-and-track-confirmation-design.md",
+      "status": "已确认",
+      "summary": "D1、D2 设计",
+      "version": "1.0.0"
+    },
+    {
+      "date": "2026-10-18",
+      "doc_id": "PERCEPTION",
+      "path": "docs/archive/PERCEPTION/PERCEPTION_v1.1.0.md",
+      "sha256": "1dbd92546fb52ecfcccf1079b84240f3886bac82a7d03c7f20cefef4031e6e64",
+      "source": "worktree:docs/superpowers/specs/2026-10-15-face-pose-association-and-track-confirmation-design.md（2026-10-18 体系建立前的工作区副本）",
+      "status": "已确认（协调者）",
+      "summary": "§4.4 修订：临时头中立的保留集合",
+      "version": "1.1.0"
+    },
+    {
+      "date": "2026-10-18",
+      "doc_id": "PERCEPTION",
+      "path": "docs/archive/PERCEPTION/PERCEPTION_v1.1.1.md",
+      "sha256": "8b6085b8888dc250d89e152688c2c99f974fb69a38ea6cfd4fe64f65f033630f",
+      "source": "worktree",
+      "status": "已确认（协调者）",
+      "summary": "加入文件头与版本记录，内容不变",
+      "version": "1.1.1"
+    },
+    {
+      "date": "2026-10-18",
+      "doc_id": "PERCEPTION",
+      "path": "docs/archive/PERCEPTION/PERCEPTION_v1.1.2.md",
+      "sha256": "c3107eeeeb58d2695e1d78254f228500d3340a89430c00299b149d08e0dd5429",
+      "source": "worktree",
+      "status": "已确认（协调者）",
+      "summary": "文件移入 `docs/design/` 并改为稳定文件名，链接与路径随之更新；内容不变",
+      "version": "1.1.2"
+    },
+    {
+      "date": "2026-10-15",
+      "doc_id": "STAGE3",
+      "path": "docs/archive/STAGE3/STAGE3_v1.0.0.md",
+      "sha256": "9e520860ced9eaef43766760ed015c4a779c09b32f62592e5943534e0098cabc",
+      "source": "git:9d540ba:docs/superpowers/specs/2026-10-15-multicamera-attention-design.md",
+      "status": "待确认",
+      "summary": "多摄像机注意区域设计（提议）",
+      "version": "1.0.0"
+    },
+    {
+      "date": "2026-10-15",
+      "doc_id": "STAGE3",
+      "path": "docs/archive/STAGE3/STAGE3_v1.1.0.md",
+      "sha256": "037852c96f8eecc0344300b933cbbab8e1010206694f91bf16ff6c34a4356a70",
+      "source": "git:ef203a4:docs/superpowers/specs/2026-10-15-multicamera-attention-design.md",
+      "status": "已确认",
+      "summary": "你批准 D13–D15",
+      "version": "1.1.0"
+    },
+    {
+      "date": "2026-10-18",
+      "doc_id": "STAGE3",
+      "path": "docs/archive/STAGE3/STAGE3_v1.1.1.md",
+      "sha256": "673d094e50d447e8a8abd4e849f6ecb3d0844cf50afa8f333905088e45fb9ade",
+      "source": "worktree:docs/superpowers/specs/2026-10-15-multicamera-attention-design.md（2026-10-18 体系建立前的工作区副本）",
+      "status": "已取代",
+      "summary": "原文件标为被目标 v3 取代",
+      "version": "1.1.1"
+    },
+    {
+      "date": "2026-10-18",
+      "doc_id": "STAGE3",
+      "path": "docs/archive/STAGE3/STAGE3_v2.0.0.md",
+      "sha256": "ce25bd42d27b1955fcb8fce25ae80282f3b29cbf1f687cbb7b86ae2144192080",
+      "source": "worktree:docs/superpowers/specs/2026-10-18-gaze-attention-system-design.md（2026-10-18 体系建立前的工作区副本）",
+      "status": "待确认",
+      "summary": "按目标 v3 重写为新文件",
+      "version": "2.0.0"
+    },
+    {
+      "date": "2026-10-18",
+      "doc_id": "STAGE3",
+      "path": "docs/archive/STAGE3/STAGE3_v2.0.1.md",
+      "sha256": "6ef916d2198b4570e61adf682e55f5312e6043645813dcd5cb6acf8329e216dd",
+      "source": "worktree",
+      "status": "待确认",
+      "summary": "加入文件头、版本记录与网页标记；标题去掉“v2”；指向系统总体设计；内容不变",
+      "version": "2.0.1"
+    },
+    {
+      "date": "2026-10-18",
+      "doc_id": "STAGE3",
+      "path": "docs/archive/STAGE3/STAGE3_v2.0.2.md",
+      "sha256": "aefc2af13066431fc27c5508f61edf1eb9650bfb24508f0803123d5c58a6e575",
+      "source": "worktree",
+      "status": "待确认",
+      "summary": "文件移入 `docs/design/` 并改为稳定文件名，链接与路径随之更新；内容不变",
+      "version": "2.0.2"
+    },
+    {
+      "date": "2026-10-29",
+      "doc_id": "STAGE3",
+      "path": "docs/archive/STAGE3/STAGE3_v2.1.0.md",
+      "sha256": "a2e096c837115c28616f45dea3ebe645107640c3b47f13e494dffb481dc0e7fb",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "你确认本设计（D22–D24）；按你确认的 Q-020、Q-021 写入新增录制的影响：新增 §3.4；评估改为按作业者留一（§8.3、附录 B）；外参与区域按录制（§5.2、§6.3、§6.5）；口罩分层与人脸检测补充（§6.1、§9 GA）；webcam 作辅助视角与基线 B3w（§2、§8.3）；§11、§12 记录决定与第 6 轮安排",
+      "version": "2.1.0"
+    },
+    {
+      "date": "2026-10-29",
+      "doc_id": "STAGE3",
+      "path": "docs/archive/STAGE3/STAGE3_v3.0.0.md",
+      "sha256": "dd0f58bb9de875f0f196cb8cba36dd1100be27ebf4a1a1b8c25ea1558e250817",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "按 §5.1 改为主版本：2.1.0 写入的按作业者留一与分层判定属于评估协议的变化，版本级别在此更正；记录你同日确认 r3（Q-017）；按独立审查修正：作业者片段只在换人处切分（§6.1、附录 B），标定第 6 步只调跨录制共用的参数、留一的预先登记与停止规则、GA/GD/GE 的判定分层（这三项待你确认，Q-023），D24 的建立时点与新分支的常设批准（§12），L2CS-Net 的许可说明，口罩影响的说明",
+      "version": "3.0.0"
+    },
+    {
+      "date": "2026-10-29",
+      "doc_id": "STAGE3",
+      "path": "docs/archive/STAGE3/STAGE3_v3.1.0.md",
+      "sha256": "b11e584f919591e19cdc1d84c465948b688c968a6a4e75d1f30064f32558b717",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "按你 2026-10-29 的身份判定写入：共 4 名作业者（P1 至 P4），三机重叠段有 2 次换班、11 个作业者片段（§3.4、§8.3）；按作业者的眼部覆盖（§3.4）；关卡 GA 的戴口罩分层改按作业者片段界定（待你确认，Q-023）；按录制留一不作为正式结果",
+      "version": "3.1.0"
+    },
+    {
+      "date": "2026-10-29",
+      "doc_id": "STAGE3",
+      "path": "docs/archive/STAGE3/STAGE3_v3.1.1.md",
+      "sha256": "318a850d72980050f3dde1f729d3a13f027b58291c848e3ecdf29ec8d90f2b4f",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "录制的称呼统一为源文件夹名（例如 20261016），画面时钟日期只在括号中注明；你确认作业者片段表（Q-024）；内容不变",
+      "version": "3.1.1"
+    },
+    {
+      "date": "2026-10-18",
+      "doc_id": "SYSTEM",
+      "path": "docs/archive/SYSTEM/SYSTEM_v1.0.0.md",
+      "sha256": "a2bdc29a4fd3dc78f91f61cafc9549e008685201f2c37bb3a91abfd9630e165c",
+      "source": "worktree",
+      "status": "待确认",
+      "summary": "首版：系统定位、现场与数据、总体架构、组件 C01–C23、数据产物、同步、运行时、阶段 3 摘要、质量保障",
+      "version": "1.0.0"
+    },
+    {
+      "date": "2026-10-18",
+      "doc_id": "SYSTEM",
+      "path": "docs/archive/SYSTEM/SYSTEM_v1.0.1.md",
+      "sha256": "b1b15affdec03ea6faac4bee924f82091692fb6422fee355325e48b4350afcb3",
+      "source": "worktree",
+      "status": "待确认",
+      "summary": "文件移入 `docs/design/` 并改为稳定文件名，链接与路径随之更新；内容不变",
+      "version": "1.0.1"
+    },
+    {
+      "date": "2026-10-29",
+      "doc_id": "SYSTEM",
+      "path": "docs/archive/SYSTEM/SYSTEM_v1.1.0.md",
+      "sha256": "f4543ac6c6b5da9050d389b139142fea6b4ab3c5ea75cd76c38772baa8b764c4",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "你确认本设计（Q-018）；按你确认的 Q-020、Q-021 写入新增录制：9 次录制与分层、webcam W 作辅助视角（§2、§3、C24）、作业者与口罩、机位与区域按录制（C25）、W 的同步、按作业者留一；E 的帧率说明更正",
+      "version": "1.1.0"
+    },
+    {
+      "date": "2026-10-29",
+      "doc_id": "SYSTEM",
+      "path": "docs/archive/SYSTEM/SYSTEM_v1.1.1.md",
+      "sha256": "5368fca3e184b791390a0d07c537fae34fa41d9ec5c17de939ba70a8a2ac6b79",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "按录制的区域改放 roi_sessions 文件夹，与只读的 roi 文件夹分开；内容不变",
+      "version": "1.1.1"
+    },
+    {
+      "date": "2026-10-29",
+      "doc_id": "SYSTEM",
+      "path": "docs/archive/SYSTEM/SYSTEM_v1.2.0.md",
+      "sha256": "b6c414c0e0f93e4f022b9553103bce44660f7cd05256dfd0747ed20411cc93cd",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "按你 2026-10-29 的身份判定更新 §2 作业者：共 4 名，同一人出现在多次录制中，0903 与 1014 各有一次换班",
+      "version": "1.2.0"
+    },
+    {
+      "date": "2026-10-29",
+      "doc_id": "SYSTEM",
+      "path": "docs/archive/SYSTEM/SYSTEM_v1.2.1.md",
+      "sha256": "a194643961d7aa5af8d1504518f1d0467a9e429d25ae813bdcb6ad09b0a104a3",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "录制的称呼统一为源文件夹名（例如 20261016），画面时钟日期只在括号中注明；内容不变",
+      "version": "1.2.1"
+    },
+    {
+      "date": "2026-10-15",
+      "doc_id": "VALSET",
+      "path": "docs/archive/VALSET/VALSET_v2.0.0.md",
+      "sha256": "8c053365f118447292be692df1fda98a07d85772a73f6a94364ac256e72074ae",
+      "source": "git:9d540ba:docs/superpowers/specs/2026-10-15-workdata-validation-set-design.md",
+      "status": "待确认",
+      "summary": "r2：作业数据连续片段的区域标注",
+      "version": "2.0.0"
+    },
+    {
+      "date": "2026-10-15",
+      "doc_id": "VALSET",
+      "path": "docs/archive/VALSET/VALSET_v2.0.1.md",
+      "sha256": "c4c73724c90b4e1d99af114238d4f7e5ebe6ef0a5b083bb050e08022e5ebbed7",
+      "source": "git:ef203a4:docs/superpowers/specs/2026-10-15-workdata-validation-set-design.md",
+      "status": "已确认",
+      "summary": "你批准 r2（D12 r2）",
+      "version": "2.0.1"
+    },
+    {
+      "date": "2026-10-18",
+      "doc_id": "VALSET",
+      "path": "docs/archive/VALSET/VALSET_v3.0.0.md",
+      "sha256": "6086fa6b951be52ecbd7ac3f9a7edf1ba26f2df08bf097a9fb3341306e57defb",
+      "source": "reconstructed:docs/superpowers/specs/2026-10-15-workdata-validation-set-design.md 的 3.1.0 去掉 §10.8 与 §10.7 的 r3.1 一行",
+      "status": "待确认",
+      "summary": "r3：手部/手中物体类别与注视点",
+      "version": "3.0.0"
+    },
+    {
+      "date": "2026-10-18",
+      "doc_id": "VALSET",
+      "path": "docs/archive/VALSET/VALSET_v3.1.0.md",
+      "sha256": "e954222afaff9f943025d15ea9dfc27f25fa4244ed68b59a1c65c412b309bfff",
+      "source": "worktree:docs/superpowers/specs/2026-10-15-workdata-validation-set-design.md（2026-10-18 体系建立前的工作区副本）",
+      "status": "待确认",
+      "summary": "r3.1 提议：画面外标记",
+      "version": "3.1.0"
+    },
+    {
+      "date": "2026-10-18",
+      "doc_id": "VALSET",
+      "path": "docs/archive/VALSET/VALSET_v3.1.1.md",
+      "sha256": "d4cf39b6c5fde796fb4aea3b6834efb984afbb512cc81d6be9e0a98bfa7e0eac",
+      "source": "worktree",
+      "status": "待确认",
+      "summary": "加入文件头与版本记录；标题去掉 revision 编号；内容不变",
+      "version": "3.1.1"
+    },
+    {
+      "date": "2026-10-18",
+      "doc_id": "VALSET",
+      "path": "docs/archive/VALSET/VALSET_v3.1.2.md",
+      "sha256": "425fe31230e787918d1117a8b20b72b1907da2815bca79a95917fc5d3d548c82",
+      "source": "worktree",
+      "status": "待确认",
+      "summary": "文件移入 `docs/design/` 并改为稳定文件名，链接与路径随之更新；内容不变",
+      "version": "3.1.2"
+    },
+    {
+      "date": "2026-10-29",
+      "doc_id": "VALSET",
+      "path": "docs/archive/VALSET/VALSET_v3.2.0.md",
+      "sha256": "98a3a1d8fdf45f885b98dc58b48956e0f50fe86405d65950f39aa483a4b37864",
+      "source": "worktree",
+      "status": "待确认",
+      "summary": "r3.1 经你同意（Q-018）；新增 §11：两次新录制作为单独分层，另成一个 8 段的同格式数据集，规则与种子不变；按作业者留一；按录制的区域（D26、D27）；§1、§2、§3、§7、§10 相应修改；r3 的细则仍待确认（Q-017）",
+      "version": "3.2.0"
+    },
+    {
+      "date": "2026-10-29",
+      "doc_id": "VALSET",
+      "path": "docs/archive/VALSET/VALSET_v4.0.0.md",
+      "sha256": "cb6e3a92280112dfe83fe9dbf985012eae08c8eeefddbe25aa19bbb4f4ca8f2e",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "按 §5.1 改为主版本：3.2.0 写入的按作业者留一属于评估协议的变化，版本级别在此更正；你确认 r3 的细则（Q-017），状态改为已确认；按独立审查修正 §11：作业者片段只在换人处切分，片段按时间归属、不因归属重抽，留一的预先登记与停止规则（待你确认，Q-023），cohort 缺省为 original；§7、§8 与中文摘要的旧说法更正",
+      "version": "4.0.0"
+    },
+    {
+      "date": "2026-10-29",
+      "doc_id": "VALSET",
+      "path": "docs/archive/VALSET/VALSET_v4.1.0.md",
+      "sha256": "b0f8bd016781e957e29cff0fcb6a573220ea53281222eb2cf04fd04b5775c5b8",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "按你 2026-10-29 的身份判定更新 §11：共 4 名作业者、11 个作业者片段，交接时段按确认的人脸界定，4 折不均衡、按作业者分别报告；§7 的依据随之更正；中文摘要同步",
+      "version": "4.1.0"
+    },
+    {
+      "date": "2026-10-29",
+      "doc_id": "VALSET",
+      "path": "docs/archive/VALSET/VALSET_v4.1.1.md",
+      "sha256": "b1c15a60ae3826ee4ca4d348b81d1c970faeadfd035cd1c696605e343490ee1d",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "录制的称呼统一为源文件夹名（例如 20261016），画面时钟日期只在括号中注明；你确认作业者片段表（Q-024）；内容不变",
+      "version": "4.1.1"
+    }
+  ],
+  "mirror_writes": [
+    {
+      "mirror": "docs/superpowers/specs/2026-10-18-system-overview-design.md",
+      "sha256": "901936f874af8100134f0dcbd9b15d9b6386fe610001d02ee74b7fd7f12cd344"
+    },
+    {
+      "mirror": "docs/superpowers/specs/2026-10-18-gaze-attention-system-design.md",
+      "sha256": "fbbbf6ca6c5ec6d8f17715ee2b3318093e58c0c9cf417d3ce34ac05e627edac0"
+    },
+    {
+      "mirror": "docs/superpowers/specs/2026-10-15-workdata-validation-set-design.md",
+      "sha256": "274ae76e350ead972b9df0e8d76564523cb60c451082479a8c5e28df829e2804"
+    },
+    {
+      "mirror": "docs/superpowers/specs/2026-10-15-face-pose-association-and-track-confirmation-design.md",
+      "sha256": "7bcf5e663abc32b342984559ef2e45f30432c2bddde0b5c94808b6e48cb2e785"
+    },
+    {
+      "mirror": "docs/superpowers/specs/2026-10-15-multicamera-attention-design.md",
+      "sha256": "7b45abe3ed1b827e6682fc14a2138c9ec8a6a2ae9ef30aa869d9581445c56ea8"
+    },
+    {
+      "mirror": "docs/superpowers/specs/2026-07-21-mediapipe-head-perception-design.md",
+      "sha256": "4a96a5c2dd9bc596b3e915d2c796935a31adbec4cdbc1cd0be7270069ef00ec1"
+    },
+    {
+      "mirror": "docs/superpowers/specs/2026-07-23-project-usage-guide-design.md",
+      "sha256": "e92f4db60bc54dc3f2d026dda2fba14bf4d80ada0016a6a1e653f4b75d812abf"
+    },
+    {
+      "mirror": "docs/superpowers/specs/2026-07-29-dual-head-pose-reference-rays-design.md",
+      "sha256": "a05c7cc08d26d7f4bb547f8f8fa117646f93a0239329d1aa134d79ca5187ee46"
+    },
+    {
+      "mirror": "docs/superpowers/specs/2026-07-30-video-codec-selection-design.md",
+      "sha256": "0c8dcdfd4af29f71dad74e48bb54d27261a69f8727944a6debcaa00159f5a759"
+    },
+    {
+      "mirror": "docs/superpowers/specs/2026-08-03-configurable-gazelle-diagnostics-design.md",
+      "sha256": "63d4a6d65f9e43a370cf27ed5146ac5c9ddb585de3fce12b401a0f38047233a1"
+    },
+    {
+      "mirror": "docs/superpowers/plans/2026-07-21-mediapipe-head-perception-implementation-plan.md",
+      "sha256": "82ade7a604da2fab4d8f4f820095389b96f19f66e7ef407e79da787a39cfc88a"
+    },
+    {
+      "mirror": "docs/superpowers/plans/2026-07-23-project-usage-guide-implementation-plan.md",
+      "sha256": "855daa6145e50f92e195519813a7ce3ea7a3e874f91a58580f55d515acace350"
+    },
+    {
+      "mirror": "docs/superpowers/plans/2026-07-29-dual-head-pose-reference-rays-implementation-plan.md",
+      "sha256": "e46710462689e6b114430624307132bb02c2d9c0d9d64d4150c6093d5f936a01"
+    },
+    {
+      "mirror": "docs/superpowers/plans/2026-07-30-video-codec-selection-implementation-plan.md",
+      "sha256": "d2dc53d05f9ccd22e1b8206a7f454dbe8d3792ea4cb57f507bcb7cd1b1796f7e"
+    },
+    {
+      "mirror": "docs/superpowers/plans/2026-08-03-configurable-gazelle-diagnostics-implementation-plan.md",
+      "sha256": "f49723f1ab02fe1c2942270025b3bbeeb137a336ebc9efe3757124d2313d9fc1"
+    },
+    {
+      "mirror": "docs/superpowers/specs/2026-10-15-multicamera-attention-design.md",
+      "sha256": "673d094e50d447e8a8abd4e849f6ecb3d0844cf50afa8f333905088e45fb9ade"
+    },
+    {
+      "mirror": "docs/superpowers/specs/2026-07-23-project-usage-guide-design.md",
+      "sha256": "57e6606dee580869e975a35fa12bcc790b2b63dfd83a88af3c10031d9b8c1b52"
+    },
+    {
+      "mirror": "docs/superpowers/specs/2026-07-30-video-codec-selection-design.md",
+      "sha256": "1b0e16cf55a7b1f209fdbe412868c1074977e8ffe8d57c43e2d2406ae8076d0a"
+    },
+    {
+      "mirror": "docs/superpowers/specs/2026-08-03-configurable-gazelle-diagnostics-design.md",
+      "sha256": "65534ceb74bedb0177252581bef5df0560e3ad5522d34c21defe474f9fbc1a07"
+    },
+    {
+      "mirror": "docs/superpowers/plans/2026-07-23-project-usage-guide-implementation-plan.md",
+      "sha256": "5a709f0b1da9f6349f5a700df314e2b8587bc6a5398fb997158d862536b69963"
+    },
+    {
+      "mirror": "docs/superpowers/plans/2026-07-29-dual-head-pose-reference-rays-implementation-plan.md",
+      "sha256": "2af332b7070c98690eb67c5691822a9a06fbd5fed925c9d3c1962f731a4d0909"
+    },
+    {
+      "mirror": "docs/superpowers/plans/2026-07-30-video-codec-selection-implementation-plan.md",
+      "sha256": "e0b9439f7b370b1507efbd2ed0948ef97332603ed9cd46dd71a1522d3313b0ad"
+    },
+    {
+      "mirror": "docs/superpowers/plans/2026-08-03-configurable-gazelle-diagnostics-implementation-plan.md",
+      "sha256": "65218abe4bcf9aaeacd2c72946c9a878a84d26d81ba4fde62e775e2d8d7ef846"
+    },
+    {
+      "mirror": "docs/superpowers/plans/2026-07-23-project-usage-guide-implementation-plan.md",
+      "sha256": "c0a583629eb663a0e7be5035bd86611239940770388bd00f94d8f0ff9ea463d7"
+    }
+  ],
+  "version": 1
+}

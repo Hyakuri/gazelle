@@ -47,7 +47,7 @@
 - 基线：阶段分支 `feature/stage2-correctness` 执行时的 HEAD。它在 `bbec056` 之上只有文档提交，原先的交接 overlay 已在其中提交（2026-10-15 更正）。
 - 代码：`gazelle/runtime/config.py:274-395`、`gazelle/runtime/heads.py:14-170`、`gazelle/runtime/geometry.py:24-42`、`gazelle/runtime/pipeline.py:67-145`、`gazelle/runtime/cli.py:54-99`。
 - 测试：`tests/test_runtime_cli.py`（退出码 2 的写法见 `:302-310`、`:590-596`）、`tests/test_image_pipeline.py:187-194`、`:369-375`、`tests/test_usage_docs.py:515-553`。
-- 文档：`docs/USAGE.md:141`、`:148-151`、`:288`、`:473` 及 `docs/USAGE_CN.md` 同行；`README.md:182`；`README_CN.md:191`。
+- 文档：`docs/usage/USAGE.md:141`、`:148-151`、`:288`、`:473` 及 `docs/usage/USAGE_CN.md` 同行；`README.md:182`；`README_CN.md:191`。
 
 ### 不可变约束
 
@@ -60,9 +60,9 @@
 ### 允许动作
 
 - 读全库。
-- 修改：`gazelle/runtime/config.py`；`gazelle/runtime/cli.py`（仅让 `choices` 引用常量，不改选项名、默认值、help 含义）；`tests/test_runtime_cli.py`；`tests/test_image_pipeline.py`；`tests/test_video_pipeline.py`（仅当既有用例因新校验需要调整）；`tests/test_usage_docs.py`；`docs/USAGE.md`、`docs/USAGE_CN.md`、`README.md`、`README_CN.md` 的相关句子。
+- 修改：`gazelle/runtime/config.py`；`gazelle/runtime/cli.py`（仅让 `choices` 引用常量，不改选项名、默认值、help 含义）；`tests/test_runtime_cli.py`；`tests/test_image_pipeline.py`；`tests/test_video_pipeline.py`（仅当既有用例因新校验需要调整）；`tests/test_usage_docs.py`；`docs/usage/USAGE.md`、`docs/usage/USAGE_CN.md`、`README.md`、`README_CN.md` 的相关句子。
 - 若为避免导入环必须移动常量，可移到无环模块，但 `heads.SUPPORTED_BBOX_FORMATS` 必须继续可导入。
-- 在本文件末尾追加「实施报告」；按 [协作方案](../COLLABORATION_PLAN_CN.md) §3 更新 `docs/collab/STATE.md` 中归 Codex 维护的字段。
+- 在本文件末尾追加「实施报告」；按 [协作方案](../../rules/COLLABORATION_PLAN_CN.md) §3 更新 `docs/collab/STATE.md` 中归 Codex 维护的字段。
 - 按协作方案 §4 在阶段分支提交并推送。
 - 运行下方验证命令。
 

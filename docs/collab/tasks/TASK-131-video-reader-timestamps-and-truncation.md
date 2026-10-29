@@ -87,7 +87,7 @@ r3（2026-10-16）。逐帧算法第 4 步改为至少增加 1 毫秒，修正 C
 - 分支 `feature/stage2-correctness`，基线为 STATE.md 的 `last_pushed`。
 - 代码：`gazelle/runtime/media.py`、`gazelle/runtime/pipeline.py`（`_video_run_config_payload`、主循环）、`gazelle/runtime/perception/mediapipe_backend.py`（`_video_timestamp`，只读参考，不改其拒绝规则）。
 - 测试：`tests/test_media.py`、`tests/test_video_pipeline.py`、`tests/test_usage_docs.py`。
-- 文档：`docs/USAGE.md` 中 `run_config.json` 的键表。
+- 文档：`docs/usage/USAGE.md` 中 `run_config.json` 的键表。
 
 ### 不可变约束
 

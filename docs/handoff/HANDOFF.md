@@ -1,12 +1,12 @@
 # Machine And Agent Handoff
 
-[中文](HANDOFF_CN.md) | [Dated project state](handoff/CURRENT_STATE.md) |
-[Shared workflow](AGENT_WORKFLOW.md) | [Full usage](USAGE.md)
+[中文](HANDOFF_CN.md) | [Dated project state](CURRENT_STATE.md) |
+[Shared workflow](../rules/AGENT_WORKFLOW.md) | [Full usage](../usage/USAGE.md)
 
 ## 1. Read In This Order
 
 1. Root `AGENTS.md`: durable rules, boundaries, environment and validation policy.
-2. `handoff/CURRENT_STATE.md`: branch/PR snapshot, completed features, evidence,
+2. `CURRENT_STATE.md`: branch/PR snapshot, completed features, evidence,
    uncommitted changes, open problems, and assets not included in the transfer.
 3. This guide for a machine move; `AGENT_WORKFLOW.md` for switching/cooperating agents.
 4. `USAGE.md` and the affected code/specs only when needed for the next task.
@@ -187,7 +187,7 @@ a new Codex/Claude session obeys all rules. Use the shared workflow.
 
 ```text
 You are taking over Hyakuri/gazelle. First read AGENTS.md,
-docs/handoff/CURRENT_STATE.md, docs/HANDOFF.md, and docs/AGENT_WORKFLOW.md.
+docs/handoff/CURRENT_STATE.md, docs/handoff/HANDOFF.md, and docs/rules/AGENT_WORKFLOW.md.
 Inspect actual branch, HEAD, working-tree changes and instruction sources.
 Distinguish installed metadata, historical tests, and current validation.
 Preserve existing edits; do not create branches/PRs, merge, force push, install,
@@ -199,4 +199,4 @@ Then complete the authorized task with risk-appropriate checks and evidence.
 ```
 
 Fill the two role/task lines before use. For takeover only, set the task to
-read-only inspection. For multi-session work use [TASK_TEMPLATE](handoff/TASK_TEMPLATE.md).
+read-only inspection. For multi-session work use [TASK_TEMPLATE](TASK_TEMPLATE.md).

@@ -2,7 +2,7 @@
 
 状态：ready（依赖 TASK-134 与 TASK-123）
 创建：2026-10-15（Asia/Tokyo），同日改为 r2　协调者：Claude　实现者：Codex　验收：用户（标注体验）与 Claude（工具审查）
-设计：[作业数据验证集规范 r2](../../superpowers/specs/2026-10-15-workdata-validation-set-design.md) §2 至 §6。
+设计：[作业数据验证集规范 r2](../../design/VALIDATION_SET_DESIGN.md) §2 至 §6。
 授权：用户 2026-10-15 批准 D12 r2。2026-10-15 用户提供 `E:\Gazelle_Workdata` 供分析，只读使用。
 摄像机角色（用户 2026-10-15 确认）：前方为 `cam_b`（通常名为カメラ2），右侧为 `cam_a`（通常名为カメラ1），全局为 `cam_e`（設備カメラ）。一律按 TASK-132 的物理编号取文件，不按文件名。
 修订：r1 的单帧视线点标注（sample1、sample2）已撤回，本契约整体替换 r1。
@@ -86,7 +86,7 @@ git status --short
 
 - 需独立审查：是（Claude 审查代码并实际试用界面）。
 - 需真实运行：生成数据集，仅 CPU。
-- 文档同步：需要。在四份用户文档的「研究数据工具」小节（TASK-132 建立）中加入本任务的工具：写明用途、在仓库根目录运行的入口命令、读取什么、写到哪里、是否调用 FFmpeg、是否使用 GPU 或网络，并链接 `tools/validation/ANNOTATION_GUIDE_CN.md`。`README.md` 与 `README_CN.md` 只放简介与指向 USAGE 的链接；`docs/USAGE.md` 与 `docs/USAGE_CN.md` 放工具表。中英文语义一致；`tests/test_usage_docs.py` 在两份 USAGE 中锁定本任务的入口模块名。原因：这些工具由用户或 Codex 直接运行，属于用户可见的用法，适用 AGENTS.md 的文档同步规则（2026-10-15 按 Codex 接手核对修正）。
+- 文档同步：需要。在四份用户文档的「研究数据工具」小节（TASK-132 建立）中加入本任务的工具：写明用途、在仓库根目录运行的入口命令、读取什么、写到哪里、是否调用 FFmpeg、是否使用 GPU 或网络，并链接 `tools/validation/ANNOTATION_GUIDE_CN.md`。`README.md` 与 `README_CN.md` 只放简介与指向 USAGE 的链接；`docs/usage/USAGE.md` 与 `docs/usage/USAGE_CN.md` 放工具表。中英文语义一致；`tests/test_usage_docs.py` 在两份 USAGE 中锁定本任务的入口模块名。原因：这些工具由用户或 Codex 直接运行，属于用户可见的用法，适用 AGENTS.md 的文档同步规则（2026-10-15 按 Codex 接手核对修正）。
 - 风险与回退：工具问题只影响标注效率与数据集，不影响运行时；回退方式是 `git revert`，数据集目录可删除重建。
 - 依赖：TASK-134；TASK-123 修复后的工具，以及用户画好并导出、带完成标记的正式区域文件（只有文件存在不算就绪，2026-10-16 按审查修订）。区域文件尚未画好时，先用默认类别完成开发与测试，正式数据集等区域文件就绪后再生成。
 

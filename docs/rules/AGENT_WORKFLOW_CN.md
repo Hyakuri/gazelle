@@ -1,7 +1,7 @@
 # 跨 Agent 协作流程
 
-[English](AGENT_WORKFLOW.md) | [迁移指南](HANDOFF_CN.md) |
-[任务模板](handoff/TASK_TEMPLATE.md)
+[English](AGENT_WORKFLOW.md) | [迁移指南](../handoff/HANDOFF_CN.md) |
+[任务模板](../handoff/TASK_TEMPLATE.md)
 
 ## 1. 共用规则与明确负责人
 

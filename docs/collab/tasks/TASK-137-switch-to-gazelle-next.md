@@ -38,7 +38,7 @@
    - 新增一句：现有 `Gazelle` 环境作为回退保留，由 `environment_py311.yml` 描述，同样不得在未经批准的情况下修改。
    - 环境文件的说明改为三份：`environment.yml` 描述当前验证过的环境；`environment_py311.yml` 是上一版（Python 3.11）的回退定义；`environment_1.0.yml` 是更早的 NumPy 1.26 参考定义。
    - Triton 与 xFormers 回退行为的规定保留原意。
-4. **四份用户文档**（`README.md`、`README_CN.md`、`docs/USAGE.md`、`docs/USAGE_CN.md`），中英语义一致：
+4. **四份用户文档**（`README.md`、`README_CN.md`、`docs/usage/USAGE.md`、`docs/usage/USAGE_CN.md`），中英语义一致：
    - **安装与环境小节**：
      - 写明新环境的组成（Python 3.14、PyTorch 2.14.1 + CUDA 13.0、MediaPipe 1.1.1、OpenCV 5.0、NumPy 2.5.4、trackers 2.6.1、supervision 0.30.9 等）。
      - 逐项写明不再包含的包及原因。
@@ -50,7 +50,7 @@
    - **示例命令**：所有示例命令中的环境名与解释器路径改为 `Gazelle-next`，包括研究数据工具小节。
    - **训练脚本**：训练脚本需要 wandb，沿用 README 中“另行安装”的说明，训练说明的其他内容不改。
    - **测试**：`tests/test_usage_docs.py` 中锁定的环境相关 token 随之更新。
-5. **其他当前状态文档**：`docs/HANDOFF.md`、`docs/HANDOFF_CN.md` 中关于环境名、解释器路径与环境文件的当前说明，改为 `Gazelle-next`。以下历史文档不改：带日期的快照（`docs/handoff/CURRENT_STATE.md`、`docs/collab/evidence/` 下的旧记录）与 `docs/superpowers/` 下的历史计划。
+5. **其他当前状态文档**：`docs/handoff/HANDOFF.md`、`docs/handoff/HANDOFF_CN.md` 中关于环境名、解释器路径与环境文件的当前说明，改为 `Gazelle-next`。以下历史文档不改：带日期的快照（`docs/handoff/CURRENT_STATE.md`、`docs/collab/evidence/` 下的旧记录）与 `docs/superpowers/` 下的历史计划。
 6. **不改代码**：`gazelle/`、`tools/`、`scripts/`、`data_prep/`、`main.py` 不在本任务范围内。若发现代码中写死了环境名或解释器路径，按协作方案 §3.5 记录，并交 Claude 判断。
 
 ### 非目标
@@ -72,7 +72,7 @@ AGENTS.md 中与环境无关的全部规定；现有 `Gazelle` 环境不改动�
 ### 允许动作
 
 - 修改 `environment.yml`；新建 `environment_py311.yml`。
-- 修改 AGENTS.md 中与环境有关的句子、四份用户文档、`docs/HANDOFF.md`、`docs/HANDOFF_CN.md` 与 `tests/test_usage_docs.py`。
+- 修改 AGENTS.md 中与环境有关的句子、四份用户文档、`docs/handoff/HANDOFF.md`、`docs/handoff/HANDOFF_CN.md` 与 `tests/test_usage_docs.py`。
 - 在 `Gazelle-next` 中运行离线门与验收第 4 条的真实 smoke。只用本地缓存，不下载。
 - 按协作方案 §4 提交、推送，并在 PR #6 发英中双语评论。
 - 问题处理按协作方案 §3.5。

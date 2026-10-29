@@ -1,7 +1,7 @@
 # Shared Agent Workflow
 
-[中文](AGENT_WORKFLOW_CN.md) | [Migration](HANDOFF.md) |
-[Task template](handoff/TASK_TEMPLATE.md)
+[中文](AGENT_WORKFLOW_CN.md) | [Migration](../handoff/HANDOFF.md) |
+[Task template](../handoff/TASK_TEMPLATE.md)
 
 ## 1. One Policy, Explicit Ownership
 

@@ -17,10 +17,10 @@ skills, plugins, model settings, or permissions while doing repository work.
 
 Start every session by reading `docs/collab/STATE.md`. It names the current
 stage and branch, whose turn it is, the active task record, and what to do
-next. `docs/collab/COLLABORATION_PLAN_CN.md` defines the procedure and extends
-`docs/AGENT_WORKFLOW.md`. Do not write files while the `writer` field in
+next. `docs/rules/COLLABORATION_PLAN_CN.md` defines the procedure and extends
+`docs/rules/AGENT_WORKFLOW.md`. Do not write files while the `writer` field in
 `docs/collab/STATE.md` names another agent. For machine migration, read
-`docs/HANDOFF.md` on demand. `CLAUDE.md` imports this file; keep project
+`docs/handoff/HANDOFF.md` on demand. `CLAUDE.md` imports this file; keep project
 policy here rather than maintaining different rules for each agent.
 
 ## Sources Of Truth
@@ -99,10 +99,10 @@ changes. Read affected code, tests, and relevant specifications on demand:
 | --- | --- |
 | CLI/config | `main.py`, `gazelle/runtime/cli.py`, `gazelle/runtime/config.py`, `tests/test_runtime_cli.py` |
 | Model boundary/geometry | `gazelle/runtime/contracts.py`, `gazelle/runtime/geometry.py`, `gazelle/runtime/predictor.py`, `gazelle/runtime/heads.py`; matching tests |
-| Perception/tracking | `gazelle/runtime/perception/`, matching tests, relevant approved spec in `docs/superpowers/specs/` |
+| Perception/tracking | `gazelle/runtime/perception/`, matching tests, relevant approved design in `docs/design/` |
 | Media/rendering/output | `gazelle/runtime/pipeline.py`, `gazelle/runtime/media.py`, `gazelle/runtime/outputs.py`, `gazelle/runtime/renderer.py`, `gazelle/runtime/ffmpeg.py`; matching tests |
 | Resources/environment | `environment.yml`, `environment_1.0.yml`, `gazelle/runtime/resources.py`, `gazelle/runtime/environment.py`, `gazelle/runtime/perception/resources.py` |
-| Usage/schema | `docs/USAGE.md`, `docs/USAGE_CN.md`, matching README sections, `tests/test_usage_docs.py` |
+| Usage/schema | `docs/usage/USAGE.md`, `docs/usage/USAGE_CN.md`, matching README sections, `tests/test_usage_docs.py` |
 | Research evaluation | Relevant approved protocol, `scripts/eval_gazefollow.py`, `scripts/eval_vat.py`, `gazelle/utils.py` |
 
 Do not read every route or historical plan for every task.
@@ -213,7 +213,7 @@ Preserve these invariants unless the current task explicitly redesigns them:
 - That absolute path is source-host-specific. On another machine, discover and
   verify the existing `Gazelle-next` interpreter; do not create directories to mimic
   the old path. Creating a destination environment needs authorization and must
-  not overwrite an existing environment. See `docs/HANDOFF.md` for acceptance.
+  not overwrite an existing environment. See `docs/handoff/HANDOFF.md` for acceptance.
 
 - Do not create, update, prune, install into, or otherwise modify the real
   `Gazelle-next` environment without explicit user approval. This includes direct
@@ -303,8 +303,8 @@ runtime behavior, or usage change, update all four user documents together:
 
 - `README.md`
 - `README_CN.md`
-- `docs/USAGE.md`
-- `docs/USAGE_CN.md`
+- `docs/usage/USAGE.md`
+- `docs/usage/USAGE_CN.md`
 
 Keep English and Chinese semantics synchronized. Commands must run from the
 repository root and state whether they download resources, use CUDA, invoke
@@ -314,6 +314,35 @@ FFmpeg, run inference, write output, or only inspect configuration. Update
 Do not add branch-specific phrases that become stale after merge. For a purely
 internal change that needs no user-documentation update, say why in the final
 report and PR comment.
+
+## Documentation Records
+
+`docs/rules/DOCS_SYSTEM_CN.md` defines the project's documentation records.
+
+- Documents live in category folders: `docs/requirements/`, `docs/design/`,
+  `docs/rules/`, `docs/collab/`, `docs/usage/`, `docs/handoff/`, and
+  `docs/archive/`. Put a new document in the matching folder.
+
+- Controlled documents are the design baselines and the process rules listed
+  there. Every change to one gets a new `MAJOR.MINOR.PATCH` version in its
+  front matter and a new top row in its version log. It is then archived with
+  `python -m tools.docs release`.
+- Snapshots and baselines under `docs/archive/` are append-only. A rollback is a
+  new version restored from an archived one, never a rewrite of history.
+- `docs/portal/index.html` and `docs/README.md` are generated from the
+  documents. Never edit them by hand.
+  - After changing any source, run `python -m tools.docs build`.
+  - Before a handoff, `python -m tools.docs check` must pass.
+- `docs/superpowers/` is the superpowers skills' workspace.
+  - Its files are copies of project files, synchronized by the tool.
+  - The project file in its category folder is authoritative.
+  - When a skill writes or edits a file there, adopt it into the project folder
+    with `python -m tools.docs adopt`, or register a new project file, before
+    the handoff.
+- Progress belongs in `docs/collab/ROADMAP.md` and `docs/collab/STATE.md`, not
+  in controlled documents.
+- Publishing the generated page to any external service requires the user's
+  approval each time.
 
 ## Models, Network, And Real Smoke Tests
 

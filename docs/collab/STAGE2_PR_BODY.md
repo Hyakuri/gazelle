@@ -4,9 +4,15 @@
 
 Make the three-camera work recordings usable and trustworthy as input, synchronize the cameras, fix the known perception defects, and build the region-labelling tool that stage 3 will be evaluated against.
 
-## Project goal (confirmed by the user on 2026-10-15)
+## Project goal (clarified by the user on 2026-10-18)
 
-Three fixed monocular cameras film one workstation: two on the desks facing the worker (front: カメラ2, right: カメラ1) and the overview camera 設備カメラ between the two desks, looking down at both. Camera positions are the same in every recording. The system will fuse the three views to estimate, over time, which work region the worker attends to: the regions the user drew on the overview camera (four target regions inside the work cell, drawn on 2026-10-17), other places in the cell, away from work, or absent. It will report time shares, dwell durations, transitions, and off-task time. Processing is offline. Multi-Pose integration is out of scope for now; multi-person inference and real-time processing are later goals.
+Three monocular fisheye cameras film one workstation: two on the desks facing the worker (front: カメラ2, right: カメラ1) and the overview camera 設備カメラ between the two desks, looking down at both. The project has two main aims and one method requirement:
+
+1. **Gaze**: estimate the worker's gaze with high precision, including changes caused by eye movements, not only head turns.
+2. **Attended location**: from the gaze, infer where the worker is actually looking, shown as a centre-graded heatmap. Targets include the desk regions the user drew and also moving targets such as the hands and held objects. The first step is a heatmap on the overview camera; physical desk coordinates follow after an approximate calibration.
+3. **Method requirement**: eyes, head and body do not move together, so gaze must not be inferred from head direction alone.
+
+Region statistics (time shares, dwell times, transitions, off-task time) remain as outputs derived from the heatmaps. Processing is offline. No new on-site recordings are possible for now, so precision is evaluated against annotated attention points. The goal record is `docs/requirements/PROJECT_GOALS_CN.md` v3, and the stage-3 system design v2 (`docs/design/STAGE3_GAZE_ATTENTION_CN.md`) was approved by the user on 2026-10-29 (D22). Multi-Pose integration is out of scope; multi-person inference and real-time processing are later goals.
 
 ## Findings that shaped this stage
 
@@ -35,17 +41,22 @@ Details: `docs/collab/analysis/2026-10-15-workdata-analysis.md`.
 | 3 | TASK-138 Annotation and region tool follow-ups | accepted; hardening items move to TASK-124 |
 | 3 | TASK-136 Run Gazelle input preprocessing on the inference device | accepted; 4K median 106–121 → 43 ms in Claude's CUDA run |
 | 3 | TASK-139 Sync protocol r2: content-calibrated alignment to the front camera | partly accepted; base maps, calibration and 18 new proxies accepted; remaining items go to TASK-140 |
-| 3 | TASK-102 Confirm new tracks on their first frame (D2) | changes requested (GZ-30) |
+| 3 | TASK-102 Confirm new tracks on their first frame (D2) | accepted after the round-4 fix (GZ-30 closed) |
 | 3 | TASK-002 Face ray and roll sign alignment | accepted |
-| 4 | TASK-140 Sync validation and step-rule revisions; complete 20260911; build the formal dataset | ready; first in round 4 |
-| 4 | TASK-124 Annotation tool hardening | ready |
-| 4 | TASK-102 Round-2 fix | changes requested |
-| 4 | TASK-101 Face–pose association fix (D1) | blocked on TASK-102 |
-| Later | Pixel-isotropic reference rays (GZ-28) | proposed; before stage-3 features |
-| User | Label 26 one-minute segments (about 2 hours) | after TASK-140 and TASK-124 pass review and the formal dataset exists |
+| 4 | TASK-140 Sync validation and step-rule revisions; complete 20260911 | implementation accepted; all 7 recordings synchronized |
+| 4 | TASK-124 Annotation tool hardening | changes requested (manual stepping bypasses the write throttle) |
+| 5 | TASK-140 round 2: uncertainty spans at steps, same-source-frame clock reading, switch to the final proxies, build both datasets | ready; first in round 5 |
+| 5 | TASK-124 round 2 | ready |
+| 5 | TASK-125 Annotation scheme r3: hands/held-object class and attention points, plus the out-of-view mark r3.1 | ready; the user confirmed the r3 details (Q-017) and r3.1 on 2026-10-29 |
+| 6 | TASK-101 Face–pose association fix (D1, contract r2) | ready |
+| 6 | TASK-150 Intake of the two new recordings (20261016, 20261023) and the webcam | blocked on round 5; contract written |
+| — | TASK-151 Register the formal regions to each recording; the user reviews them (D27) | proposed |
+| Stage 4 | Pixel-isotropic reference rays (GZ-28) | proposed; no longer a stage-3 prerequisite because stage 3 uses 3D gaze |
+| User | Label 26 one-minute segments with scheme r3 (about 3 hours) | paused (D20) until TASK-125 and round 5 pass review |
+| User | Label the 8 segments of the new recordings (about 1 hour) | after TASK-150 |
 | — | Stage acceptance by Claude, final acceptance by the user | not started |
 
-User decisions on 2026-10-15: the front camera is カメラ2 and the right camera is カメラ1; the user will draw the regions on the overview camera; each date has one worker and the camera positions are fixed; D4, D12 r2, and D13–D15 are approved. The stage 3 design is approved, and its task contracts will be written at stage 2 acceptance. The user accepted MediaPipe telemetry (GZ-23) for the development phase; security handling follows the research.
+User decisions on 2026-10-15: the front camera is カメラ2 and the right camera is カメラ1; the user will draw the regions on the overview camera; each date has one worker and the camera positions are fixed; D4, D12 r2, and D13–D15 are approved. That stage-3 design was superseded on 2026-10-18 by design v2, which the user approved on 2026-10-29 (below). The user accepted MediaPipe telemetry (GZ-23) for the development phase; security handling follows the research.
 
 Environment evaluation on 2026-10-17 (`docs/collab/evidence/2026-10-17-env-next-evaluation.md`):
 
@@ -73,6 +84,35 @@ Round 3 review on 2026-10-17 (`docs/collab/evidence/2026-10-17-sync-validation-r
   - TASK-102: in single-person mode, a one-frame provisional head can delete a confirmed track's bridge (GZ-30).
   - The reference rays are distorted on non-square frames (GZ-28).
 
+Round 4 review on 2026-10-18 (`docs/collab/evidence/2026-10-18-sync-validation-r4.md`):
+
+- **All seven recordings are synchronized.**
+  - Codex's validation and Claude's independent re-measurement agree. Every front–right and front–overview pair passes the unchanged gates, with |c0| ≤ 0.05 s. One right–overview pair has too few windows to judge.
+  - All 25 event strips were checked by eye. Where the worker moves, the three views agree within one or two 0.2 s columns.
+- **Two protocol decisions.**
+  - Each step in the calibration is treated as uncertain from the nearest valid evidence on one side to the nearest on the other. At one step the workstation was empty, which covers about 6 minutes.
+  - A clock sample that cannot be read on the proxy may be read from the same source frame.
+- **TASK-102 is accepted.** TASK-124 needs one small fix: manual stepping bypassed the one-write-per-second throttle.
+- **Next round.** Round 5 applies both decisions, switches to the final proxies and builds the formal dataset. After Claude's review, the user can start labelling.
+
+New recordings and design approval on 2026-10-29 (`docs/collab/analysis/2026-10-29-workdata-analysis-r2.md`):
+
+- **New data.** The data provider added two recordings, with burned-in clock dates 2026-10-14 and 2026-10-19. The three-camera overlap grows from about 6.5 h to about 8.5 h. Each new recording also has a webcam that sees the head, hands and desk together, but its faces are only about 80 px wide.
+- **What changed.**
+  - The workers wear masks in the new recordings: at least one face camera sees usable eyes in 28% of the steps with the worker present, against 76% before.
+  - One new recording contains two workers.
+  - The face cameras are re-placed in every recording, and the overview camera moved from 2026-09-22 by 10–28 px.
+- **User decisions.**
+  - D22: the system design and the stage-3 design v2 are approved.
+  - D23: MIT- and Apache-licensed models first, tried in a cloned sandbox environment, with each download authorized item by item; non-commercial models are not used until the user judges them at download time.
+  - D24: a new stage-3 branch and draft PR from the stage-2 acceptance point, so this PR stays stage 2 only. Round 6 and TASK-151 are stage-2 work and stay on this branch.
+  - D25: the documentation records system is confirmed.
+  - D26: the new recordings join as a separate cohort; the webcam is an auxiliary view; evaluation becomes leave-one-worker-out.
+  - D27: the formal regions are registered to each recording and reviewed by the user.
+  - Q-017: the details of labelling scheme r3 are confirmed, so r3 and r3.1 take effect together.
+- **Workers.** From face crops the user identified four workers (P1–P4). One works on four of the seven original dates, and the recordings 20260903 and 20261016 each contain a handover, so the overlap splits into 11 worker spans (`docs/collab/analysis/2026-10-29-worker-identity-analysis.md`).
+- **Plan.** Round 5 is unchanged. TASK-150 ingests the new recordings in round 6, together with TASK-101.
+
 ## How this PR is used
 
 - Both agents start from `docs/collab/STATE.md`.
@@ -91,9 +131,15 @@ Work videos stay read-only on the local drive. Derived data, labels, and outputs
 
 让三台摄像机的作业录像能够作为可靠输入，把三台摄像机同步，修复已知的感知缺陷，并建立第 3 阶段评估所依据的区域标注工具。
 
-## 项目目标（用户 2026-10-15 确认）
+## 项目目标（用户 2026-10-18 说明）
 
-三台固定单目摄像机拍摄同一工位：两台放在桌面上对着作业者，前方为カメラ2，右侧为カメラ1；全局摄像机設備カメラ在两张工作台之间俯视两张桌面。各次录制的机位相同。系统融合三个视角，逐时刻判断作业者注视的作业区域：用户在全局摄像机画面上画出的区域（2026-10-17 画出，工作区内的 4 个目标区域）、工作区内其他位置、离开工作或不在岗；并报告时间占比、停留时长、切换次数与离开工作的时间。以离线处理为主。暂不考虑 Multi-Pose 接口；多人推断与实时处理是后续目标。
+三台单目鱼眼摄像机拍摄同一工位：两台放在桌面上对着作业者，前方为カメラ2，右侧为カメラ1；全局摄像机設備カメラ在两张工作台之间俯视两张桌面。项目有两个主要目的和一条方法要求：
+
+1. **视线**：高精度估计作业者的视线，包括眼球转动带来的变化，而不只是转头。
+2. **注意力位置**：由视线推断作业者实际注视的位置，用中心渐变的热力图表示。目标既包括用户画出的桌面区域，也包括双手、手中物体等会移动的目标。第一步在全局摄像机画面上给出热力图，近似标定后再给出桌面上的物理坐标。
+3. **方法要求**：眼、头、身体的朝向并不同步，不能只用头部方向推断视线。
+
+区域统计（占比、停留时长、切换次数、离开工作的时间）保留，改为由热力图得到。以离线处理为主。暂时无法追加现场录制，精度用人工标注的注视点评估。目标记录见 `docs/requirements/PROJECT_GOALS_CN.md` v3，第 3 阶段系统设计 v2（`docs/design/STAGE3_GAZE_ATTENTION_CN.md`）已由用户于 2026-10-29 批准（D22）。暂不考虑 Multi-Pose 接口；多人推断与实时处理是后续目标。
 
 ## 影响本阶段安排的发现
 
@@ -122,17 +168,22 @@ Work videos stay read-only on the local drive. Derived data, labels, and outputs
 | 3 | TASK-138 标注与区域工具的后续修复 | accepted；加固项转入 TASK-124 |
 | 3 | TASK-136 Gazelle 输入预处理移到推理设备 | accepted；Claude 的 CUDA 对照中 4K 中位数由 106 至 121 ms 降到 43 ms |
 | 3 | TASK-139 同步协议 r2：以前方摄像机为基准的画面内容校准 | 部分通过：基础映射、校准与 18 段新代理通过，余项转入 TASK-140 |
-| 3 | TASK-102 新轨迹首帧即确认（D2） | 退回修改（GZ-30） |
+| 3 | TASK-102 新轨迹首帧即确认（D2） | 第 4 轮修复后 accepted（GZ-30 关闭） |
 | 3 | TASK-002 面部射线与 roll 符号对齐 | accepted |
-| 4 | TASK-140 同步验证与分段规则修订；补齐 20260911；生成正式数据集 | ready，第 4 轮第一项 |
-| 4 | TASK-124 标注工具加固 | ready |
-| 4 | TASK-102 第 2 轮修复 | 退回修改 |
-| 4 | TASK-101 人脸与姿态关联修正（D1） | 等 TASK-102 |
-| 之后 | 参考射线改为像素各向同性方向（GZ-28） | proposed；第 3 阶段特征提取之前 |
-| 用户 | 标注 26 个一分钟片段（约 2 小时） | TASK-140 与 TASK-124 通过审查、正式数据集生成之后 |
+| 4 | TASK-140 同步验证与分段规则修订；补齐 20260911 | 实现通过；7 次录制同步全部达标 |
+| 4 | TASK-124 标注工具加固 | 退回修改（手动逐步绕过写盘降频） |
+| 5 | TASK-140 第 2 轮：台阶处的不确定区间、时钟同源帧补读、切换正式代理、生成两个数据集 | ready，第 5 轮第一项 |
+| 5 | TASK-124 第 2 轮 | ready |
+| 5 | TASK-125 标注方案 r3：“手部/手中物体”类别与注视点，以及“画面外”标记 r3.1 | ready；用户已于 2026-10-29 确认 r3 细则（Q-017）与 r3.1 |
+| 6 | TASK-101 人脸与姿态关联修正（D1，契约 r2） | ready |
+| 6 | TASK-150 两次新录制（20261016、20261023）与 webcam 的接入 | 等第 5 轮；契约已写 |
+| — | TASK-151 正式区域按录制配准，由用户复核（D27） | proposed |
+| 阶段 4 | 参考射线改为像素各向同性方向（GZ-28） | proposed；阶段 3 改用三维视线，不再是其前置 |
+| 用户 | 按方案 r3 标注 26 个一分钟片段（约 3 小时） | 暂停（D20），等 TASK-125 与第 5 轮通过审查 |
+| 用户 | 标注新录制的 8 段（约 1 小时） | TASK-150 之后 |
 | — | Claude 阶段验收，用户最终验收 | 未开始 |
 
-用户 2026-10-15 的决定：前方摄像机为カメラ2，右侧为カメラ1；区域由用户在全局摄像机画面上画出；同一日期为同一作业者，机位固定；批准 D4、D12 r2 与 D13 至 D15。第 3 阶段设计已批准，任务契约在阶段 2 验收时编写。用户决定开发阶段接受 MediaPipe 遥测（GZ-23），研究完成后再做安全处理。
+用户 2026-10-15 的决定：前方摄像机为カメラ2，右侧为カメラ1；区域由用户在全局摄像机画面上画出；同一日期为同一作业者，机位固定；批准 D4、D12 r2 与 D13 至 D15。该第 3 阶段设计在 2026-10-18 被设计 v2 取代，设计 v2 已由用户于 2026-10-29 批准（见下文）。用户决定开发阶段接受 MediaPipe 遥测（GZ-23），研究完成后再做安全处理。
 
 2026-10-17 的环境评估（`docs/collab/evidence/2026-10-17-env-next-evaluation.md`）：
 
@@ -159,6 +210,35 @@ Work videos stay read-only on the local drive. Derived data, labels, and outputs
   - TASK-002：第 15 帧样例是否检出取决于输入编码，与代码无关（Q-011）。
   - TASK-102：单人模式下，一帧的临时头会删掉已确认轨迹的桥接（GZ-30）。
   - 参考射线的角度在非正方形画面上变形（GZ-28）。
+
+2026-10-18 的第 4 轮审查（`docs/collab/evidence/2026-10-18-sync-validation-r4.md`）：
+
+- **7 次录制全部同步达标。**
+  - Codex 的验证与 Claude 的独立复算一致：所有前方–右侧、前方–全局两对都通过原门槛，|c0| 不超过 0.05 秒；只有一对右侧–全局的有效窗太少，无法判断。
+  - 25 张事件条图全部目视检查。作业者有动作时，三台机位在同一两列（0.2 秒一列）之内一致。
+- **两项协议决定。**
+  - 校准中的每个台阶，从一侧最近的有效证据到另一侧最近的有效证据，整段视为不确定。其中一处台阶发生时工位无人，覆盖约 6 分钟。
+  - 代理上读不出的时钟样本，可以从同一源帧读。
+- **TASK-102 通过。** TASK-124 需要一处小修：手动逐步时绕过了每秒一次的写盘降频。
+- **下一轮。** 第 5 轮落实这两项决定、切换正式代理并生成正式数据集。Claude 审查通过后，用户即可开始标注。
+
+2026-10-29 的新录制与设计批准（`docs/collab/analysis/2026-10-29-workdata-analysis-r2.md`）：
+
+- **新数据。** 数据提供方新增了两次录制，画面时钟日期为 2026-10-14 与 2026-10-19，三机重叠由约 6.5 小时增加到约 8.5 小时。每次新录制另有一台 webcam，同时看到头部、双手与桌面，但脸只有约 80 像素宽。
+- **变化。**
+  - 新录制中作业者戴口罩：作业者在场时，至少一台人脸摄像机看得清眼睛的比例为 28%，旧录制为 76%。
+  - 一次新录制中有两名作业者。
+  - 人脸摄像机每次录制都被重新摆放；全局摄像机自 2026-09-22 起偏移 10 至 28 像素。
+- **用户的决定。**
+  - D22：批准系统总体设计与阶段 3 设计 v2。
+  - D23：先只用 MIT 与 Apache 许可的模型，在克隆的沙盒环境中试用，下载逐项授权；非商业许可的模型暂不使用，需要时随下载授权请用户判断。
+  - D24：从阶段 2 的验收点新建阶段 3 分支与 draft PR，本 PR 只含阶段 2；第 6 轮与 TASK-151 属于阶段 2，仍在本分支。
+  - D25：确认文档记录体系。
+  - D26：新录制作为单独分层纳入；webcam 作辅助视角；评估改为按作业者留一。
+  - D27：正式区域按录制配准，由用户复核。
+  - Q-017：确认标注方案 r3 的细则，r3 与 r3.1 一起生效。
+- **作业者。** 用户看过面部截图后判定共 4 名作业者（P1 至 P4）。其中一人出现在 7 个旧日期中的 4 个；20260903 与 20261016 两次录制中各有一次换班，三机重叠段共分成 11 个作业者片段（`docs/collab/analysis/2026-10-29-worker-identity-analysis.md`）。
+- **计划。** 第 5 轮不变；第 6 轮由 TASK-150 接入新录制，同时做 TASK-101。
 
 ## 本 PR 的用法
 

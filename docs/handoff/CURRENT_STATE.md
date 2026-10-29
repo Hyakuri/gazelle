@@ -51,7 +51,7 @@ the Git bundle ends at the HEAD above. See the package manifest for exact paths.
 
 当前已贯通头部观测、跟踪融合、Gazelle 推理和输出渲染。重点使用场景是单人作业，
 未来支持不超过 10 人，但真实多人验证有限。面部检测不是身份识别；诊断模式结果
-不能当作精确眼动测量。完整 CLI 和 schema 以 [USAGE_CN](../USAGE_CN.md) 为准。
+不能当作精确眼动测量。完整 CLI 和 schema 以 [USAGE_CN](../usage/USAGE_CN.md) 为准。
 
 ## 3. Source Environment Evidence / 源环境证据
 
