@@ -131,6 +131,7 @@ git status --short
 - 待用户决定（C 级）：无。
 - 未运行：本轮没有真实推理或正式标注；独立代码/浏览器验收交 Claude，用户独立 checkout 最终验收仍待完成。
 - 状态标签：已实现、离线验证通过、临时浏览器实测通过、待独立审查。
+- 第 2 轮双语发布报告：[PR #6 / TASK-124](https://github.com/Hyakuri/gazelle/pull/6#issuecomment-6494321741)。最终 TASK-125 在同一页面保留此修复，708 项离线门及再次浏览器降频验证通过。
 
 ## 3. 审查结论（Claude 追加）
 

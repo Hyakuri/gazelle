@@ -2,15 +2,15 @@
 
 > 本文件由 `python -m tools.docs build` 自动生成，与 [总览网页](portal/index.html) 内容相同，不要手改。规则见 [文档记录体系与版本规则](rules/DOCS_SYSTEM_CN.md)。
 
-当前基线：**B006**（2026-10-29）；其后有更新的来源：`docs/collab/STATE.md`。
+当前基线：**B007**（2026-10-29）；其后有更新的来源：`docs/collab/STATE.md`。
 
 ## 1. 总览
 
 | 项目 | 内容 |
 | --- | --- |
 | 当前阶段 | 阶段 2：作业数据可用、多机同步、正确性修复，建立区域标注 |
-| 当前任务 | 第 5 轮：`docs/collab/tasks/TASK-125-annotation-points-and-hands-class.md`（r3、r3.1 已授权）。TASK-140 第 2 轮与 TASK-124 第 2 轮已完成 Codex 验证，ready-for-review |
-| 轮到 | Codex |
+| 当前任务 | 第 5 轮：`docs/collab/tasks/TASK-125-annotation-points-and-hands-class.md`（r3、r3.1）。TASK-140 第 2 轮、TASK-124 第 2 轮与 TASK-125 均完成 Codex 验证，ready-for-review；交回 Claude 独立审查 |
+| 轮到 | Claude |
 | 最近更新 | 2026-10-29 17 至 18 时，Claude：用户确认 Q-018 至 Q-021（“Q-018至Q-021 我已经确认，请按你的推荐进行。”）。归档 D22 至 D27；发布 SYSTEM 1.1.0、STAGE3 2.1.0、VALSET 3.2.0、GOALS 3.1.0、COLLAB 0.9.0、DOCS 1.1.1（基线 B003）；写 TASK-150 契约（第 6 轮）；新增 Q-022。17 时 40 分用户确认 r3（Q-017）；按独立审查修正后发布 STAGE3 3.0.0、VALSET 4.0.0、SYSTEM 1.1.1、GOALS 3.1.1、COLLAB 0.9.1（基线 B004），新增 Q-023。18 时 10 分按用户要求给出 Q-022 的暂定编号 P1 至 P10，并在本机生成面部截图供用户确认，图像不入库、不上传。18 时 20 分用户判定共 4 名作业者；18 时 30 分起按此分析换班，写[作业者分析](collab/analysis/2026-10-29-worker-identity-analysis.md)，新增 Q-024，并发布 SYSTEM 1.2.0、STAGE3 3.1.0、VALSET 4.1.0、GOALS 3.2.0（基线 B005）。18 时 45 分用户确认片段表（Q-024）；按用户的提醒，把文档中录制的称呼统一为文件夹名（基线 B006）。第 5 轮交给 Codex |
 
 ### 需要你处理
@@ -269,7 +269,7 @@ flowchart LR
 | --- | --- | --- | --- |
 | Codex 第 5 轮 | [TASK-140](collab/tasks/TASK-140-sync-validation-and-steps.md) 第 2 轮：切点不确定区间、时钟同源帧补读、正式切换与两个数据集 | ready-for-review | Codex 验证通过，待独立审查 |
 | Codex 第 5 轮 | [TASK-124](collab/tasks/TASK-124-annotation-hardening.md) 第 2 轮：手动逐步的写盘降频等 | ready-for-review | Codex 验证通过，待独立审查 |
-| Codex 第 5 轮 | [TASK-125](collab/tasks/TASK-125-annotation-points-and-hands-class.md) 标注方案 r3 与 r3.1 | in-progress | r3 已确认（Q-017），含 r3.1 |
+| Codex 第 5 轮 | [TASK-125](collab/tasks/TASK-125-annotation-points-and-hands-class.md) 标注方案 r3 与 r3.1 | ready-for-review | Codex 验证通过，待独立审查 |
 | Codex 第 6 轮 | [TASK-101](collab/tasks/TASK-101-face-pose-association.md) 人脸与姿态关联修正（D1，契约 r2） | ready | 阶段 3 的作业者锁定依赖它 |
 | Codex 第 6 轮 | [TASK-150](collab/tasks/TASK-150-new-sessions-and-webcam-intake.md) 新录制与 webcam 接入（D26） | blocked（第 5 轮） | 契约已写；第 5 轮审查时复核 |
 | 用户 | 回复 Q-023（协调者的细化） | 待你确认 | 不阻塞第 5 轮 |
@@ -628,6 +628,7 @@ flowchart TB
 
 | 基线 | 日期 | 说明 | 文档版本 | 快照 |
 | --- | --- | --- | --- | --- |
+| B007 | 2026-10-29 | 第5轮结束 | COLLAB v0.9.1、DOCS v1.1.1、GOALS v3.2.1、PERCEPTION v1.1.2、STAGE3 v3.1.1、SYSTEM v1.2.1、VALSET v4.1.1 | [网页](archive/baselines/B007/index.html) |
 | B006 | 2026-10-29 | 录制称呼统一为文件夹名；Q-024 已确认（2026-10-29） | COLLAB v0.9.1、DOCS v1.1.1、GOALS v3.2.1、PERCEPTION v1.1.2、STAGE3 v3.1.1、SYSTEM v1.2.1、VALSET v4.1.1 | [网页](archive/baselines/B006/index.html) |
 | B005 | 2026-10-29 | 用户判定 4 名作业者与换班分析（2026-10-29） | COLLAB v0.9.1、DOCS v1.1.1、GOALS v3.2.0、PERCEPTION v1.1.2、STAGE3 v3.1.0、SYSTEM v1.2.0、VALSET v4.1.0 | [网页](archive/baselines/B005/index.html) |
 | B004 | 2026-10-29 | 用户确认 r3（Q-017）与独立审查的修正（2026-10-29） | COLLAB v0.9.1、DOCS v1.1.1、GOALS v3.1.1、PERCEPTION v1.1.2、STAGE3 v3.0.0、SYSTEM v1.1.1、VALSET v4.0.0 | [网页](archive/baselines/B004/index.html) |

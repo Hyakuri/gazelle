@@ -349,6 +349,7 @@ git status --short
 - 待 Claude 判断（B 级）：无新协议变更；请独立复核 2059/451 步、目录 manifest、63 个时钟读数与两套数据集。当前仅 Codex 验证，不代替独立验收。
 - 待用户决定（C 级）：无。正式标注仍等 TASK-125 与本轮审查。
 - 状态标签：已实现、离线验证通过、CPU 数据检查通过、已切换并生成数据集、待独立审查。
+- 第 2 轮双语发布报告：[PR #6 / TASK-140](https://github.com/Hyakuri/gazelle/pull/6#issuecomment-6494321115)。此处类别与 manifest 哈希是 TASK-140 交付时的值；TASK-125 后续只更新类别/schema 元数据，最终哈希见 TASK-125 §2，片段与帧未改变。
 
 ## 3. 审查结论（Claude 追加）
 
