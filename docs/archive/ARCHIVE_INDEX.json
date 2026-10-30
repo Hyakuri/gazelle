@@ -289,6 +289,302 @@
         "docs/rules/COLLABORATION_PLAN_CN.md": "e9c36d5c64b7f2d3599df563eb4eb082052e18b3cecbd2233f49dadc77144a76",
         "docs/rules/DOCS_SYSTEM_CN.md": "03ef9ddd4c0982bbb6cd2f19ccf953de512ee3299e8bb9d049e5ad01b1219ff7"
       }
+    },
+    {
+      "date": "2026-10-30",
+      "documents": {
+        "COLLAB": "0.9.2",
+        "DOCS": "1.1.1",
+        "GOALS": "3.2.1",
+        "PERCEPTION": "1.1.2",
+        "STAGE3": "3.1.1",
+        "SYSTEM": "1.2.1",
+        "VALSET": "4.2.1"
+      },
+      "files": {
+        "docs/archive/baselines/B011/README.md": "89bbd02313e2c77d7a1f1d48c397e5052a18dec4ae5f554c57219093f6be7c01",
+        "docs/archive/baselines/B011/index.html": "1000a743e4f4df1cec57d5b5ce4c1eb3defa644addc90918e0339cf3e75d7ea7"
+      },
+      "id": "B011",
+      "note": "源目录迁移：源视频路径改为 E:\\Gazelle_Workdata（用户 2026-10-30 移出上层的日文文件夹，文件不变）",
+      "sources": {
+        "docs/collab/ROADMAP.md": "89ba627eb03d1dd9ae4a02543c9da2056392875e12e9a0ab6177b6797caa633d",
+        "docs/collab/STATE.md": "e1fdb48740db9165922e5f4a2fd0e25a34cf87b666133648bb9ebb22c5e12476",
+        "docs/design/PERCEPTION_D1_D2_DESIGN.md": "c3107eeeeb58d2695e1d78254f228500d3340a89430c00299b149d08e0dd5429",
+        "docs/design/STAGE3_GAZE_ATTENTION_CN.md": "318a850d72980050f3dde1f729d3a13f027b58291c848e3ecdf29ec8d90f2b4f",
+        "docs/design/SYSTEM_OVERVIEW_CN.md": "a194643961d7aa5af8d1504518f1d0467a9e429d25ae813bdcb6ad09b0a104a3",
+        "docs/design/VALIDATION_SET_DESIGN.md": "68a4700ed888212d6a49090698dacf3b9dfc250983e691feb7515e06efd7c71a",
+        "docs/requirements/PROJECT_GOALS_CN.md": "fd39ff2e5929d9c493536ec085181f2afaffcf0c3c50e8e0f03b26954f670f97",
+        "docs/rules/COLLABORATION_PLAN_CN.md": "a76546578c6aa3cb2665e2600083d577d08ee4b7e39e5fdb0e07baa208ed0f97",
+        "docs/rules/DOCS_SYSTEM_CN.md": "03ef9ddd4c0982bbb6cd2f19ccf953de512ee3299e8bb9d049e5ad01b1219ff7"
+      }
+    },
+    {
+      "date": "2026-10-30",
+      "documents": {
+        "COLLAB": "0.9.2",
+        "DOCS": "1.1.1",
+        "GOALS": "3.3.0",
+        "PERCEPTION": "1.1.2",
+        "STAGE3": "3.2.0",
+        "SYSTEM": "1.3.0",
+        "VALSET": "4.3.0"
+      },
+      "files": {
+        "docs/archive/baselines/B012/README.md": "8d4a73a661dfeef84ed630ca82b05be71725a59217879a5a2335c827fe87a38f",
+        "docs/archive/baselines/B012/index.html": "dc051c81ea270487daaeacd6091feba459026d22bb222da3c32c15707049d58b"
+      },
+      "id": "B012",
+      "note": "纳入新录制 20261030（用户 2026-10-30 决定，Q-026）：2026-10 分层改为 3 次录制、12 段，TASK-152 接入",
+      "sources": {
+        "docs/collab/ROADMAP.md": "6274f430b4a298ca75ab1ffa1564586c843e1ea1c09c3953043ac5aad831ef89",
+        "docs/collab/STATE.md": "703d1a10c1e6cfe9a8940ac2188b96424a59ff7c0c2746d9c63076581c15c1c9",
+        "docs/design/PERCEPTION_D1_D2_DESIGN.md": "c3107eeeeb58d2695e1d78254f228500d3340a89430c00299b149d08e0dd5429",
+        "docs/design/STAGE3_GAZE_ATTENTION_CN.md": "5e60bb34ccd8f32441fd74999b880fbcdb63f215f0d6edb6f89a746317f11035",
+        "docs/design/SYSTEM_OVERVIEW_CN.md": "5886b2483d20f1ec4f7bdbb8f70b3c9630a609cb0992ff265e70f76ab5f31b30",
+        "docs/design/VALIDATION_SET_DESIGN.md": "11512704c88ec8388f9cdc4b50ebbaaa41f0fbf2a01b71b9491ccfbe5580726d",
+        "docs/requirements/PROJECT_GOALS_CN.md": "d96304db94e0d153a8ecb97a257b0eb011bf0dc3936a95bf02a8517c30be58d9",
+        "docs/rules/COLLABORATION_PLAN_CN.md": "a76546578c6aa3cb2665e2600083d577d08ee4b7e39e5fdb0e07baa208ed0f97",
+        "docs/rules/DOCS_SYSTEM_CN.md": "03ef9ddd4c0982bbb6cd2f19ccf953de512ee3299e8bb9d049e5ad01b1219ff7"
+      }
+    },
+    {
+      "date": "2026-10-30",
+      "documents": {
+        "COLLAB": "0.9.2",
+        "DOCS": "1.1.1",
+        "GOALS": "3.3.0",
+        "PERCEPTION": "1.1.2",
+        "STAGE3": "3.2.1",
+        "SYSTEM": "1.3.0",
+        "VALSET": "4.3.0"
+      },
+      "files": {
+        "docs/archive/baselines/B013/README.md": "4e600e544637d6cea208dbf064f8ac31cdf78a662901f6a078ce154fa860db53",
+        "docs/archive/baselines/B013/index.html": "cf337d53a921f09cce5078ab06cd7287b4dd0bd03a7897f3be919a9fca4f6776"
+      },
+      "id": "B013",
+      "note": "阶段 3 任务流程图补上 TASK-152 节点",
+      "sources": {
+        "docs/collab/ROADMAP.md": "6274f430b4a298ca75ab1ffa1564586c843e1ea1c09c3953043ac5aad831ef89",
+        "docs/collab/STATE.md": "703d1a10c1e6cfe9a8940ac2188b96424a59ff7c0c2746d9c63076581c15c1c9",
+        "docs/design/PERCEPTION_D1_D2_DESIGN.md": "c3107eeeeb58d2695e1d78254f228500d3340a89430c00299b149d08e0dd5429",
+        "docs/design/STAGE3_GAZE_ATTENTION_CN.md": "7f80389f3700a912026672e9db9ceb889253c35eaf28a841d2141a45bd30054d",
+        "docs/design/SYSTEM_OVERVIEW_CN.md": "5886b2483d20f1ec4f7bdbb8f70b3c9630a609cb0992ff265e70f76ab5f31b30",
+        "docs/design/VALIDATION_SET_DESIGN.md": "11512704c88ec8388f9cdc4b50ebbaaa41f0fbf2a01b71b9491ccfbe5580726d",
+        "docs/requirements/PROJECT_GOALS_CN.md": "d96304db94e0d153a8ecb97a257b0eb011bf0dc3936a95bf02a8517c30be58d9",
+        "docs/rules/COLLABORATION_PLAN_CN.md": "a76546578c6aa3cb2665e2600083d577d08ee4b7e39e5fdb0e07baa208ed0f97",
+        "docs/rules/DOCS_SYSTEM_CN.md": "03ef9ddd4c0982bbb6cd2f19ccf953de512ee3299e8bb9d049e5ad01b1219ff7"
+      }
+    },
+    {
+      "date": "2026-10-30",
+      "documents": {
+        "COLLAB": "0.10.0",
+        "DOCS": "1.1.1",
+        "GOALS": "3.3.1",
+        "PERCEPTION": "1.1.2",
+        "STAGE3": "3.3.0",
+        "SYSTEM": "1.4.0",
+        "VALSET": "4.3.1"
+      },
+      "files": {
+        "docs/archive/baselines/B014/README.md": "c8263e76712281a9c56697431f67be6daa51d00adacdee97ffe5aceb594f1a1b",
+        "docs/archive/baselines/B014/index.html": "fb03332f7675873f59701bfe61e9aca1b6c77d16cff737dfdbeb001d6459d6ee"
+      },
+      "id": "B014",
+      "note": "按独立审查修正纳入 20261030 的记录：接入方式标为协调者的安排，旧说法与任务范围补齐",
+      "sources": {
+        "docs/collab/ROADMAP.md": "e9bf8a953d0d70291c410e8df57fed9ffd05db0bbb52a4677d1d5b1da6cd4370",
+        "docs/collab/STATE.md": "01ab58649e2e4528706648fd3ccde0554186eb70c6fdd792ff8121295cae7137",
+        "docs/design/PERCEPTION_D1_D2_DESIGN.md": "c3107eeeeb58d2695e1d78254f228500d3340a89430c00299b149d08e0dd5429",
+        "docs/design/STAGE3_GAZE_ATTENTION_CN.md": "864bc5d25ecc8e74bb7015f592479783eb34a362debe7bd2fa715a48a9421c56",
+        "docs/design/SYSTEM_OVERVIEW_CN.md": "70a9c15926948b75daa0811ee1a8739da8bc1f51e3ec9face11bc7c9f700923b",
+        "docs/design/VALIDATION_SET_DESIGN.md": "6cba9c3946d41983653d71615866f594c39f31f6213177535c84daad0247916b",
+        "docs/requirements/PROJECT_GOALS_CN.md": "b9461578d34883c1239eec44544b4ace84e0807d97a17720131d9a91b0ba9211",
+        "docs/rules/COLLABORATION_PLAN_CN.md": "61cd631c8015e49b09bdd37f4d885e30b03a113ed8c0bcc3347b6e95f8669416",
+        "docs/rules/DOCS_SYSTEM_CN.md": "03ef9ddd4c0982bbb6cd2f19ccf953de512ee3299e8bb9d049e5ad01b1219ff7"
+      }
+    },
+    {
+      "date": "2026-10-30",
+      "documents": {
+        "COLLAB": "0.10.0",
+        "DOCS": "1.1.1",
+        "GOALS": "3.3.1",
+        "PERCEPTION": "1.1.2",
+        "STAGE3": "3.3.1",
+        "SYSTEM": "1.4.0",
+        "VALSET": "4.3.1"
+      },
+      "files": {
+        "docs/archive/baselines/B015/README.md": "0293ab2f2015bb5eaf75955266e14518196fc1da88d1fb9fbe234144d4bd0c5f",
+        "docs/archive/baselines/B015/index.html": "479bb1d247419596260f2ab2e8548fc083aeddf31be22b047e2e534174419c8d"
+      },
+      "id": "B015",
+      "note": "阶段 3 设计 §12 的 D26 一行注明接入方式由协调者安排",
+      "sources": {
+        "docs/collab/ROADMAP.md": "e9bf8a953d0d70291c410e8df57fed9ffd05db0bbb52a4677d1d5b1da6cd4370",
+        "docs/collab/STATE.md": "01ab58649e2e4528706648fd3ccde0554186eb70c6fdd792ff8121295cae7137",
+        "docs/design/PERCEPTION_D1_D2_DESIGN.md": "c3107eeeeb58d2695e1d78254f228500d3340a89430c00299b149d08e0dd5429",
+        "docs/design/STAGE3_GAZE_ATTENTION_CN.md": "c974499a6aaafd375d8778d1a3db9dd15a6745ab4cb77fdf6c376321713f86d6",
+        "docs/design/SYSTEM_OVERVIEW_CN.md": "70a9c15926948b75daa0811ee1a8739da8bc1f51e3ec9face11bc7c9f700923b",
+        "docs/design/VALIDATION_SET_DESIGN.md": "6cba9c3946d41983653d71615866f594c39f31f6213177535c84daad0247916b",
+        "docs/requirements/PROJECT_GOALS_CN.md": "b9461578d34883c1239eec44544b4ace84e0807d97a17720131d9a91b0ba9211",
+        "docs/rules/COLLABORATION_PLAN_CN.md": "61cd631c8015e49b09bdd37f4d885e30b03a113ed8c0bcc3347b6e95f8669416",
+        "docs/rules/DOCS_SYSTEM_CN.md": "03ef9ddd4c0982bbb6cd2f19ccf953de512ee3299e8bb9d049e5ad01b1219ff7"
+      }
+    },
+    {
+      "date": "2026-10-30",
+      "documents": {
+        "COLLAB": "0.10.0",
+        "DOCS": "1.1.1",
+        "GOALS": "3.3.1",
+        "PERCEPTION": "1.1.2",
+        "STAGE3": "3.4.0",
+        "SYSTEM": "1.5.0",
+        "VALSET": "4.3.1"
+      },
+      "files": {
+        "docs/archive/baselines/B016/README.md": "d83897cae3ae6fd88d83f62c71086bcffa3dbb2f40eccce789722062f56678f0",
+        "docs/archive/baselines/B016/index.html": "965c93e81bb0a48f588160e1584b84c1c5eb34f87015ecaffde778816fc38365"
+      },
+      "id": "B016",
+      "note": "写入第 4 台摄像机的说明与摄像机身份核对（用户 2026-10-30）",
+      "sources": {
+        "docs/collab/ROADMAP.md": "a4a5d0fe3f1ee98b62adc8d6de45bbd35f38d9089c51f381d2c721b352a332f7",
+        "docs/collab/STATE.md": "e5b83225d3049ba693d3e54f7f22100c0a77156f508151182a28bb3da89c496a",
+        "docs/design/PERCEPTION_D1_D2_DESIGN.md": "c3107eeeeb58d2695e1d78254f228500d3340a89430c00299b149d08e0dd5429",
+        "docs/design/STAGE3_GAZE_ATTENTION_CN.md": "1f54b0416073926ba509bfe37394d9a891db41f7a91b8a6c54ef88f8d36c59d1",
+        "docs/design/SYSTEM_OVERVIEW_CN.md": "999dd44b38a02faf6e7b62ef132dd498d2723f7238cdba4d26bdd6ee235d7c74",
+        "docs/design/VALIDATION_SET_DESIGN.md": "6cba9c3946d41983653d71615866f594c39f31f6213177535c84daad0247916b",
+        "docs/requirements/PROJECT_GOALS_CN.md": "b9461578d34883c1239eec44544b4ace84e0807d97a17720131d9a91b0ba9211",
+        "docs/rules/COLLABORATION_PLAN_CN.md": "61cd631c8015e49b09bdd37f4d885e30b03a113ed8c0bcc3347b6e95f8669416",
+        "docs/rules/DOCS_SYSTEM_CN.md": "03ef9ddd4c0982bbb6cd2f19ccf953de512ee3299e8bb9d049e5ad01b1219ff7"
+      }
+    },
+    {
+      "date": "2026-10-30",
+      "documents": {
+        "COLLAB": "0.10.0",
+        "DOCS": "1.1.1",
+        "GOALS": "3.4.0",
+        "PERCEPTION": "1.1.2",
+        "STAGE3": "3.5.0",
+        "SYSTEM": "1.6.0",
+        "VALSET": "4.3.1"
+      },
+      "files": {
+        "docs/archive/baselines/B017/README.md": "4c147aee306887493e5261c4726cf38b83d4fd85058ee9a5d79d2f93bace8195",
+        "docs/archive/baselines/B017/index.html": "e27b4ae046e6ecf5e9406cfc6d9e1dad30398cb2de3097c556731361e4f982e8"
+      },
+      "id": "B017",
+      "note": "W 的用途（用户 2026-10-30，D28）：辅助视角，尽量利用，用于补充、参考与二次验证；新增 M9 与 TASK-313",
+      "sources": {
+        "docs/collab/ROADMAP.md": "da917a129bcce2f00569f43abd6446d9b4f3cda66e2d1ec3852a6411a7da85dc",
+        "docs/collab/STATE.md": "a4245d67f9c7e23f3c8c6a2a7dc0a1b1fcaa8d81f1210725547d3414af02ee0f",
+        "docs/design/PERCEPTION_D1_D2_DESIGN.md": "c3107eeeeb58d2695e1d78254f228500d3340a89430c00299b149d08e0dd5429",
+        "docs/design/STAGE3_GAZE_ATTENTION_CN.md": "beecf969d9214a600f80f3c84d548ddae9f313c91b7958d86bc661d60286f457",
+        "docs/design/SYSTEM_OVERVIEW_CN.md": "0c83caa219706ed9b75b7d705379732bcacb88e0da73f150fe8dfc923ffa19ec",
+        "docs/design/VALIDATION_SET_DESIGN.md": "6cba9c3946d41983653d71615866f594c39f31f6213177535c84daad0247916b",
+        "docs/requirements/PROJECT_GOALS_CN.md": "552eaa0823ca7d6a62f960929c4dad66309880fd3023a224589a546977b6f690",
+        "docs/rules/COLLABORATION_PLAN_CN.md": "61cd631c8015e49b09bdd37f4d885e30b03a113ed8c0bcc3347b6e95f8669416",
+        "docs/rules/DOCS_SYSTEM_CN.md": "03ef9ddd4c0982bbb6cd2f19ccf953de512ee3299e8bb9d049e5ad01b1219ff7"
+      }
+    },
+    {
+      "date": "2026-10-30",
+      "documents": {
+        "COLLAB": "0.10.0",
+        "DOCS": "1.2.0",
+        "GOALS": "3.5.0",
+        "PERCEPTION": "1.1.2",
+        "ROIREG": "1.0.0",
+        "STAGE3": "3.6.0",
+        "SYSTEM": "1.7.0",
+        "VALSET": "4.4.0"
+      },
+      "files": {
+        "docs/archive/baselines/B018/README.md": "865953ceb482257782dccba9b7c3243f7047e6673abae69dee81869db176c437",
+        "docs/archive/baselines/B018/index.html": "e49cfe7741d0728175019c244627dfb50ae9bbd18a1a2e05a59051104d04ca13"
+      },
+      "id": "B018",
+      "note": "工作区域自动重配准（用户 2026-10-30，D29，方案待 Q-028）；Q-027 确认",
+      "sources": {
+        "docs/collab/ROADMAP.md": "98fd66d98c80b3a2cce21361b4821e7b58dddbaf07fe8bdbd8df3327a6c314be",
+        "docs/collab/STATE.md": "b85fd7ee975127164e5d84cebcc915689e58a8a57e45601b4aad4c96dfb321cf",
+        "docs/design/PERCEPTION_D1_D2_DESIGN.md": "c3107eeeeb58d2695e1d78254f228500d3340a89430c00299b149d08e0dd5429",
+        "docs/design/REGION_REGISTRATION_CN.md": "425aa8ad45fc33e35f9c2700e8877a4662c48c18328732ba330f6fd9ac48d1c9",
+        "docs/design/STAGE3_GAZE_ATTENTION_CN.md": "1890e7e1b79a38d4bf8c6b2c4a16f329e096e5ef2336e12584295a01386c8135",
+        "docs/design/SYSTEM_OVERVIEW_CN.md": "75bf5e8df0dd1fda79ed8753e45effcc0ce60f2674f317bb8811fd98d1775ec7",
+        "docs/design/VALIDATION_SET_DESIGN.md": "4edc80cb6a6f5327e0f1e757637da67dc7c264914b7dd23cc6129732b8634ec3",
+        "docs/requirements/PROJECT_GOALS_CN.md": "3ad0ae144f22a4e7e619384ee999d03420198898433f281da811cbde9916c2e2",
+        "docs/rules/COLLABORATION_PLAN_CN.md": "61cd631c8015e49b09bdd37f4d885e30b03a113ed8c0bcc3347b6e95f8669416",
+        "docs/rules/DOCS_SYSTEM_CN.md": "4455cee71c032a000e506fd3dd6d53d75e18a12017c4fe4a304b3d69bcfd94d8"
+      }
+    },
+    {
+      "date": "2026-10-30",
+      "documents": {
+        "COLLAB": "0.10.0",
+        "DOCS": "1.2.0",
+        "GOALS": "3.5.0",
+        "PERCEPTION": "1.1.2",
+        "ROIREG": "1.0.1",
+        "STAGE3": "3.6.0",
+        "SYSTEM": "1.7.0",
+        "VALSET": "4.4.0"
+      },
+      "files": {
+        "docs/archive/baselines/B019/README.md": "ffb28b7e273e1f0c4e593fb4dc1eb072593c29cabc115988750fb88aa66c0cf4",
+        "docs/archive/baselines/B019/index.html": "87ed65a4e913e29f5affcb70f746a8f1a296edc2e5b09299549d52f4d9dbc4d4"
+      },
+      "id": "B019",
+      "note": "ROIREG 1.0.1：§0 一处措辞按用户原话修正，更正 1.0.0 的审查轮数记录",
+      "sources": {
+        "docs/collab/ROADMAP.md": "98fd66d98c80b3a2cce21361b4821e7b58dddbaf07fe8bdbd8df3327a6c314be",
+        "docs/collab/STATE.md": "c22c523661dea030cc95e3452eb486b09f94cba75eb4cdf6918d4ad6581e4dde",
+        "docs/design/PERCEPTION_D1_D2_DESIGN.md": "c3107eeeeb58d2695e1d78254f228500d3340a89430c00299b149d08e0dd5429",
+        "docs/design/REGION_REGISTRATION_CN.md": "6608eb35338bc67199d120d55011349506fe3582f818c5e5a82e18af76fa28ae",
+        "docs/design/STAGE3_GAZE_ATTENTION_CN.md": "1890e7e1b79a38d4bf8c6b2c4a16f329e096e5ef2336e12584295a01386c8135",
+        "docs/design/SYSTEM_OVERVIEW_CN.md": "75bf5e8df0dd1fda79ed8753e45effcc0ce60f2674f317bb8811fd98d1775ec7",
+        "docs/design/VALIDATION_SET_DESIGN.md": "4edc80cb6a6f5327e0f1e757637da67dc7c264914b7dd23cc6129732b8634ec3",
+        "docs/requirements/PROJECT_GOALS_CN.md": "3ad0ae144f22a4e7e619384ee999d03420198898433f281da811cbde9916c2e2",
+        "docs/rules/COLLABORATION_PLAN_CN.md": "61cd631c8015e49b09bdd37f4d885e30b03a113ed8c0bcc3347b6e95f8669416",
+        "docs/rules/DOCS_SYSTEM_CN.md": "4455cee71c032a000e506fd3dd6d53d75e18a12017c4fe4a304b3d69bcfd94d8"
+      }
+    },
+    {
+      "date": "2026-10-30",
+      "documents": {
+        "COLLAB": "0.10.0",
+        "DOCS": "1.2.0",
+        "GOALS": "3.5.1",
+        "PERCEPTION": "1.1.2",
+        "ROIREG": "1.0.2",
+        "STAGE3": "3.7.0",
+        "SYSTEM": "1.7.1",
+        "VALSET": "4.4.1"
+      },
+      "files": {
+        "docs/archive/baselines/B020/README.md": "11504ca18ab336e32338c82a59e0a064cfc247afbe9c915fc148c4cf67a7be9e",
+        "docs/archive/baselines/B020/index.html": "6263d3cd897a00c40b2d70f28f23c5a1ae461d82b0eb7573d42d536d75e2e97f"
+      },
+      "id": "B020",
+      "note": "用户确认工作区域自动重配准方案（Q-028，D29）",
+      "sources": {
+        "docs/collab/ROADMAP.md": "f48207142f2aaeac608d6ecc94989563558cd9d95e0d15138e41ba4e76f8ce1c",
+        "docs/collab/STATE.md": "7d7fb489a191515455fdd3769faa55befedc55c3828953647b39a767d00516d5",
+        "docs/design/PERCEPTION_D1_D2_DESIGN.md": "c3107eeeeb58d2695e1d78254f228500d3340a89430c00299b149d08e0dd5429",
+        "docs/design/REGION_REGISTRATION_CN.md": "ff702ca5b3b14e75b29981fc19ec9f5a3389338cb070c58dcb69b5c87bc90eff",
+        "docs/design/STAGE3_GAZE_ATTENTION_CN.md": "095dfe9a6510be18f7185f0550b0d60ca8f6e5af3b596bb4644bd587d2e77535",
+        "docs/design/SYSTEM_OVERVIEW_CN.md": "d119f8ae7ee88bbfe0991eb64a19e4e9c1f207d5ff325c629657a3d6dc7b3fef",
+        "docs/design/VALIDATION_SET_DESIGN.md": "5e5b75718dad221de883c2675c680784cd21ddc44d97ff65cfac86ff8a46f61c",
+        "docs/requirements/PROJECT_GOALS_CN.md": "ea262bd0f780a371240bc5643712cebb542eeb45affe3799bd0abdf9b3563a08",
+        "docs/rules/COLLABORATION_PLAN_CN.md": "61cd631c8015e49b09bdd37f4d885e30b03a113ed8c0bcc3347b6e95f8669416",
+        "docs/rules/DOCS_SYSTEM_CN.md": "4455cee71c032a000e506fd3dd6d53d75e18a12017c4fe4a304b3d69bcfd94d8"
+      }
     }
   ],
   "documents": [
@@ -393,6 +689,26 @@
       "version": "0.9.1"
     },
     {
+      "date": "2026-10-30",
+      "doc_id": "COLLAB",
+      "path": "docs/archive/COLLAB/COLLAB_v0.9.2.md",
+      "sha256": "a76546578c6aa3cb2665e2600083d577d08ee4b7e39e5fdb0e07baa208ed0f97",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "§5 预检的作业数据路径改为 `E:\\Gazelle_Workdata\\`：你 2026-10-30 把各录制文件夹移出上层的日文文件夹；新文件夹 `20261030` 待你说明（Q-026）",
+      "version": "0.9.2"
+    },
+    {
+      "date": "2026-10-30",
+      "doc_id": "COLLAB",
+      "path": "docs/archive/COLLAB/COLLAB_v0.10.0.md",
+      "sha256": "61cd631c8015e49b09bdd37f4d885e30b03a113ed8c0bcc3347b6e95f8669416",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "§5 预检的作业数据一行改为 `20261030` 由 TASK-152 接入（你 2026-10-30 决定纳入研究集，Q-026 第 1 项；接入方式由协调者安排）。0.9.2 增加的是规则条款，按 §5.1 属于次版本，此处补正级别",
+      "version": "0.10.0"
+    },
+    {
       "date": "2026-10-18",
       "doc_id": "DOCS",
       "path": "docs/archive/DOCS/DOCS_v1.0.0.md",
@@ -421,6 +737,16 @@
       "status": "已确认",
       "summary": "你确认本规则（Q-019）；内容不变",
       "version": "1.1.1"
+    },
+    {
+      "date": "2026-10-30",
+      "doc_id": "DOCS",
+      "path": "docs/archive/DOCS/DOCS_v1.2.0.md",
+      "sha256": "4455cee71c032a000e506fd3dd6d53d75e18a12017c4fe4a304b3d69bcfd94d8",
+      "source": "worktree",
+      "status": "已确认（协调者）",
+      "summary": "受控文档清单加入 ROIREG（工作区域自动重配准设计）；规则不变",
+      "version": "1.2.0"
     },
     {
       "date": "2026-10-15",
@@ -533,6 +859,56 @@
       "version": "3.2.1"
     },
     {
+      "date": "2026-10-30",
+      "doc_id": "GOALS",
+      "path": "docs/archive/GOALS/GOALS_v3.3.0.md",
+      "sha256": "d96304db94e0d153a8ecb97a257b0eb011bf0dc3936a95bf02a8517c30be58d9",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "你 2026-10-30 决定纳入新录制 `20261030`（Q-026）：数据现状改为 10 次录制、三机重叠约 9.5 小时；补记待提供的作业者编号",
+      "version": "3.3.0"
+    },
+    {
+      "date": "2026-10-30",
+      "doc_id": "GOALS",
+      "path": "docs/archive/GOALS/GOALS_v3.3.1.md",
+      "sha256": "b9461578d34883c1239eec44544b4ace84e0807d97a17720131d9a91b0ba9211",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "注明把 `20261030` 归入 2026-10 分层是协调者的安排；含义不变",
+      "version": "3.3.1"
+    },
+    {
+      "date": "2026-10-30",
+      "doc_id": "GOALS",
+      "path": "docs/archive/GOALS/GOALS_v3.4.0.md",
+      "sha256": "552eaa0823ca7d6a62f960929c4dad66309880fd3023a224589a546977b6f690",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "写入你 2026-10-30 的决定：纳入 `20261030`，以及 webcam 的用途（D28）：仍作辅助视角，但尽量利用，用于补充、参考与二次验证；§5 去掉以后把 webcam 升为主输入的设想",
+      "version": "3.4.0"
+    },
+    {
+      "date": "2026-10-30",
+      "doc_id": "GOALS",
+      "path": "docs/archive/GOALS/GOALS_v3.5.0.md",
+      "sha256": "3ad0ae144f22a4e7e619384ee999d03420198898433f281da811cbde9916c2e2",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "写入你 2026-10-30 的确认与要求：Q-027；工作区域自动重配准（D29，方案待确认 Q-028）",
+      "version": "3.5.0"
+    },
+    {
+      "date": "2026-10-30",
+      "doc_id": "GOALS",
+      "path": "docs/archive/GOALS/GOALS_v3.5.1.md",
+      "sha256": "ea262bd0f780a371240bc5643712cebb542eeb45affe3799bd0abdf9b3563a08",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "你确认 Q-028，去掉方案待确认的标记；内容不变",
+      "version": "3.5.1"
+    },
+    {
       "date": "2026-10-15",
       "doc_id": "PERCEPTION",
       "path": "docs/archive/PERCEPTION/PERCEPTION_v1.0.0.md",
@@ -571,6 +947,36 @@
       "status": "已确认（协调者）",
       "summary": "文件移入 `docs/design/` 并改为稳定文件名，链接与路径随之更新；内容不变",
       "version": "1.1.2"
+    },
+    {
+      "date": "2026-10-30",
+      "doc_id": "ROIREG",
+      "path": "docs/archive/ROIREG/ROIREG_v1.0.0.md",
+      "sha256": "425aa8ad45fc33e35f9c2700e8877a4662c48c18328732ba330f6fd9ac48d1c9",
+      "source": "worktree",
+      "status": "待确认",
+      "summary": "首版：按你 2026-10-30 的要求，依据 10 次录制的实测，设计工作区域自动重配准子功能（D29）；发布前经过一次独立审查，并按审查修正方法、检查项与表述",
+      "version": "1.0.0"
+    },
+    {
+      "date": "2026-10-30",
+      "doc_id": "ROIREG",
+      "path": "docs/archive/ROIREG/ROIREG_v1.0.1.md",
+      "sha256": "6608eb35338bc67199d120d55011349506fe3582f818c5e5a82e18af76fa28ae",
+      "source": "worktree",
+      "status": "待确认",
+      "summary": "§0 第一行按你的原话改为“偏移是逐渐发生的”；更正 1.0.0 的记录：发布前的独立审查是两轮，不是一次。内容不变",
+      "version": "1.0.1"
+    },
+    {
+      "date": "2026-10-30",
+      "doc_id": "ROIREG",
+      "path": "docs/archive/ROIREG/ROIREG_v1.0.2.md",
+      "sha256": "ff702ca5b3b14e75b29981fc19ec9f5a3389338cb070c58dcb69b5c87bc90eff",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "你确认本方案（Q-028）；内容不变",
+      "version": "1.0.2"
     },
     {
       "date": "2026-10-15",
@@ -673,6 +1079,86 @@
       "version": "3.1.1"
     },
     {
+      "date": "2026-10-30",
+      "doc_id": "STAGE3",
+      "path": "docs/archive/STAGE3/STAGE3_v3.2.0.md",
+      "sha256": "5e60bb34ccd8f32441fd74999b880fbcdb63f215f0d6edb6f89a746317f11035",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "你 2026-10-30 决定纳入新录制 `20261030`（Q-026）：新增 §3.5（全局摄像机移位约 155 像素、时钟格式不同、webcam 类摄像机、作业者待判定）；2026-10 分层改为 3 次录制、12 段，验证集共 38 段；§0、§2.2、§6.6、§8、§10、§11、§12 相应更新，TASK-152 接入。接入方式由协调者安排",
+      "version": "3.2.0"
+    },
+    {
+      "date": "2026-10-30",
+      "doc_id": "STAGE3",
+      "path": "docs/archive/STAGE3/STAGE3_v3.2.1.md",
+      "sha256": "7f80389f3700a912026672e9db9ceb889253c35eaf28a841d2141a45bd30054d",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "§11.2 的任务流程图补上 TASK-152 节点（`20261030` 接入，阶段 2）；Mermaid 11.4.1 渲染核对通过；其余内容不变",
+      "version": "3.2.1"
+    },
+    {
+      "date": "2026-10-30",
+      "doc_id": "STAGE3",
+      "path": "docs/archive/STAGE3/STAGE3_v3.3.0.md",
+      "sha256": "864bc5d25ecc8e74bb7015f592479783eb34a362debe7bd2fa715a48a9421c56",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "按独立审查补齐纳入 `20261030` 的后续改动：注明接入方式是协调者的安排；§0、§10、附录 B 的旧说法（两次录制、34 分钟）更正；关卡 GA 的戴口罩片段加入 `20261030`；§3.5 注明全局摄像机若换了设备或焦距，E 的内参要单独标定（TASK-304）；§11.1 改为第 8、9 轮；TASK-301 的依赖与 D24 的阶段 2 范围加入 TASK-152",
+      "version": "3.3.0"
+    },
+    {
+      "date": "2026-10-30",
+      "doc_id": "STAGE3",
+      "path": "docs/archive/STAGE3/STAGE3_v3.3.1.md",
+      "sha256": "c974499a6aaafd375d8778d1a3db9dd15a6745ab4cb77fdf6c376321713f86d6",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "§12 的 D26 一行注明由 TASK-152 接入是协调者的安排；含义不变",
+      "version": "3.3.1"
+    },
+    {
+      "date": "2026-10-30",
+      "doc_id": "STAGE3",
+      "path": "docs/archive/STAGE3/STAGE3_v3.4.0.md",
+      "sha256": "1f54b0416073926ba509bfe37394d9a891db41f7a91b8a6c54ef88f8d36c59d1",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "写入你 2026-10-30 的说明：W 是第 4 台摄像机，能拍到更广的范围；§3.5 用帧对帧复核全局摄像机的偏移（149–158 像素），画面比对确认“動作解析カメラ”就是 W（Q-026 第 3 项），它这次偏移约 50–80 像素",
+      "version": "3.4.0"
+    },
+    {
+      "date": "2026-10-30",
+      "doc_id": "STAGE3",
+      "path": "docs/archive/STAGE3/STAGE3_v3.5.0.md",
+      "sha256": "beecf969d9214a600f80f3c84d548ddae9f313c91b7958d86bc661d60286f457",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "写入你 2026-10-30 对 W 的要求（D28）：W 仍作辅助视角，但尽量利用，用于补充、参考与二次验证。新增 R12、§6.9 M9、§7 的 W 输出、基线“完整 + W”与 TASK-313，B3w 移到 TASK-313。主结果不含 W，已确认的关卡与假设不变，所以按已确认方向内的增补处理（§5.1 次版本）；影响评估的规则由协调者提出，待你确认（Q-027）",
+      "version": "3.5.0"
+    },
+    {
+      "date": "2026-10-30",
+      "doc_id": "STAGE3",
+      "path": "docs/archive/STAGE3/STAGE3_v3.6.0.md",
+      "sha256": "1890e7e1b79a38d4bf8c6b2c4a16f329e096e5ef2336e12584295a01386c8135",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "你确认 Q-027，§6.9、§8.3、§9 去掉待确认标记。写入工作区域自动重配准（D29）：R13；§3.5 按逐区域实测更正 `20261030` 的区域处理；§6.3 第 1 步记录摄像机运动实测；§6.5 静态目标与料箱；§10 风险；TASK-305 依赖 TASK-153",
+      "version": "3.6.0"
+    },
+    {
+      "date": "2026-10-30",
+      "doc_id": "STAGE3",
+      "path": "docs/archive/STAGE3/STAGE3_v3.7.0.md",
+      "sha256": "095dfe9a6510be18f7185f0550b0d60ca8f6e5af3b596bb4644bd587d2e77535",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "你确认 Q-028（D29）：§6.5 写明固定区域跟着工作台走、`item_box` 每次录制由你调整并单列统计、正式结果只用你确认过的区域；去掉方案待确认的标记",
+      "version": "3.7.0"
+    },
+    {
       "date": "2026-10-18",
       "doc_id": "SYSTEM",
       "path": "docs/archive/SYSTEM/SYSTEM_v1.0.0.md",
@@ -731,6 +1217,66 @@
       "status": "已确认",
       "summary": "录制的称呼统一为源文件夹名（例如 20261016），画面时钟日期只在括号中注明；内容不变",
       "version": "1.2.1"
+    },
+    {
+      "date": "2026-10-30",
+      "doc_id": "SYSTEM",
+      "path": "docs/archive/SYSTEM/SYSTEM_v1.3.0.md",
+      "sha256": "5886b2483d20f1ec4f7bdbb8f70b3c9630a609cb0992ff265e70f76ab5f31b30",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "你 2026-10-30 决定纳入新录制 `20261030`（Q-026）：录制改为 10 次；W 的文件名补上“動作解析カメラ”一种；`20261030` 的全局摄像机移位约 155 像素、时钟格式不同；作业者待判定；新分层数据集改为 12 段，由 TASK-152 生成",
+      "version": "1.3.0"
+    },
+    {
+      "date": "2026-10-30",
+      "doc_id": "SYSTEM",
+      "path": "docs/archive/SYSTEM/SYSTEM_v1.4.0.md",
+      "sha256": "70a9c15926948b75daa0811ee1a8739da8bc1f51e3ec9face11bc7c9f700923b",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "按独立审查补齐：注明把 `20261030` 归入 2026-10 分层、由 TASK-152 接入是协调者的安排；W 一行注明 `20261030` 的摄像机是否同一台待你说明（Q-026 第 3 项）；组件与产物表加入 TASK-152（清单共 64 个文件、作业者片段、webcam 视角、同步精度）",
+      "version": "1.4.0"
+    },
+    {
+      "date": "2026-10-30",
+      "doc_id": "SYSTEM",
+      "path": "docs/archive/SYSTEM/SYSTEM_v1.5.0.md",
+      "sha256": "999dd44b38a02faf6e7b62ef132dd498d2723f7238cdba4d26bdd6ee235d7c74",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "写入你 2026-10-30 的说明：共 4 台摄像机，第 4 台 W 用 Windows 标准相机应用录制，能拍到更广的范围；画面比对确认“動作解析カメラ”就是 W（Q-026 第 3 项），它在 `20261030` 偏移约 50–80 像素",
+      "version": "1.5.0"
+    },
+    {
+      "date": "2026-10-30",
+      "doc_id": "SYSTEM",
+      "path": "docs/archive/SYSTEM/SYSTEM_v1.6.0.md",
+      "sha256": "0c83caa219706ed9b75b7d705379732bcacb88e0da73f150fe8dfc923ffa19ec",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "写入你 2026-10-30 对 W 的要求（D28）：仍作辅助视角，但尽量利用，用于补充、参考与二次验证；C24 与组件图相应更新，W 在阶段 3 的工作归 TASK-313。实现方式见阶段 3 设计 §6.9，影响评估的各条待你确认（Q-027）",
+      "version": "1.6.0"
+    },
+    {
+      "date": "2026-10-30",
+      "doc_id": "SYSTEM",
+      "path": "docs/archive/SYSTEM/SYSTEM_v1.7.0.md",
+      "sha256": "75bf5e8df0dd1fda79ed8753e45effcc0ce60f2674f317bb8811fd98d1775ec7",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "写入工作区域自动重配准（D29）：§0 加设计文档，机位与布局按实测更新，C25 改为逐区域配准，产物表更新；你确认 Q-027，C24 去掉待确认标记",
+      "version": "1.7.0"
+    },
+    {
+      "date": "2026-10-30",
+      "doc_id": "SYSTEM",
+      "path": "docs/archive/SYSTEM/SYSTEM_v1.7.1.md",
+      "sha256": "d119f8ae7ee88bbfe0991eb64a19e4e9c1f207d5ff325c629657a3d6dc7b3fef",
+      "source": "worktree",
+      "status": "已确认",
+      "summary": "你确认 Q-028，去掉方案待确认的标记；内容不变",
+      "version": "1.7.1"
     },
     {
       "date": "2026-10-15",
@@ -841,6 +1387,56 @@
       "status": "已确认（协调者）",
       "summary": "第 5 轮审查后的补充说明：同一片段内注视点与“跳过”“画面外”标记二选一；“画面外”只用于整段目标都在全局画面外；严格校验相应增加一条（§10.4、§10.7、§10.8）。由协调者确认并告知你（Q-025 第 2 项），你可以推翻",
       "version": "4.2.0"
+    },
+    {
+      "date": "2026-10-30",
+      "doc_id": "VALSET",
+      "path": "docs/archive/VALSET/VALSET_v4.2.1.md",
+      "sha256": "68a4700ed888212d6a49090698dacf3b9dfc250983e691feb7515e06efd7c71a",
+      "source": "worktree",
+      "status": "已确认（协调者）",
+      "summary": "§2 的源视频路径改为 `E:\\Gazelle_Workdata\\`：你 2026-10-30 把各录制文件夹移出上层的日文文件夹，文件名与内容不变（SHA-256 已核对）；此前派生数据中记录的旧路径不改写；其余内容不变",
+      "version": "4.2.1"
+    },
+    {
+      "date": "2026-10-30",
+      "doc_id": "VALSET",
+      "path": "docs/archive/VALSET/VALSET_v4.3.0.md",
+      "sha256": "11512704c88ec8388f9cdc4b50ebbaaa41f0fbf2a01b71b9491ccfbe5580726d",
+      "source": "worktree",
+      "status": "已确认（协调者）",
+      "summary": "你 2026-10-30 决定把新录制 `20261030`（画面时钟 2026-10-29）纳入研究集（Q-026）：§11 的 2026-10 分层改为 3 次录制、12 段，放在一个数据集里，三次录制都接入后一次生成（TASK-152）；它的作业者由你判定；它的全局摄像机偏移约 155 像素，区域可能需要重画。§8、§9、中文摘要相应更新。接入方式由协调者安排",
+      "version": "4.3.0"
+    },
+    {
+      "date": "2026-10-30",
+      "doc_id": "VALSET",
+      "path": "docs/archive/VALSET/VALSET_v4.3.1.md",
+      "sha256": "6cba9c3946d41983653d71615866f594c39f31f6213177535c84daad0247916b",
+      "source": "worktree",
+      "status": "已确认（协调者）",
+      "summary": "按独立审查更正：§11.3 写明作业者片段的顺序（TASK-152 先追加 `20261030` 的片段、编号为空，你判定后再填入，抽样不等编号），结论只推广到这些作业者；4.3.0 一行所说的章节实为 §9、§10.6、§11 与中文摘要，§8 未改；4.2.1 另把确认一栏的“见 Q-025”改为“用户已确认 Q-025”。含义不变",
+      "version": "4.3.1"
+    },
+    {
+      "date": "2026-10-30",
+      "doc_id": "VALSET",
+      "path": "docs/archive/VALSET/VALSET_v4.4.0.md",
+      "sha256": "4edc80cb6a6f5327e0f1e757637da67dc7c264914b7dd23cc6129732b8634ec3",
+      "source": "worktree",
+      "status": "已确认（协调者）",
+      "summary": "§11.4 与中文摘要按 2026-10-30 的逐区域实测更正：`20261030` 的固定区域预计可以自动配准，料箱推车由你调整；标注方案与数据集不变",
+      "version": "4.4.0"
+    },
+    {
+      "date": "2026-10-30",
+      "doc_id": "VALSET",
+      "path": "docs/archive/VALSET/VALSET_v4.4.1.md",
+      "sha256": "5e5b75718dad221de883c2675c680784cd21ddc44d97ff65cfac86ff8a46f61c",
+      "source": "worktree",
+      "status": "已确认（协调者）",
+      "summary": "你确认 Q-028，去掉方案待确认的标记；内容不变",
+      "version": "4.4.1"
     }
   ],
   "mirror_writes": [
@@ -943,6 +1539,18 @@
     {
       "mirror": "docs/superpowers/specs/2026-10-15-workdata-validation-set-design.md",
       "sha256": "789aef9c2c9d61b335428d730c919f8ffe7e6fed3f187bf26ce8031e11359e60"
+    },
+    {
+      "mirror": "docs/superpowers/specs/2026-10-18-system-overview-design.md",
+      "sha256": "9ed7760070bff138940e4d2109c02fdb746e4df74e2e34a6877882e612a4b3dd"
+    },
+    {
+      "mirror": "docs/superpowers/specs/2026-10-18-gaze-attention-system-design.md",
+      "sha256": "6000fe735d0322abddb02e748cb80da8815f79b2eee4d40e44479bc3d15fa307"
+    },
+    {
+      "mirror": "docs/superpowers/specs/2026-10-15-workdata-validation-set-design.md",
+      "sha256": "b2fa689b92f1dad53050d48ce8ff2978188eaf6e63b2001b930d5e4fe1b11c70"
     }
   ],
   "version": 1

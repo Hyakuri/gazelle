@@ -1,11 +1,11 @@
 ---
 doc_id: VALSET
 title: 作业数据验证集设计
-version: 4.2.0
+version: 4.4.1
 status: 已确认（协调者）
-updated: 2026-10-29
+updated: 2026-10-30
 owner: Claude
-confirm_ref: 用户 2026-10-29（Q-017、Q-018、Q-020、Q-021、Q-022、Q-024）；§10.8 的补充说明由协调者确认（2026-10-29），见 Q-025；待定项见 Q-023
+confirm_ref: 用户 2026-10-29（Q-017、Q-018、Q-020、Q-021、Q-022、Q-024）；§10.8 的补充说明由协调者确认（2026-10-29），用户已确认 Q-025；用户 2026-10-30 决定纳入 `20261030`（Q-026 第 1 项），接入方式由协调者安排；§11.4 的实测由协调者更新，方案用户 2026-10-30 已确认（Q-028）
 ---
 # Work-Data Validation Set Design (D12)
 
@@ -38,9 +38,9 @@ names are swapped in folder `20260903`.
 ## 中文摘要
 
 - **数据**：E 盘作业数据，只读。使用 TASK-134 生成的 5 Hz 同步代理视频，三台摄像机共用一条时间轴。
-- **单位**：连续 60 秒片段。每次录制 4 段，2026-08-24 那次只有 30 分钟，取 2 段，共 26 段；另加 1 段试标片段。在三机重叠时段内分层随机抽取，种子 20261015。2026-10-29 起，两次新录制各追加 4 段，共 8 段，规则与种子不变，放在一个格式相同的单独数据集里；原 26 段不变（§11）。
+- **单位**：连续 60 秒片段。每次录制 4 段，2026-08-24 那次只有 30 分钟，取 2 段，共 26 段；另加 1 段试标片段。在三机重叠时段内分层随机抽取，种子 20261015。2026-10-29 起，新录制各追加 4 段，规则与种子不变，放在一个格式相同的单独数据集里；2026-10-30 你决定再纳入 `20261030`，新录制共 3 次、12 段；原 26 段不变（§11）。
 - **标注**：每 0.2 秒一个时间步。标注者同时看到前方、右侧与全局三个视角，按数字键在注视区域发生变化的时刻打点。类别由你在全局摄像机画面上画出的区域生成（TASK-123）；按默认区域，类别为取货台、作业台、放置区、工作区内其他、离开工作、不在岗、无法判断。另外记录他人入镜的区间。
-- **工作量**：r2 为每段约 4 到 5 分钟。r3 为每段约 6 至 7 分钟：旧 7 次的 26 段约 3 小时，新录制的 8 段约 1 小时，可分多次完成（§10.6、§11.5）。
+- **工作量**：r2 为每段约 4 到 5 分钟。r3 为每段约 6 至 7 分钟：旧 7 次的 26 段约 3 小时，新录制的 12 段约 1.5 小时，可分多次完成（§10.6、§11.5）。
 - **隐私**：代理视频、抽出的帧与标注只保存在本机仓库之外；证据文件只含汇总指标。
 - **用途**：评估第 3 阶段的区域推断，包括逐时间步准确率、注视片段的时长误差、各区域时间占比误差。2026-10-29 起按作业者留一交叉验证，旧录制与新录制分层报告（§11）。
 
@@ -57,7 +57,7 @@ names are swapped in folder `20260903`.
 
 | Item | Value |
 | --- | --- |
-| Source videos | `E:\Gazelle_Workdata\秋田大学様解析用動画\`, read-only |
+| Source videos | `E:\Gazelle_Workdata\`, one folder per recording, read-only. On 2026-10-30 the user moved the recording folders out of a Japanese-named parent folder; file names and bytes are unchanged (SHA-256 checked). Derived data made earlier still records the old parent path and refers to the same files |
 | Synchronized proxies | `C:\Users\yun\Documents\Claude_Code\gazelle_data\workdata\proxies\` (TASK-134) |
 | Dataset root | `C:\Users\yun\Documents\Claude_Code\gazelle_validation\roi_r2\`, configurable; the 2026-10 cohort uses the sibling `roi_r2_2026_10\` (§11.2) |
 | Run outputs | `C:\Users\yun\Documents\Claude_Code\gazelle_runs\` |
@@ -197,6 +197,7 @@ regions with TASK-123.
 | r3 | 2026-10-18 | §10. The user approved the direction (D20): a hands/held-object class and attention points at gaze changes. The user confirmed the details on 2026-10-29 (Q-017). |
 | r3.1 | 2026-10-18 | §10.8, the out-of-view mark. Approved by the user on 2026-10-29 (Q-018). |
 | Addendum | 2026-10-29 | §11: the two new recordings as a separate cohort, leave-one-worker-out, per-recording regions. Approved by the user on 2026-10-29 (D26, D27). |
+| Addendum 2 | 2026-10-30 | §11: the recording `20261030` (burned-in clock 2026-10-29) joins cohort `2026-10`, which now has 12 segments in one dataset. The user decided to include it on 2026-10-30 (Q-026); how it joins is a coordinator refinement. |
 
 ## 10. Revision 3 (2026-10-18)
 
@@ -259,7 +260,7 @@ Region labels alone cannot evaluate the attended location or moving targets. The
 ### 10.6 Effort
 
 About 6 to 7 minutes per segment, about 3 hours in total, in several sittings.
-The 8 segments of the new recordings add about 1 hour (§11.5).
+The 12 segments of the new recordings add about 1.5 hours (§11.5).
 
 ### 10.8 Revision 3.1 (proposed 2026-10-18, approved 2026-10-29)
 
@@ -302,56 +303,63 @@ The data provider added two recordings: source folders `20261016` and `20261023`
 
 The user approved the recommendations on 2026-10-29 (D26, D27).
 
+On 2026-10-30 a third new recording arrived: folder `20261030`, burned-in clock 2026-10-29, with about 1 hour of overlap between A, B, E and a webcam-type camera named 動作解析カメラ. Its overview camera moved much more than before: the formal region vertices are about 155 px off at 1080p, with few feature matches, and its burned-in clock has a different format. The user decided the same day to include it (Q-026); the facts are in `docs/collab/evidence/2026-10-30-source-relocation-check.md` §3.
+
 ### 11.2 Sampling for the new recordings
 
-- **Cohorts**: the first seven recordings form cohort `original`; the two new recordings form cohort `2026-10`. Results are reported per cohort; pooled numbers are given for reference only (coordinator refinement). The `roi_r2` manifest has no `cohort` field, and a missing field means `original`.
-- **Count and rules**: 4 segments per new recording, 8 in total, with the stratification and gap rules of §3 and the `sync_uncertain` exclusion of TASK-140.
+- **Cohorts**: the first seven recordings form cohort `original`; the new recordings `20261016`, `20261023` and `20261030` form cohort `2026-10`. Results are reported per cohort; pooled numbers are given for reference only (coordinator refinement). The `roi_r2` manifest has no `cohort` field, and a missing field means `original`.
+- **Count and rules**: 4 segments per new recording, 12 in total, with the stratification and gap rules of §3 and the `sync_uncertain` exclusion of TASK-140.
 - **Seed**: the protocol seed 20261015. Each recording has its own generator (the seed plus the session number), so the new draws neither depend on nor change the 26 existing segments.
-- **Separate dataset** (implementation detail, coordinator): a label file is bound to the manifest of its dataset. The 8 segments therefore form a sibling dataset in the same format, with its own manifest and labels. The 26-segment dataset, its pilot, frames and labels stay byte-identical.
+- **Separate dataset** (implementation detail, coordinator): a label file is bound to the manifest of its dataset. The 12 segments therefore form one sibling dataset in the same format, with its own manifest and labels. It is built once, after all three recordings are ingested (TASK-152). The 26-segment dataset, its pilot, frames and labels stay byte-identical.
 - **No pilot** (coordinator): the new cohort has no pilot segment; the pilot of §3 remains the shared tool shakedown.
 - **Gaps**: the simultaneous gap of about 6 s in A and B in 20261023 counts as a proxy gap.
 - **Views**: the annotator sees A, B and E as before. For cohort `2026-10` the tool may also show W as a reference view. Labels and points are still placed on E.
 
 ### 11.3 Worker-level splits
 
-- **Worker spans**: a span is the part of one recording in which one worker is at the station. Spans are cut only where the worker changes; a worker who leaves and returns stays in the same span. At a change, the handover period runs from the earlier worker's last confirmed face to the later worker's first confirmed face (A or B, at least 200 px wide at 4K and a detection score of at least 0.5); it belongs to no span. The worker-identity analysis of 2026-10-29 gives 11 spans over the nine recordings, with handovers inside 20260903 and 20261016 (`docs/collab/analysis/2026-10-29-worker-identity-analysis.md` §3). TASK-150 writes the span file, and later tasks use it as is (coordinator refinement).
-- **Anonymous worker IDs**: the user gave them on 2026-10-29 after viewing face crops: four workers, P1 to P4. Spans of the same person share an ID. IDs carry no names or personal attributes.
+- **Worker spans**: a span is the part of one recording in which one worker is at the station. Spans are cut only where the worker changes; a worker who leaves and returns stays in the same span. At a change, the handover period runs from the earlier worker's last confirmed face to the later worker's first confirmed face (A or B, at least 200 px wide at 4K and a detection score of at least 0.5); it belongs to no span. The worker-identity analysis of 2026-10-29 gives 11 spans over the nine recordings, with handovers inside 20260903 and 20261016 (`docs/collab/analysis/2026-10-29-worker-identity-analysis.md` §3). TASK-150 writes the span file for the first nine recordings and TASK-152 appends the spans of `20261030`; later tasks use the file as is (coordinator refinement).
+- **Anonymous worker IDs**: the user gave them on 2026-10-29 after viewing face crops: four workers, P1 to P4. Spans of the same person share an ID. IDs carry no names or personal attributes. The worker in `20261030` is identified the same way: TASK-152 appends its spans with `worker_id` null, and the ID is filled in after the user has judged the face crops. Segment assignment uses spans, not IDs, so the dataset does not wait for the identification.
 - **Assignment**: a segment belongs to the span with which it overlaps most in time. A segment that lies entirely in an empty period belongs to the nearest span in time. Segments are never redrawn because of their span. With the gap observed in 20261016 (about 3 minutes), no 60-second segment can contain both workers.
-- **Evaluation**: leave-one-worker-out over the IDs, with the bootstrap of §7. Each report gives the number of distinct IDs and, per fold, the train and test segment counts and their cohorts. If a fold's training set holds less than half of all segments, or only one cohort, the evaluation stops and the user decides; there is no silent fallback to another split (coordinator refinement, pending the user's confirmation, Q-023). With four workers the folds are unbalanced: of the 34 segments P1 holds about 15 and P4 4 (estimated from the strata). Results are given per worker, and conclusions extend only to these four people.
+- **Evaluation**: leave-one-worker-out over the IDs, with the bootstrap of §7. Each report gives the number of distinct IDs and, per fold, the train and test segment counts and their cohorts. If a fold's training set holds less than half of all segments, or only one cohort, the evaluation stops and the user decides; there is no silent fallback to another split (coordinator refinement, pending the user's confirmation, Q-023). With four workers the folds are unbalanced: of the 34 segments of the first nine recordings P1 holds about 15 and P4 4 (estimated from the strata); `20261030` adds 4 segments whose worker is still to be identified. Results are given per worker, and conclusions extend only to these workers.
 - **Leave-one-session-out**: not used for formal results, because one person appears in several recordings (P1 in five).
 
 ### 11.4 Regions per recording
 
-- The formal regions were drawn on the 20260821 overview frame. The overview camera moved by 10–28 px (1080p) from 2026-09-22, and movable objects change position.
-- The regions are registered automatically to each recording's overview view and then reviewed by the user, who may adjust a polygon where an object moved (D27, TASK-151). The per-recording regions are new files; the original files stay unchanged.
+- The formal regions were drawn on the 20260821 overview frame. Measured on 2026-10-30, regions on fixed structure stay put within a recording (at most 0.84 px at 1080p) and move between recordings (up to 37 px, and 94–166 px in `20261030`). Different parts of the view move differently, so one global transform is not enough. Per-region registration gave a consistent result in all 27 fixed-region cases, including `20261030`, but there is no human ground truth yet, and the user confirms every region. The storage cart (`item_box`) changes in load, position and appearance, even within a recording, and usually cannot be found again from recorded features, so the user adjusts it. See the [region drift analysis](../collab/evidence/2026-10-30-region-drift-analysis.md) and the [region re-registration design](REGION_REGISTRATION_CN.md) (D29, confirmed by the user on 2026-10-30, Q-028).
+- The regions are registered automatically to each recording's overview view and then reviewed by the user, who may adjust a polygon where an object moved (D27, D29; TASK-151, TASK-153). The per-recording regions are new files; the original files stay unchanged.
 - Labels use class names, not polygons, so labelling does not wait for this step. Region-based metrics and the stage-3 heatmaps use the per-recording regions.
 
 ### 11.5 Effort
 
-About 6 to 7 minutes per segment, so about 1 hour for the 8 new segments.
+About 6 to 7 minutes per segment, so about 1.5 hours for the 12 new segments.
 
 ### 11.6 中文摘要
 
-- **新录制**：两次新录制作为单独分层（`2026-10`）纳入，各抽 4 段，共 8 段，规则与种子 20261015 不变。每次录制有自己的随机数生成器，所以原 26 段不受影响。
-  - 标注文件绑定数据集的清单，所以这 8 段放在一个格式相同的单独数据集里；原数据集、试标段与标注都不变。新分层没有试标段。
+- **新录制**：`20261016`、`20261023`，以及 2026-10-30 你决定纳入的 `20261030`，作为单独分层（`2026-10`），各抽 4 段，共 12 段，规则与种子 20261015 不变。每次录制有自己的随机数生成器，所以原 26 段不受影响。
+  - 标注文件绑定数据集的清单，所以这 12 段放在一个格式相同的单独数据集里，三次录制都接入后一次生成（TASK-152）；原数据集、试标段与标注都不变。新分层没有试标段。
   - 20261023 的 A、B 同时中断约 6 秒，按代理缺口处理。
   - 新录制的片段可以另外显示 webcam 作参考，标签与注视点仍标在全局画面上。
 - **按作业者留一**：
   - 作业者片段是同一录制中一名作业者在岗的时段，只在换人处切分。交接时段从前一人最后一次确认的人脸，到后一人第一次确认的人脸，不属于任何片段。
-  - 你 2026-10-29 判定共 4 名作业者（P1 至 P4）。0903 与 1016 各有一次换班，9 次录制共 11 个片段（见作业者分析）。
+  - 你 2026-10-29 判定共 4 名作业者（P1 至 P4）。0903 与 1016 各有一次换班，9 次录制共 11 个片段（见作业者分析）。`20261030` 的作业者片段由 TASK-152 追加，编号先为空，你看截图判定后再填入；片段归属按作业者片段，不等编号。
   - 片段按时间重叠最多的作业者片段归属，不因归属重抽。
-  - 同一人用同一编号。4 折很不均衡（34 段中 P1 约 15 段，P4 4 段），结果按作业者分别报告。
+  - 同一人用同一编号。折很不均衡（前 9 次录制的 34 段中 P1 约 15 段，P4 4 段；`20261030` 的 4 段待判定作业者），结果按作业者分别报告。
   - 每次评估报告编号个数，以及每折的训练、测试片段数；某一折的训练集不到全部片段的一半或只剩一个分层时，停下来请你决定（待你确认，Q-023）。
   - 按录制留一会让同一人同时出现在训练与测试中，不作为正式结果。
-- **区域按录制**：你在 0821 画面上画的区域，先自动配准到每次录制的全局画面，再由你复核，另存为新文件，原文件不改。标注用类别名称，不必等这一步。
-- **工作量**：新增 8 段约 1 小时。
+- **区域按录制**：你在 0821 画面上画的区域，先逐区域自动配准到每次录制的全局画面，再由你复核，另存为新文件，原文件不改。标注用类别名称，不必等这一步。2026-10-30 实测：固定结构的区域包括 `20261030` 预计都能自动配准，以你的确认为准；料箱推车通常靠特征找不回来，由你调整（D29，Q-028）。
+- **工作量**：新增 12 段约 1.5 小时。
 
 ## 版本记录
 
 <!-- portal:versions -->
 | 版本 | 日期 | 状态 | 变更摘要 | 确认 | 归档 |
 | --- | --- | --- | --- | --- | --- |
-| 4.2.0 | 2026-10-29 | 已确认（协调者） | 第 5 轮审查后的补充说明：同一片段内注视点与“跳过”“画面外”标记二选一；“画面外”只用于整段目标都在全局画面外；严格校验相应增加一条（§10.4、§10.7、§10.8）。由协调者确认并告知你（Q-025 第 2 项），你可以推翻 | 用户 2026-10-29（Q-017、Q-018、Q-020、Q-021、Q-022、Q-024）；§10.8 的补充说明由协调者确认（2026-10-29），见 Q-025；待定项见 Q-023 | [v4.2.0](../archive/VALSET/VALSET_v4.2.0.md) |
+| 4.4.1 | 2026-10-30 | 已确认（协调者） | 你确认 Q-028，去掉方案待确认的标记；内容不变 | 用户 2026-10-29（Q-017、Q-018、Q-020、Q-021、Q-022、Q-024）；§10.8 的补充说明由协调者确认（2026-10-29），用户已确认 Q-025；用户 2026-10-30 决定纳入 `20261030`（Q-026 第 1 项），接入方式由协调者安排；§11.4 的实测由协调者更新，方案用户 2026-10-30 已确认（Q-028） | [v4.4.1](../archive/VALSET/VALSET_v4.4.1.md) |
+| 4.4.0 | 2026-10-30 | 已取代 | §11.4 与中文摘要按 2026-10-30 的逐区域实测更正：`20261030` 的固定区域预计可以自动配准，料箱推车由你调整；标注方案与数据集不变 | 用户 2026-10-29（Q-017、Q-018、Q-020、Q-021、Q-022、Q-024）；§10.8 的补充说明由协调者确认（2026-10-29），用户已确认 Q-025；用户 2026-10-30 决定纳入 `20261030`（Q-026 第 1 项），接入方式由协调者安排；§11.4 的实测由协调者更新，方案待 Q-028 | [v4.4.0](../archive/VALSET/VALSET_v4.4.0.md) |
+| 4.3.1 | 2026-10-30 | 已取代 | 按独立审查更正：§11.3 写明作业者片段的顺序（TASK-152 先追加 `20261030` 的片段、编号为空，你判定后再填入，抽样不等编号），结论只推广到这些作业者；4.3.0 一行所说的章节实为 §9、§10.6、§11 与中文摘要，§8 未改；4.2.1 另把确认一栏的“见 Q-025”改为“用户已确认 Q-025”。含义不变 | 用户 2026-10-29（Q-017、Q-018、Q-020、Q-021、Q-022、Q-024）；§10.8 的补充说明由协调者确认（2026-10-29），用户已确认 Q-025；用户 2026-10-30 决定纳入 `20261030`（Q-026 第 1 项），接入方式由协调者安排；待定项见 Q-023 | [v4.3.1](../archive/VALSET/VALSET_v4.3.1.md) |
+| 4.3.0 | 2026-10-30 | 已取代 | 你 2026-10-30 决定把新录制 `20261030`（画面时钟 2026-10-29）纳入研究集（Q-026）：§11 的 2026-10 分层改为 3 次录制、12 段，放在一个数据集里，三次录制都接入后一次生成（TASK-152）；它的作业者由你判定；它的全局摄像机偏移约 155 像素，区域可能需要重画。§8、§9、中文摘要相应更新。接入方式由协调者安排 | 用户 2026-10-29（Q-017、Q-018、Q-020、Q-021、Q-022、Q-024）；§10.8 的补充说明由协调者确认（2026-10-29），用户已确认 Q-025；用户 2026-10-30 决定纳入 `20261030`（Q-026 第 1 项），接入方式由协调者安排；待定项见 Q-023 | [v4.3.0](../archive/VALSET/VALSET_v4.3.0.md) |
+| 4.2.1 | 2026-10-30 | 已取代 | §2 的源视频路径改为 `E:\Gazelle_Workdata\`：你 2026-10-30 把各录制文件夹移出上层的日文文件夹，文件名与内容不变（SHA-256 已核对）；此前派生数据中记录的旧路径不改写；其余内容不变 | 用户 2026-10-29（Q-017、Q-018、Q-020、Q-021、Q-022、Q-024）；§10.8 的补充说明由协调者确认（2026-10-29），用户已确认 Q-025；路径变化由用户 2026-10-30 告知；待定项见 Q-023 | [v4.2.1](../archive/VALSET/VALSET_v4.2.1.md) |
+| 4.2.0 | 2026-10-29 | 已取代 | 第 5 轮审查后的补充说明：同一片段内注视点与“跳过”“画面外”标记二选一；“画面外”只用于整段目标都在全局画面外；严格校验相应增加一条（§10.4、§10.7、§10.8）。由协调者确认并告知你（Q-025 第 2 项），你可以推翻 | 用户 2026-10-29（Q-017、Q-018、Q-020、Q-021、Q-022、Q-024）；§10.8 的补充说明由协调者确认（2026-10-29），见 Q-025；待定项见 Q-023 | [v4.2.0](../archive/VALSET/VALSET_v4.2.0.md) |
 | 4.1.1 | 2026-10-29 | 已取代 | 录制的称呼统一为源文件夹名（例如 20261016），画面时钟日期只在括号中注明；你确认作业者片段表（Q-024）；内容不变 | 用户 2026-10-29（Q-017、Q-018、Q-020、Q-021、Q-022、Q-024）；待定项见 Q-023 | [v4.1.1](../archive/VALSET/VALSET_v4.1.1.md) |
 | 4.1.0 | 2026-10-29 | 已取代 | 按你 2026-10-29 的身份判定更新 §11：共 4 名作业者、11 个作业者片段，交接时段按确认的人脸界定，4 折不均衡、按作业者分别报告；§7 的依据随之更正；中文摘要同步 | 用户 2026-10-29（Q-017、Q-018、Q-020、Q-021、Q-022）；待定项见 Q-023 | [v4.1.0](../archive/VALSET/VALSET_v4.1.0.md) |
 | 4.0.0 | 2026-10-29 | 已取代 | 按 §5.1 改为主版本：3.2.0 写入的按作业者留一属于评估协议的变化，版本级别在此更正；你确认 r3 的细则（Q-017），状态改为已确认；按独立审查修正 §11：作业者片段只在换人处切分，片段按时间归属、不因归属重抽，留一的预先登记与停止规则（待你确认，Q-023），cohort 缺省为 original；§7、§8 与中文摘要的旧说法更正 | 用户 2026-10-29（Q-017、Q-018、Q-020、Q-021）；待定项见 Q-023 | [v4.0.0](../archive/VALSET/VALSET_v4.0.0.md) |

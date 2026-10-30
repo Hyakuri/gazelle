@@ -1,11 +1,11 @@
 ---
 doc_id: DOCS
 title: 文档记录体系与版本规则
-version: 1.1.1
-status: 已确认
-updated: 2026-10-29
+version: 1.2.0
+status: 已确认（协调者）
+updated: 2026-10-30
 owner: Claude
-confirm_ref: 用户 2026-10-29（Q-019）
+confirm_ref: 用户 2026-10-29（Q-019）；清单加一行按本文件 §3 的规定，由协调者确认
 ---
 
 # 文档记录体系与版本规则
@@ -46,7 +46,7 @@ confirm_ref: 用户 2026-10-29（Q-019）
 | `docs/` | `README.md`：项目总览的 Markdown 版，在 GitHub 上打开 docs 文件夹时自动显示；其余文档都在下面的分类文件夹中 | 视图 | 工具生成，不手改 | 工具 |
 | `docs/portal/` | `index.html`：项目总览网页 | 视图 | 工具生成，不手改；建立基线时留档 | 工具 |
 | `docs/requirements/` | 项目目标与需求基线 | 基线 | 受控：版本号、版本记录、归档 | Claude 起草，用户确认 |
-| `docs/design/` | 系统总体设计、阶段 3 设计、验证集设计、D1/D2 设计 | 基线 | 受控 | Claude 起草，用户确认 |
+| `docs/design/` | 系统总体设计、阶段 3 设计、验证集设计、D1/D2 设计、工作区域重配准设计 | 基线 | 受控 | Claude 起草，用户确认 |
 | `docs/design/history/` | 旧设计与实施计划：2026-07、2026-08 的设计，以及被取代的 2026-10-15 多摄像机设计 | 历史 | 不再修改 | — |
 | `docs/rules/` | 文档记录体系、协同开发方案（受控）；跨 agent 协作流程 | 规则 | 前两份受控，其余由 Git 记录 | Claude 起草，用户确认 |
 | `docs/collab/` | STATE、ROADMAP、HISTORY、QUICKSTART、PR 正文；`tasks/` 任务契约与报告；`evidence/` 证据；`analysis/` 分析 | 现状与记录 | 活文档：Git 记录，基线快照留档 | Claude 与 Codex 按字段 |
@@ -100,6 +100,7 @@ flowchart LR
 | STAGE3 | 阶段 3 视线与注意力位置估计设计 | `docs/design/STAGE3_GAZE_ATTENTION_CN.md` | 基线 | 用户确认 |
 | VALSET | 作业数据验证集设计 | `docs/design/VALIDATION_SET_DESIGN.md` | 基线 | 用户确认 |
 | PERCEPTION | 人脸与姿态关联、新轨迹确认设计（D1、D2） | `docs/design/PERCEPTION_D1_D2_DESIGN.md` | 基线 | 方向由用户确认，细节可由协调者确认 |
+| ROIREG | 工作区域自动重配准设计 | `docs/design/REGION_REGISTRATION_CN.md` | 基线 | 用户确认 |
 | COLLAB | Claude × Codex 协同开发方案 | `docs/rules/COLLABORATION_PLAN_CN.md` | 规则 | 用户确认 |
 | DOCS | 文档记录体系与版本规则 | `docs/rules/DOCS_SYSTEM_CN.md` | 规则 | 用户确认 |
 
@@ -333,6 +334,7 @@ python -m tools.docs snapshot --note "第 5 轮结束"
 <!-- portal:versions -->
 | 版本 | 日期 | 状态 | 变更摘要 | 确认 | 归档 |
 | --- | --- | --- | --- | --- | --- |
-| 1.1.1 | 2026-10-29 | 已确认 | 你确认本规则（Q-019）；内容不变 | 用户 2026-10-29（Q-019） | [v1.1.1](../archive/DOCS/DOCS_v1.1.1.md) |
+| 1.2.0 | 2026-10-30 | 已确认（协调者） | 受控文档清单加入 ROIREG（工作区域自动重配准设计）；规则不变 | 用户 2026-10-29（Q-019）；清单加一行按本文件 §3 的规定，由协调者确认 | [v1.2.0](../archive/DOCS/DOCS_v1.2.0.md) |
+| 1.1.1 | 2026-10-29 | 已取代 | 你确认本规则（Q-019）；内容不变 | 用户 2026-10-29（Q-019） | [v1.1.1](../archive/DOCS/DOCS_v1.1.1.md) |
 | 1.1.0 | 2026-10-18 | 已取代 | 按类别分文件夹（requirements、design、rules、collab、usage、handoff）；superpowers 改为技能工作区，技能副本自动同步，技能修改用 adopt 并入；文档管理架构图与流程图；Markdown 总览改为 `docs/README.md`；新增 adopt 命令 | Q-019（先行生效） | [v1.1.0](../archive/DOCS/DOCS_v1.1.0.md) |
 | 1.0.0 | 2026-10-18 | 已取代 | 首版：原则、分层、受控文档清单、版本号与状态、归档、基线、回档、生成视图、活文档约定、工作流程、命令 | Q-019（先行生效） | [v1.0.0](../archive/DOCS/DOCS_v1.0.0.md) |

@@ -49,14 +49,17 @@ Details: `docs/collab/analysis/2026-10-15-workdata-analysis.md`.
 | 5 | TASK-124 round 2 | accepted (2026-10-29) |
 | 5 | TASK-125 Annotation scheme r3: hands/held-object class and attention points, plus the out-of-view mark r3.1 | changes requested (2026-10-29): points and skip marks can coexist; modifier keys edit marks |
 | 6 | TASK-125 round 2: exclusive points and marks, shortcut guards, save on hide, dataset version gate, tests and docs | changes requested (2026-10-29): one regression, holding Space clicks the focused button |
-| 7 | TASK-125 round 3: held-key and undo fixes, small test and doc items, hands colour change (Q-025) | ready; the only task in round 7 |
+| 7 | TASK-125 round 3: held-key and undo fixes, small test and doc items, hands colour change (Q-025) | accepted (2026-10-30) |
+| 8 | TASK-125 round 4: release focus after mouse use of the slider, dropdowns and buttons | ready |
 | 8 | TASK-101 Face–pose association fix (D1, contract r2) | ready |
-| 8 | TASK-150 Intake of the two new recordings (20261016, 20261023) and the webcam | blocked on TASK-125 round 3; contract r2 written |
+| 8 | TASK-150 Intake of the two new recordings (20261016, 20261023) and the webcam | ready; contracts r2–r4 written; the cohort dataset moves to TASK-152 |
 | 8 | TASK-140 round 3: test follow-ups only | ready |
-| — | TASK-151 Register the formal regions to each recording; the user reviews them (D27) | proposed |
+| 9 | TASK-151 Per-region re-registration of the formal regions with in-recording monitoring (D27, D29) | proposed; the design is confirmed (Q-028) |
+| 10 | TASK-153 Review mode and blind landmark test; the user confirms the regions of each recording | proposed |
+| 9 | TASK-152 Intake of the new recording 20261030 and the 2026-10 cohort dataset (12 segments) | proposed |
 | Stage 4 | Pixel-isotropic reference rays (GZ-28) | proposed; no longer a stage-3 prerequisite because stage 3 uses 3D gaze |
-| User | Label 26 one-minute segments with scheme r3 (about 3 hours) | paused (D20) until TASK-125 round 3 passes review; dataset `roi_r2` is ready |
-| User | Label the 8 segments of the new recordings (about 1 hour) | after TASK-150 |
+| User | Label 26 one-minute segments with scheme r3 (about 3 hours) | can start; dataset `roi_r2` is ready |
+| User | Label the 12 segments of the new recordings (about 1.5 hours) | after TASK-152 |
 | — | Stage acceptance by Claude, final acceptance by the user | not started |
 
 User decisions on 2026-10-15: the front camera is カメラ2 and the right camera is カメラ1; the user will draw the regions on the overview camera; each date has one worker and the camera positions are fixed; D4, D12 r2, and D13–D15 are approved. That stage-3 design was superseded on 2026-10-18 by design v2, which the user approved on 2026-10-29 (below). The user accepted MediaPipe telemetry (GZ-23) for the development phase; security handling follows the research.
@@ -108,7 +111,7 @@ New recordings and design approval on 2026-10-29 (`docs/collab/analysis/2026-10-
 - **User decisions.**
   - D22: the system design and the stage-3 design v2 are approved.
   - D23: MIT- and Apache-licensed models first, tried in a cloned sandbox environment, with each download authorized item by item; non-commercial models are not used until the user judges them at download time.
-  - D24: a new stage-3 branch and draft PR from the stage-2 acceptance point, so this PR stays stage 2 only. Rounds 6 and 7 and TASK-151 are stage-2 work and stay on this branch.
+  - D24: a new stage-3 branch and draft PR from the stage-2 acceptance point, so this PR stays stage 2 only. Rounds 6 to 10, including TASK-151 and TASK-153, are stage-2 work and stay on this branch.
   - D25: the documentation records system is confirmed.
   - D26: the new recordings join as a separate cohort; the webcam is an auxiliary view; evaluation becomes leave-one-worker-out.
   - D27: the formal regions are registered to each recording and reviewed by the user.
@@ -148,6 +151,22 @@ Round 6 review on 2026-10-29 (`docs/collab/evidence/2026-10-29-round6-review.md`
   - Round 7 is TASK-125 round 3 only: the regression, small items and the recolour. Then back to Claude.
   - Formal labelling starts after that review.
   - Round 8 brings TASK-101, TASK-150 and the TASK-140 test follow-ups, and can run while the user labels.
+
+Source data on 2026-10-30 (`docs/collab/evidence/2026-10-30-source-relocation-check.md`):
+
+- The user moved the recording folders up to `E:\Gazelle_Workdata\`. Claude re-hashed the whole source: the 40 inventoried files match by SHA-256, and all 56 files recorded on 2026-10-29 match by size and modification time.
+- Derived records keep the old path, because the formal manifests bind their hashes. TASK-150 (contract revision r3) makes source access independent of the root.
+- A new recording, `20261030` (burned-in clock 2026-10-29, four cameras overlapping for about 1 h), arrived the same day. The user decided to include it (Q-026 item 1). As arranged by the coordinator, TASK-152 ingests it after TASK-150 and then builds the 2026-10 cohort dataset with 12 segments. Its overview camera moved by about 155 px at 1080p and shows a different clock format. The user expects that the data provider moved some cameras, and a full audit confirmed all 64 videos are assigned to the right camera among the four (A, B, E and the webcam W). Whether the overview camera was also replaced and whether more recordings will come remain open.
+- The user set the role of the fourth camera W (D28): it stays an auxiliary view but is used as fully as possible, to supplement and inform when A, B and E lack head or other needed information, and to verify the gaze results a second time. Stage-3 design 3.5.0 adds this as module M9, and the coordinator planned task TASK-313 for it. The evaluation-related rules are the coordinator's proposals, and the user confirmed them on 2026-10-30 (Q-027). Stage 2 gains two small items: TASK-150 and TASK-152 report the W sync clearly, and TASK-152 applies the same W–B gate as TASK-150.
+- The user reported that the cameras, although fixed on the workbench, shift through vibration and bench movement, and asked for regions that record their features when marked and re-match automatically (D29). A read-only study of all 10 recordings (`docs/collab/evidence/2026-10-30-region-drift-analysis.md`) found that the overview regions stay put within a recording and move between recordings, that different parts of the view move differently so one global transform is not enough, and that the storage cart usually cannot be found again from its features. The cause of the uneven motion is not established. The results so far are consistency checks, not accuracy, because there is no human ground truth yet. The design `docs/design/REGION_REGISTRATION_CN.md` proposes per-region registration, review hints, in-recording monitoring, confirmation of every region by the user and a blind landmark test. The user confirmed it on 2026-10-30 (Q-028). TASK-151 changes accordingly, and TASK-153 is added for the review mode.
+
+Round 7 review on 2026-10-30 (`docs/collab/evidence/2026-10-30-round7-review.md`):
+
+- **TASK-125 round 3 is accepted.** The held-Space regression is fixed, undo needs plain Ctrl/Cmd+Z, and held keys act once.
+- **Claude completed the real-browser check Codex could not run.** Headless Edge delivered trusted input with real `repeat=true`. All 28 checks of the new key test pass, as do the 43 round-6 checks. The same key test on the round-6 page fails 17 of 28, so it detects the old defects.
+- **The recolour is verified.** Only the hands colour changed. The regions, the reference image and the seven overlays are byte-identical, the datasets changed only in colour and hash, and neither has `labels.json`.
+- **One new usability finding, already present before this round.** After mouse use of the slider or a dropdown, focus stays there and shortcuts do not respond; arrow keys on the segment dropdown switch segments. No label goes to the wrong place. TASK-125 round 4 fixes it in round 8.
+- **Plan.** Formal labelling can start from `24baf57`. Round 8 is TASK-125 round 4, TASK-101, TASK-150 and the TASK-140 test follow-ups.
 
 ## How this PR is used
 
@@ -212,14 +231,17 @@ Work videos stay read-only on the local drive. Derived data, labels, and outputs
 | 5 | TASK-124 第 2 轮 | accepted（2026-10-29） |
 | 5 | TASK-125 标注方案 r3：“手部/手中物体”类别与注视点，以及“画面外”标记 r3.1 | 退回修改（2026-10-29）：注视点与跳过标记可以并存；组合键会改动标记 |
 | 6 | TASK-125 第 2 轮：注视点与标记互斥、快捷键防护、隐藏页面时的保存、数据集版本门、测试与文档 | 退回修改（2026-10-29）：一处回归，按住空格会点击获得焦点的按钮 |
-| 7 | TASK-125 第 3 轮：按住按键与撤销键的修复、测试与文档的小项、手部类换色（Q-025） | ready；第 7 轮唯一一项 |
+| 7 | TASK-125 第 3 轮：按住按键与撤销键的修复、测试与文档的小项、手部类换色（Q-025） | accepted（2026-10-30） |
+| 8 | TASK-125 第 4 轮：鼠标用过的滑块、下拉框与按钮释放焦点 | ready |
 | 8 | TASK-101 人脸与姿态关联修正（D1，契约 r2） | ready |
-| 8 | TASK-150 两次新录制（20261016、20261023）与 webcam 的接入 | 等 TASK-125 第 3 轮；契约 r2 已写 |
+| 8 | TASK-150 两次新录制（20261016、20261023）与 webcam 的接入 | ready；契约 r2 至 r4 已写，分层数据集移到 TASK-152 |
 | 8 | TASK-140 第 3 轮：只补测试 | ready |
-| — | TASK-151 正式区域按录制配准，由用户复核（D27） | proposed |
+| 9 | TASK-151 正式区域逐区域重配准与录制内监测（D27、D29） | proposed；方案已确认（Q-028） |
+| 10 | TASK-153 区域复核模式与盲测，用户逐次确认 | proposed |
+| 9 | TASK-152 新录制 `20261030` 的接入与 2026-10 分层数据集（12 段） | proposed |
 | 阶段 4 | 参考射线改为像素各向同性方向（GZ-28） | proposed；阶段 3 改用三维视线，不再是其前置 |
-| 用户 | 按方案 r3 标注 26 个一分钟片段（约 3 小时） | 暂停（D20），等 TASK-125 第 3 轮通过审查；数据集 `roi_r2` 已就绪 |
-| 用户 | 标注新录制的 8 段（约 1 小时） | TASK-150 之后 |
+| 用户 | 按方案 r3 标注 26 个一分钟片段（约 3 小时） | 可以开始；数据集 `roi_r2` 已就绪 |
+| 用户 | 标注新录制的 12 段（约 1.5 小时） | TASK-152 之后 |
 | — | Claude 阶段验收，用户最终验收 | 未开始 |
 
 用户 2026-10-15 的决定：前方摄像机为カメラ2，右侧为カメラ1；区域由用户在全局摄像机画面上画出；同一日期为同一作业者，机位固定；批准 D4、D12 r2 与 D13 至 D15。该第 3 阶段设计在 2026-10-18 被设计 v2 取代，设计 v2 已由用户于 2026-10-29 批准（见下文）。用户决定开发阶段接受 MediaPipe 遥测（GZ-23），研究完成后再做安全处理。
@@ -271,7 +293,7 @@ Work videos stay read-only on the local drive. Derived data, labels, and outputs
 - **用户的决定。**
   - D22：批准系统总体设计与阶段 3 设计 v2。
   - D23：先只用 MIT 与 Apache 许可的模型，在克隆的沙盒环境中试用，下载逐项授权；非商业许可的模型暂不使用，需要时随下载授权请用户判断。
-  - D24：从阶段 2 的验收点新建阶段 3 分支与 draft PR，本 PR 只含阶段 2；第 6、7 轮与 TASK-151 属于阶段 2，仍在本分支。
+  - D24：从阶段 2 的验收点新建阶段 3 分支与 draft PR，本 PR 只含阶段 2；第 6 至 10 轮（含 TASK-151、TASK-153）属于阶段 2，仍在本分支。
   - D25：确认文档记录体系。
   - D26：新录制作为单独分层纳入；webcam 作辅助视角；评估改为按作业者留一。
   - D27：正式区域按录制配准，由用户复核。
@@ -311,6 +333,22 @@ Work videos stay read-only on the local drive. Derived data, labels, and outputs
   - 第 7 轮只做 TASK-125 第 3 轮：修复回归、几个小项与换色，完成后交回 Claude。
   - 正式标注在那次审查之后开始。
   - 第 8 轮做 TASK-101、TASK-150 与 TASK-140 的测试补充，可以与用户的标注同时进行。
+
+2026-10-30 的源数据（`docs/collab/evidence/2026-10-30-source-relocation-check.md`）：
+
+- 用户把各录制文件夹移到 `E:\Gazelle_Workdata\` 下。Claude 重新计算了整个源目录的哈希：清单中的 40 个文件 SHA-256 一致，2026-10-29 记录的 56 个文件大小与修改时间一致。
+- 派生记录保留旧路径，因为正式 manifest 绑定了它们的哈希；TASK-150（契约修订 r3）让打开源视频不依赖根目录。
+- 同日到了一次新录制 `20261030`（画面时钟 2026-10-29，四台摄像机约重叠 1 小时），用户决定纳入（Q-026 第 1 项）。按协调者的安排，由 TASK-152 在 TASK-150 之后接入，再一次生成 12 段的 2026-10 分层数据集。它的全局摄像机移位约 155 像素（1080p），画面时钟格式也不同。用户认为可能是数据提供方移动了一些摄像头；全面核对确认 64 个视频都对应到正确的摄像机（A、B、E 与 webcam W 共 4 台）。全局摄像机是否也换了设备、今后是否还有录制仍待回答。
+- 用户确定了第 4 台摄像机 W 的用途（D28）：仍作辅助视角，但尽量利用，在 A、B、E 缺头部或其他需要的信息时补充和参考，并对视线推测等结果做二次验证。阶段 3 设计 3.5.0 把它写成模块 M9，协调者为它安排了任务 TASK-313。影响评估的规则是协调者的提议，用户 2026-10-30 已确认（Q-027）。阶段 2 只增加两点：TASK-150、TASK-152 要写明 W 的同步结果，TASK-152 采用与 TASK-150 相同的 W–B 门槛。
+- 用户说明摄像头虽然固定在工作台上，但震动与工作台移动会使其偏移，要求区域在标记时记录特征，之后自动重新匹配（D29）。对全部 10 次录制的只读实测（`docs/collab/evidence/2026-10-30-region-drift-analysis.md`）发现：全局摄像机上的区域在录制内基本不动，变化发生在录制之间；画面各处移动不同，一个全局变换不够；料箱推车通常靠特征找不回来。移动不均匀的原因尚未确定。目前的结果是一致性检验，不是精度，因为还没有人工真值。设计 `docs/design/REGION_REGISTRATION_CN.md` 提出逐区域配准、检查提示、录制内监测、用户确认全部区域以及盲测，用户 2026-10-30 已确认（Q-028）。TASK-151 相应修改，并新增 TASK-153 负责复核模式。
+
+2026-10-30 的第 7 轮审查（`docs/collab/evidence/2026-10-30-round7-review.md`）：
+
+- **TASK-125 第 3 轮通过。** 按住空格的回归已修好，撤销只认不带其他修饰键的 Ctrl/Cmd+Z，按住按键只算一次。
+- **Claude 补完了 Codex 没能运行的真实浏览器检查。** 无界面 Edge 发出可信输入与真实的 `repeat=true`。新的按键测试 28 项全部通过，第 6 轮的 43 项检查也全部通过。同一测试用于第 6 轮的页面，28 项有 17 项失败，说明它能发现旧缺陷。
+- **换色核对无误。** 只有手部类颜色变化。区域、参考图与 7 张叠加图逐字节相同，两个数据集只改颜色与哈希，都没有 `labels.json`。
+- **新发现一个易用性问题，本轮之前就存在。** 用鼠标操作滑块或下拉框后，焦点留在控件上，快捷键不响应；片段下拉框上的方向键会切换片段。标签不会写错。第 8 轮由 TASK-125 第 4 轮修复。
+- **计划。** 正式标注可以从 `24baf57` 开始。第 8 轮做 TASK-125 第 4 轮、TASK-101、TASK-150 与 TASK-140 的测试补充。
 
 ## 本 PR 的用法
 
