@@ -377,7 +377,14 @@ with `tracking.provisional=true` and age 1. Confirmation within two frame indice
 to the same `person_id`; age counts from the original spawn. Provisional observations do not
 create or refresh bridge state, so a one-frame detection cannot create a stale ghost.
 Image mode, confirmed observations and `tracked_only` always use `tracking.provisional=false`.
-In single-person mode, a provisional winner preserves existing confirmed bridge state.
+Bridge retention uses a separate selection excluding all provisional heads, for every `--max-heads`.
+Thus a one-frame spawn is neutral to bridge pruning, whether or not it wins output selection.
+Face/pose matching uses at least 3 candidates before output selection. The anchor rule requires
+the pose nose inside the face-derived head box; without a nose, at least two available head
+keypoints must be inside, or, if fewer than two exist, the head center must be between and above
+both shoulders. Video selection prefers spatial continuity with fresh observations, then identity
+continuity (including active bridges), then existing priority. Image IDs are renumbered from 0;
+video IDs need not start at 0 or be contiguous. Eligibility thresholds and CLI options are unchanged.
 Provisional heads can enter Gazelle: `--gazelle-head-mode all` selects pose-only heads,
 and conservative mode selects heads with a valid face ray. An unconfirmed one-frame spawn
 increases the number of distinct `person_id` values; downstream identity counts should
@@ -389,7 +396,7 @@ roll rotates clockwise. Serialized roll and the face ray's vertical direction fo
 signs; consumers of earlier opposite signs must update. Both rays remain uncalibrated 2D
 head-pose references, not eye-gaze measurements or calibrated 3D rays.
 
-`track_age_frames` is the track age, while `missed_frames` and `missed_ms` count consecutive bridge reuse since the last current observation. `tracked_only` therefore represents a stale bridged box, not a fresh detection. It is excluded by the default `eligible` selector, but explicit `tracked_only` or `all` diagnostic selection may send it to Gazelle only while that bridge track is active. In single-person mode, post-bridge arbitration outputs at most one identity and prunes other stale bridge state only when the winner is confirmed.
+`track_age_frames` is the track age, while `missed_frames` and `missed_ms` count consecutive bridge reuse since the last current observation. `tracked_only` therefore represents a stale bridged box, not a fresh detection. It is excluded by the default `eligible` selector, but explicit `tracked_only` or `all` diagnostic selection may send it to Gazelle only while that bridge track is active. Post-bridge arbitration outputs at most `--max-heads` identities; the separate confirmed-only selection determines which bridge states are retained.
 
 ### Prediction records
 

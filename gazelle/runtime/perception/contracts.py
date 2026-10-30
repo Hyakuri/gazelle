@@ -6,6 +6,10 @@ from typing import Optional, Tuple
 from gazelle.runtime.contracts import BBox, GazeStatus, HeadObservation
 
 
+def candidate_pool_size(max_heads: int) -> int:
+    return max(max_heads, 3)
+
+
 class HeadPerceptionState(str, Enum):
     FACE_POSE = "face_pose"
     FACE_ONLY = "face_only"

@@ -5,7 +5,7 @@ from typing import Optional, Tuple
 from gazelle.runtime.contracts import HeadObservation
 from gazelle.runtime.geometry import sanitize_normalized_bbox
 from gazelle.runtime.heads import HeadProvider
-from gazelle.runtime.perception.contracts import HeadFrameResult, HeadPerception
+from gazelle.runtime.perception.contracts import HeadFrameResult, HeadPerception, candidate_pool_size
 from gazelle.runtime.perception.fusion import build_head_candidates
 from gazelle.runtime.perception.gaze_policy import (
     annotate_gaze_eligibility,
@@ -102,6 +102,7 @@ class MediaPipeHeadProvider(HeadProvider):
         self._bridge = bridge
         self._reference_ray_length = reference_ray_length
         self._closed = False
+        self._previous_selection = ()
 
     @classmethod
     def create(
@@ -164,7 +165,9 @@ class MediaPipeHeadProvider(HeadProvider):
                 for person_id, candidate in enumerate(candidates)
             )
             return annotate_gaze_eligibility(
-                arbitrate_perceptions(perceptions, max_heads=self._max_heads)
+                tuple(replace(item, person_id=index) for index, item in enumerate(
+                    arbitrate_perceptions(perceptions, max_heads=self._max_heads)
+                ))
             )
         tracked = self._tracker.update(
             candidates,
@@ -174,11 +177,16 @@ class MediaPipeHeadProvider(HeadProvider):
             image_height=image_height,
         )
         perceptions = self._bridge.update(tracked, timestamp_ms=timestamp_ms)
-        perceptions = arbitrate_perceptions(perceptions, max_heads=self._max_heads)
-        if self._max_heads == 1 and perceptions and not perceptions[0].provisional:
-            self._bridge.retain_person_ids(
-                tuple(perception.person_id for perception in perceptions)
-            )
+        # Provisional heads may win output selection but must not affect bridge pruning.
+        confirmed = arbitrate_perceptions(
+            (item for item in perceptions if not item.provisional),
+            max_heads=self._max_heads, previous_selection=self._previous_selection,
+        )
+        perceptions = arbitrate_perceptions(
+            perceptions, max_heads=self._max_heads, previous_selection=self._previous_selection,
+        )
+        self._bridge.retain_person_ids(tuple(item.person_id for item in confirmed))
+        self._previous_selection = tuple((item.person_id, item.head_bbox) for item in perceptions)
         return annotate_gaze_eligibility(perceptions)
 
     def get_frame_result(self, frame, frame_index, timestamp_ms, image_width, image_height):
@@ -198,7 +206,7 @@ class MediaPipeHeadProvider(HeadProvider):
             for candidate in build_head_candidates(
                 faces=observed.faces,
                 poses=observed.poses,
-                max_heads=self._max_heads,
+                max_heads=candidate_pool_size(self._max_heads),
                 reference_ray_length=self._reference_ray_length,
             )
         )

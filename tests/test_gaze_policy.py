@@ -65,6 +65,39 @@ def frame_result(*perceptions):
 
 
 class GazePolicyTest(unittest.TestCase):
+    def test_continuity_beats_alternating_confidence_and_retains_provisional(self):
+        previous=()
+        for index in range(6):
+            a=replace(perception(7,confidence=.9 if index%2==0 else .6),head_bbox=(.1,.1,.2,.2))
+            b=replace(perception(8,confidence=.6 if index%2==0 else .9),head_bbox=(.7,.1,.8,.2))
+            selected=arbitrate_perceptions((b,a),max_heads=1,previous_selection=previous)
+            self.assertEqual([p.person_id for p in selected],[7])
+            previous=tuple((p.person_id,p.head_bbox) for p in selected)
+        fresh=replace(a,person_id=12,provisional=True)
+        stale=replace(a,observed=False,state=HeadPerceptionState.TRACKED_ONLY)
+        self.assertEqual(arbitrate_perceptions((stale,b,fresh),max_heads=1,
+                                              previous_selection=previous),(fresh,))
+
+    def test_identity_during_gap_then_priority_when_expired(self):
+        stale=replace(perception(1,observed=False,state=HeadPerceptionState.TRACKED_ONLY),
+                      head_bbox=(.1,.1,.2,.2))
+        other=replace(perception(2),head_bbox=(.7,.1,.8,.2))
+        previous=((1,stale.head_bbox),)
+        self.assertEqual(arbitrate_perceptions((other,stale),max_heads=1,previous_selection=previous),(stale,))
+        self.assertEqual(arbitrate_perceptions((other,),max_heads=1,previous_selection=previous),(other,))
+
+    def test_spatial_distance_tie_priority_original_order_and_no_duplicate_selection(self):
+        a=replace(perception(3,confidence=.9),head_bbox=(.3,.3,.4,.4))
+        b=replace(a,person_id=5,confidence=.7)
+        c=replace(a,person_id=9,head_bbox=(.8,.8,.9,.9),confidence=1.)
+        previous=((1,a.head_bbox),(2,a.head_bbox))
+        self.assertEqual(arbitrate_perceptions((b,c,a),max_heads=1,previous_selection=previous),(a,))
+        self.assertEqual(arbitrate_perceptions((b,c,a),max_heads=2,previous_selection=previous),(b,a))
+        nearer=replace(a,person_id=11,head_bbox=(.31,.3,.41,.4),confidence=.5)
+        farther=replace(a,head_bbox=(.32,.3,.42,.4))
+        self.assertEqual(arbitrate_perceptions((farther,nearer,c),max_heads=1,
+                         previous_selection=((0,a.head_bbox),)),(nearer,))
+
     def test_tracked_only_is_continuity_only(self):
         item = perception(
             3,

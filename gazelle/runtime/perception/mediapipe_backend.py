@@ -11,6 +11,7 @@ from gazelle.runtime.perception.contracts import (
     HeadPoseAngles,
     NormalizedLandmark,
     PoseObservation,
+    candidate_pool_size,
 )
 from gazelle.runtime.perception.resources import PreparedMediaPipeResources
 
@@ -102,7 +103,7 @@ def _create_mediapipe_task_bundle(
                     model_asset_path=str(pose_landmarker_path),
                 ),
                 running_mode=detector_pose_mode,
-                num_poses=max_heads,
+                num_poses=candidate_pool_size(max_heads),
             )
         )
         created_tasks.append(pose_landmarker)
@@ -373,7 +374,7 @@ class MediaPipeBackend:
                 getattr(detector_result, "detections", ()),
                 key=_detection_confidence,
                 reverse=True,
-            )[: self._max_heads]
+            )[: candidate_pool_size(self._max_heads)]
             face_start = perf_counter()
             faces = []
             for detection in detections:

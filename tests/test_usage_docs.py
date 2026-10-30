@@ -39,6 +39,21 @@ VIDEO_CODEC_PLAN = (
 
 
 class UsageDocumentationTest(unittest.TestCase):
+    def test_face_pose_anchor_pool_and_continuity_contract(self):
+        for path in (ENGLISH_README,ENGLISH_GUIDE):
+            text=self._read(path)
+            for token in ('at least 3 candidates','anchor rule','pose nose','both shoulders',
+                          'spatial continuity','identity','video IDs need not start at 0',
+                          'excluding all provisional','neutral to bridge pruning'):
+                self.assertIn(token,text,str(path))
+            self.assertNotIn('provisional winner preserves existing confirmed bridge state',text)
+        for path in (CHINESE_README,CHINESE_GUIDE):
+            text=self._read(path)
+            for token in ('至少 3 个候选','锚点规则','姿态鼻点','双肩','空间连续','身份连续',
+                          '视频 ID 不保证从 0 开始','排除全部 provisional','不影响桥接修剪'):
+                self.assertIn(token,text,str(path))
+            self.assertNotIn('临时头部胜出时保留已有的已确认轨迹桥接状态',text)
+
     def _read(self, path):
         return path.read_text(encoding="utf-8")
 

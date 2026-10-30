@@ -1,5 +1,6 @@
 import math
 import unittest
+from dataclasses import replace
 
 from gazelle.runtime.perception.contracts import (
     FaceObservation,
@@ -57,11 +58,13 @@ def make_head_candidate(
     confidence,
     state,
     face_bbox=None,
+    pose_head_keypoints=PoseHeadKeypoints(),
 ):
     return HeadCandidate(
         source_index=source_index,
         head_bbox=head_bbox,
         face_bbox=face_bbox,
+        pose_head_keypoints=pose_head_keypoints,
         confidence=confidence,
         state=state,
         view_state=(
@@ -73,6 +76,44 @@ def make_head_candidate(
 
 
 class HeadFusionTest(unittest.TestCase):
+    def test_anchor_precedence_and_inclusive_bounds(self):
+        face = build_head_candidates(faces=(make_face((.3,.3,.5,.5)),), poses=(), max_heads=1)[0]
+        pose = build_pose_head_candidate(make_pose_head_at(.4,.4))
+        inside = landmark(.4,.4)
+        outside = landmark(.8,.4)
+        shoulders = dict(left_shoulder=landmark(.2,.7), right_shoulder=landmark(.6,.7))
+        for points, expected in (
+            (PoseHeadKeypoints(nose=inside), True),
+            (PoseHeadKeypoints(nose=landmark(face.head_bbox[0],face.head_bbox[1])), True),
+            (PoseHeadKeypoints(nose=outside,left_eye=inside,right_eye=inside,**shoulders), False),
+            (PoseHeadKeypoints(left_eye=inside,right_eye=inside), True),
+            (PoseHeadKeypoints(left_eye=inside,right_eye=outside,**shoulders), False),
+            (PoseHeadKeypoints(mouth_left=inside,mouth_right=inside,left_ear=outside), True),
+            (PoseHeadKeypoints(**shoulders), True),
+            (PoseHeadKeypoints(left_eye=inside,**shoulders), True),
+            (PoseHeadKeypoints(left_shoulder=landmark(.6,.7),right_shoulder=landmark(.2,.7)), True),
+            (PoseHeadKeypoints(left_shoulder=landmark(.5,.7),right_shoulder=landmark(.7,.7)), False),
+            (PoseHeadKeypoints(left_shoulder=landmark(.2,.1),right_shoulder=landmark(.6,.1)), False),
+            (PoseHeadKeypoints(left_eye=inside), False),
+            (PoseHeadKeypoints(), False),
+        ):
+            with self.subTest(points=points):
+                self.assertEqual(associate_face_pose(face,replace(pose,pose_head_keypoints=points)),expected)
+
+    def test_adjacent_people_match_anchors_before_single_person_truncation(self):
+        faces=(make_face((.30,.30,.40,.42),.99),make_face((.43,.30,.53,.42),.70))
+        poses=(make_pose_head_at(.35,.36,.80,pose_index=0,marker=10),
+               make_pose_head_at(.48,.36,.95,pose_index=1,marker=20))
+        pool=build_head_candidates(faces=faces,poses=poses,max_heads=3)
+        self.assertEqual(len(pool),2)
+        self.assertTrue(all(c.state is HeadPerceptionState.FACE_POSE for c in pool))
+        self.assertEqual([c.pose_head_keypoints.nose.z for c in pool],[10,20])
+        self.assertAlmostEqual(pool[0].head_bbox[2] - pool[0].head_bbox[0], .14)
+        self.assertAlmostEqual(pool[1].head_bbox[2] - pool[1].head_bbox[0], .14)
+        self.assertEqual(build_head_candidates(faces=faces,poses=poses,max_heads=1),pool[:1])
+        single=build_head_candidates(faces=faces[:1],poses=poses[1:],max_heads=1)[0]
+        self.assertEqual(single.state,HeadPerceptionState.FACE_ONLY)
+
     def assertBBoxAlmostEqual(self, actual, expected):
         self.assertIsNotNone(actual)
         self.assertEqual(len(actual), 4)
@@ -253,6 +294,7 @@ class HeadFusionTest(unittest.TestCase):
             source_index=1,
             confidence=0.8,
             state=HeadPerceptionState.POSE_ONLY,
+            pose_head_keypoints=PoseHeadKeypoints(nose=landmark(.45,.5)),
         )
 
         self.assertTrue(associate_face_pose(face, pose))
@@ -277,6 +319,7 @@ class HeadFusionTest(unittest.TestCase):
             source_index=1,
             confidence=0.8,
             state=HeadPerceptionState.POSE_ONLY,
+            pose_head_keypoints=PoseHeadKeypoints(nose=landmark(.3,.5)),
         )
 
         self.assertTrue(associate_face_pose(face, pose))
@@ -311,6 +354,7 @@ class HeadFusionTest(unittest.TestCase):
             source_index=7,
             confidence=0.6,
             state=HeadPerceptionState.POSE_ONLY,
+            pose_head_keypoints=PoseHeadKeypoints(nose=landmark(.5,.4)),
         )
 
         candidate = fuse_head_candidates(face, pose)
