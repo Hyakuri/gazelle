@@ -6,13 +6,14 @@
 </style>
 <style>
 #frameSurface{position:relative;margin:12px 0}#frameSurface #image{margin:0}#pointOverlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}#pointTools{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}#pointStatus{color:#f1c40f}#pointNotice{color:#ffd5a0;min-height:1.4em}#timeline span.missingPoint{border-bottom:5px solid #ffb347}#timeline span.hasPoint{box-shadow:inset 0 6px white}
+#webcamImage:not([hidden]){display:block}
 </style>
 <header><h1>多视角注视区域标注</h1><span id="status">正在读取数据集…</span></header>
 <p>判断依据：眼睛优先，其次头部，最后手部。看自己的手或手中、正被手移动的物体时选“手部/手中物体”，优先于区域。单击全局画面添加注视点；拿不准可跳过。斜线表示尚未看过，橙色底线表示缺注视点。</p>
 <div id="error" role="alert"></div>
 <div id="toolbar"><label>片段 <select id="segments"></select></label><button id="play">播放（空格）</button><select id="speed"><option value="1">1×</option><option value="0.5">0.5×</option></select><button id="back1">−1 秒</button><button id="back">−0.2 秒</button><button id="forward">+0.2 秒</button><button id="forward1">+1 秒</button><button id="nextUnlabeled">下一个未标注</button></div>
 <div id="current"></div><button id="finish" disabled>本段完成</button><div id="frameSurface"><img id="image" alt="前方（左上）、右侧（左下）、全局（右侧）同步画面"><svg id="pointOverlay" viewBox="0 0 1920 720" aria-label="全局注视点"></svg></div>
-<details id="webcamPanel" hidden open><summary>W 辅助参考（可收起，注视点仍在上方全局画面标注）</summary><span id="webcamStatus" role="status"></span><img id="webcamImage" alt="同步 webcam 辅助参考" style="display:block;max-width:100%;width:640px;aspect-ratio:16/9"></details>
+<details id="webcamPanel" hidden open><summary>W 辅助参考（可收起，注视点仍在上方全局画面标注）</summary><span id="webcamStatus" role="status"></span><img id="webcamImage" alt="同步 webcam 辅助参考" style="max-width:100%;width:640px;aspect-ratio:16/9"></details>
 <div id="pointTools"><button id="deletePoint">删除当前步注视点（X）</button><button id="skipPoint">本片段跳过注视点（S）</button><button id="outOfView">本片段画面外（O）</button><span id="pointStatus"></span></div><div id="pointNotice" role="status"></div>
 <div id="timeline" aria-label="标注时间轴"></div><input id="scrub" type="range" min="0" max="299" value="0" aria-label="时间步">
 <div id="classes"></div><div id="toolbar"><button id="deleteChange">删除当前变化点（Delete）</button><button id="undo">撤销（Ctrl+Z）</button><small>数字键：从当前步标到下一变化点。左右方向键：移动一步。</small></div>

@@ -9,7 +9,7 @@
 | 项目 | 内容 |
 | --- | --- |
 | 当前阶段 | 阶段 2：作业数据可用、多机同步、正确性修复，建立区域标注 |
-| 当前任务 | 第 8 轮第 3 项：`docs/collab/tasks/TASK-150-new-sessions-and-webcam-intake.md`（契约 r2 至 r4）；TASK-125 第 4 轮与 TASK-101 已通过 Codex 检查，待 Claude 独立验收 |
+| 当前任务 | 第 8 轮第 4 项：`docs/collab/tasks/TASK-140-sync-validation-and-steps.md` 第 3 轮，只补测试与正式字段说明；TASK-150 的数据失败与交接边界问题已记录，待 Claude 判断 |
 | 轮到 | Codex |
 | 最近更新 | 2026-10-30 晚，Claude 完成第 7 轮审查：TASK-125 第 3 轮通过，正式标注可以开始；第 8 轮交给 Codex。同日较早：你确认 Q-027、Q-028，工作区域自动重配准方案已写入设计。此前的更新记录见 HISTORY |
 
@@ -276,7 +276,7 @@ flowchart LR
 | Codex 第 7 轮 | TASK-125 第 3 轮：按住按键与撤销键、测试与文档的小项、手部类换色（Q-025） | accepted | Claude 2026-10-30 审查通过，真实按住重复事件已补测 |
 | Codex 第 8 轮 | TASK-125 第 4 轮：鼠标用过的滑块、下拉框与按钮释放焦点 | ready-for-review | `980d8ee`；717 tests / 0 skip、Node 与临时浏览器检查通过；待 Claude Edge 独立验收；不改正式数据 |
 | Codex 第 8 轮 | [TASK-101](collab/tasks/TASK-101-face-pose-association.md) 人脸与姿态关联修正（D1，契约 r2） | ready-for-review | `569394b`；729 tests / 0 skip；Sunny A/B、office 及两段作业视频真实检查完成；待 Claude 独立验收 |
-| Codex 第 8 轮 | [TASK-150](collab/tasks/TASK-150-new-sessions-and-webcam-intake.md) 新录制与 webcam 接入（D26） | ready | 契约 r2 至 r4（源目录迁移；分层数据集移到 TASK-152）；你标注期间不碰 `roi_r2` 的标签 |
+| Codex 第 8 轮 | [TASK-150](collab/tasks/TASK-150-new-sessions-and-webcam-intake.md) 新录制与 webcam 接入（D26） | ready-for-review | `397c5d1` 与后续加载隐藏修正；744 tests / 0 skip；1016 E、1023 A 校准失败，两次代理未生成；两次交接区间与初稿时钟出处需 Claude 判断，数据目标未达成 |
 | Codex 第 8 轮 | TASK-140 第 3 轮：只补测试与正式字段说明 | ready | 见 TASK-140 §3 |
 | Codex 第 9 轮 | [TASK-152](collab/tasks/TASK-152-recording-20261030-intake.md) 新录制 `20261030` 接入与 2026-10 分层数据集（12 段） | proposed | 等 TASK-150 通过审查；你决定纳入（Q-026） |
 | Codex 第 9 轮 | TASK-151 工作区域自动重配准：背景图、区域指纹、逐区域配准、检查提示、录制内监测 | proposed | 方案已确认（Q-028）；等 TASK-150；契约在第 8 轮审查时编写；`20261030` 要等 TASK-152 |

@@ -274,4 +274,53 @@ git status --short
 
 ## 2. 实施报告（Codex 追加，勿改上文）
 
+### 第 8 轮实施记录（Codex，2026-10-31；实现待审，真实数据受 B 级问题阻塞）
+
+- 以实时 STATE 接手，沿用 `feature/stage2-correctness` 与 draft PR #6；主线程 Inline Execution，无子代理。实现提交 `397c5d168ceaa67d0424659623232f548c65fe0d` — `Support selected recordings and optional synchronized webcam references` 已推送；[实现检查点](https://github.com/Hyakuri/gazelle/pull/6#issuecomment-6527893311)。本节不是独立验收。
+- 代码：清单、重封装可重复传 `--session`，保留未选录制的行；迁移后的 E 来源按相对路径、大小、清单 SHA 核对。严格识别 `WIN_YYYYMMDD_HH_MM_SS_Pro.mp4`，W 以文件名电脑时钟加原生 PTS 建图，不改 OSD 版式。W 单列于 `auxiliary_cameras`，同一 5 Hz 网格上沿用现有校准方法、720p 无音轨代理与 W–B 门槛，失败不挡 A/B/E。
+- 抽样与标注：新增 `--no-pilot`、`--cohort`、`--worker-spans`，每次录制的随机数独立；按最大重叠、无人时段最近片段、相同则较早片段归属，不重抽。通过 W–B 验证并绑定映射、session、视频 SHA 后，才把 W 纳入参考图；640×360 JPEG 逐张带哈希、缺口和不确定标记。页面可收起 W，注视点仍只在 E 标注。无 W 的 payload、拼图与默认旧 7 次抽样保持原行为。
+- 契约保护：`check_implementation.py` 比较 **21 个采样、映射、A/E 运动/拟合组件的 AST，全部不变**；采样 SHA 为 `7c6c32f413379ddb023dcfc07295376aec727bf12bffb13af2f6e3461ac6d77d`。旧映射、代理不因新实现指纹而重跑。正式 `roi_r2` 的 `labels.json`、`labels.json.bak` 未读写，不在该目录运行提取或校验；正式区域与导出不改。
+
+#### 命令、检查与实际活动
+
+- 所有 Python 使用 `C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe`，字节码在仓库外 TEMP；未安装、卸载或修改环境。外部证据目录 `gazelle_runs/task-150/`，数据在 `gazelle_data/workdata/`，源 `E:\Gazelle_Workdata` 只读。没有接入 `20261030`，没有生成 `roi_r2_2026_10`。
+- 核对版本：Python 3.14.8、PyAV 19.0.1、NumPy 2.5.4、OpenCV 5.0.0.93、MediaPipe 1.1.1；FFmpeg/ffprobe 为预检中的 `2025-03-31-git-35c091f4b7-full_build-www.gyan.dev`。结束检查确认两个校准 PID 不存在；命令组合的最后一个 `Get-Process` 因进程已退出返回 1，不是 docs/check 或校准之外的新失败。
+- `run-gate.ps1 -Tag task150`：`python -m compileall main.py gazelle tests tools`、`python -m unittest discover -s tests -v`（**744 tests / 35.344s / 0 skip**）、`python main.py --help`、`python main.py --list-models`、两个 Node harness、`python -m tools.docs build`、`python -m tools.docs check`、`git diff --check` 均 exit 0。合成坏 MP4 的 `moov atom not found` 与 Git LF/CRLF 提示为非致命消息。TDD 红/绿记录在 `*-red.log`、`*-green.log`；功能门 `task150-gate.json` 逐命令保存退出码。
+- 临时浏览器数据集的 **7 项实际检查通过**：W 640×360、步 2 对应图片、不确定提示、收起、展开、无 W 隐藏、原拼图 1920×720。证据 `webcam-browser-checks.json` 与合成截图 `webcam-browser.png`；测试标签独立，8810 服务停止、标签页关闭。最初两次定位器不匹配，改用实际 DOM 定位后成功；不是页面故障。未把本次内置浏览器检查称为 Edge 真实按住重复验收。
+- `audit_before.py`：预先列明 **16,836 文件 / 87,442,562,724 字节**；共享 inventory/remux report/proxy manifest/ROI candidates 的整文件 SHA 在已保护 JSON 中未发现依赖（`shared-hash-dependencies.json`），随后按契约保留旧行。inventory 原文件改名 `inventory.before-task150-20261031.json`；旧 40 行逐字段不变，root 更新为新根，清单现 **56 文件 / 2 W**。
+- `run_intake.py` 调用 `create_inventory(..., sessions=['20261016','20261023'])`、`run_inventory(..., sessions=...)`，无 `--force`。两个新 E 实际 FFmpeg stream-copy 重封装通过包数、PTS、时长、头/中/尾解码与 EOF 检查；有效输出分别 **54,058 / 54,296 包**，空小包全部去除。旧 11 条报告逐字段不变，报告合计 13 条。命令与检查在 `remux-result.json`，未上传视频或派生 JSON。
+- 两次 `python -m tools.workdata.timemap --inventory .../inventory/inventory.json --remux-root .../remux --out-root .../timemaps_v2_base --session <日期>` 均 exit 0：1016 的 7 文件、1023 的 9 文件全部 valid；E 分别 352、360 个锚点。W 各完整扫描原生 PTS，来源为 filename_clock、b=1，不读取画面时钟。`base_summary.py` 核对当前实现 SHA 与覆盖。1023 的 A/B 大缺口均在文件边界，**5.985482693 / 5.952110529 秒**，另有 0.124、0.093 秒边界缝；E 连续。
+- 两次 `python -m tools.workdata.sync_calibrate --timemaps .../timemaps_v2_base --out-root .../timemaps_v3 --samples-root .../sync_samples_v2 --keyframes-root .../keyframes_v3 --session <日期>` 均已结束，**exit 1**，分别因 1016 E、1023 A 的尾部残差超限；详见 B 级问题。实际优先级检查为 BelowNormal（16384），本轮长 CPU 作业最多三个；所有作业和临时服务已结束。
+- 0903 交接核实：`check_handover.py --session 20260903` 在 B 时钟开区间 00:14:00–00:19:35，对 A/B **各 6,700 个原生帧**用缓存 `blaze_face_full_range.tflite`、CPU、1920×1080 检测，宽度换算到 4K ≥200、分数 ≥0.5。A **81 命中帧**，B **64 命中帧（65 次检测）**；以源文件与 PTS 去重后修正了原先把检测次数当作帧数的记录；首个分别为 00:19:26.725725、00:19:31.082138，脚本 exit 1。目视六张命中帧确认实际人脸。最初按重叠起点取日期，跨午夜使错误日期无帧而误报通过；原失败证据保留为 `handover-20260903-initial-date-error.*`，改为重叠中点日期并断言区间、非零帧后重跑，以上只使用重跑结果。
+- MediaPipe 模型 SHA `3698b18f063835bc609069ef052228fbe86d9c9a6dc8dcb7c7c2d69aed2b181b`，复用缓存，无下载、无 Gazelle/CUDA 推理。开发阶段遥测按 GZ-23 许可，未做包级网络审计。实际活动还包括本机 HTTP/浏览器、CPU 解码、FFmpeg、GitHub；Git/GitHub 沿用获准 yun 上下文，不复制凭据。图片仅在本机证据目录，不进仓库。
+- 六份用户/工具说明及文档测试已同步。当前只实现新分层能力，正式生成由 TASK-152 负责。
+- 后续自查发现 W 图片的内联 `display:block` 会覆盖 `hidden`。在合成服务 8811 将步 1 图片延迟 25 秒，实际浏览器复现 `hidden=true` 但 computed display=block；改为仅在 `:not([hidden])` 时 display:block。重跑变为 display=none，加载后恢复 block、640×360。证据 `webcam-delay-check.json`、`webcam-browser-fixed.png`；临时服务和标签页已关闭。修复没有改变文档所述行为；`run-gate.ps1 -Tag task150-final` 重跑完整门 **744 tests / 38.588s / 0 skip**，其余八项同样 exit 0，结果为 `task150-final-gate.json`。
+- `audit_after.py` 对预先列明的 **16,836 文件**重新计算 SHA，**338.266s、exit 0**；只有允许追加的 inventory 与 remux report 整文件 SHA 改变，旧 40 行、11 条报告及 7 条代理索引逐字段相同，inventory 改名备份 SHA 等于旧文件。其他旧产物、两个数据集的限定元数据/帧均逐字节不变。初跑已列出的变化同样只有两个共享文件，但检查器的正反斜线比较不一致导致 exit 1；修正外部脚本后完整重算，失败日志 `protection-after.log` 保留，正式结果为 `protection-after-fixed.log`、`protection-result.json`。共享代理索引的后续追加另做旧行核对。
+- 1016 交接核实独立使用已通过的 A→B 校准与 B 基础映射，不依赖失败的 E。`check_handover.py --session 20261016` 实际检查 A/B **各 4,250 帧**，A **20 帧**、B **43 帧**命中；最早分别为 B 时钟 **13:16:27.007591 / 13:16:26.601678**，均位于契约交接区间内。273.977s，exit 1；首个、最高分、最后一个共六张实际帧经目视确认有人脸，证据 `handover-20261016-summary.json` 与本机 `handover-20261016-hits.jpg`。没有据此识别身份或修改 P1/P2 边界。
+- 两次八组灰度样本完整扫描到 EOF并通过像素 SHA 复核，1016 每机 **18,018 步**，1023 每机 **18,099 步**。A/B/E/W 的实际解码帧数分别为 1016 **117253/90664/54058/161708**、1023 **137755/93002/54296/161707**。`final-data-audit.json` 保存映射、旁注、像素 SHA，核对全部 16,836 保护文件在完整哈希后大小和 mtime 不变；正式代理索引 SHA 与本轮前相同。
+- **未运行项**：两次正式代理、代理残差验证、9 个时钟抽查/录制、事件条图与正式索引追加，均因必需校准失败而未运行，不以模型拟合通过代替代理 W–B 验收。`run_proxy_validation.py`、`make_clock_samples.py`、`append_proxy_manifest.py` 已准备但未执行；原时钟抽样脚本复制为 `check_proxy_clocks.original.py`，计划方法仍为固定种子 `20261015 + int(session)`。没有生成正式旁注，故没有正式 `sync_uncertain` 步数；`cut-diagnostics.json` 仅记录映射切点在原采样网格上的诊断投影：1016 E 区间 [1070.138509,1100.279277] → 151 步；1023 E 两区间 [1140.362641,1200.324615]、[1620.357520,1673.666389] → 301、268 步，均 localized。其余拟合无切点；这些数字不是可用于抽样的正式标记。
+- 作业者只在本任务运行目录生成 **9 次 / 11 段**的 `worker_spans_candidate.json` 和 `worker-conversion-review.json`，带 review-only/阻塞说明。旧 7 次原本已在 B 代理轴，外端点裁到重叠范围；新录制保留原时钟为候选，并列出可用摄像机校准的替代换算。格式、非重叠、范围和交接排除校验通过，**正式 `workers/worker_spans.json` 未创建**，不能把候选当作已确认数据。
+
+#### 自主决定（A 级）
+
+- W 的接口与错误隔离按契约单列，参考图必须有绑定的通过验证；重用既有 A/E 算法而不复制改写研究门槛。临时数据覆盖新 schema，原有三机路径回归通过。
+- 用原生逐帧核实交接，比先前约 5 秒抽样细；不据此自行改动匿名片段边界。无效的日期初跑、定位器失败等保留证据，不计作成功。
+- 等待真实处理时，只在仓库外准备 TASK-140 测试并在隔离进程内做变异；生产代码、正式数据不受改写。13 个变异全部触发断言失败，结果待 TASK-140 正式报告归档。
+
+#### 范围外改动
+
+- 无。相邻 ROI 提取代码只复用本任务要求的迁移后重封装来源校验，没有运行正式候选提取。
+
+#### 待 Claude 判断（B 级）
+
+0. **1016 必需的 E 校准失败，依赖它的代理与验证暂停**：A 51/60 有效窗、MAD 0.055943、尾部 2/51；W 52/60、MAD 0.042401、尾部 4/52，B 时钟 13:25/13:50 处 W 电脑时钟减 B 为 **−2.384729 / −2.443956 秒**，两处数值核对通过。E 50/60、MAD 0.039280，但尾部 **6/50=12% >10%**，校准命令 exit 1，正式映射保留 `calibrated=false`（SHA `d9a60b922b5f2f0a8dc63d9367f90fd2a04dc6303ba951f7d2a45f56a560ce5b`）。对同一已存窗口的只读诊断发现，原算法细化前为 5/50=10%，细化把切点从 1140.190933 移到 1085.208893 秒后变为 6/50；没有采用粗拟合替换正式失败结果。推荐 Claude 审查切点细化目标与最终门的关系，另行决定是否制定保留有效粗拟合的规则；代价是需要新的协议与独立验证。本轮不改 A/E 的受保护函数，不剔除窗、不放宽门槛、不生成 1016 代理或把它写入正式索引。`fit-gate-diagnostic-20261016.json` 保留六个尾部窗及相关强度，`calibration-summary-20261016.json` 保留完整数值核对。
+   - **1023 必需的 A 同样失败**：53/60 有效窗、MAD 0.054952、尾部 **7/53=13.2075%**，无切点，细化前后相同。E 55/60、MAD 0.051328、尾部 4/55；W 56/60、MAD 0.072269、尾部 3/56，均通过拟合；B 时钟 14:05/14:35 处 W 偏移 **−0.575497 / −0.745526 秒**（按契约仅报告）。映射 SHA `32251e2195c6dbd2a8c9dd629b1eee6a6b5c634aa0887a505a530c7c22954b2f`、`calibrated=false`。推荐 Claude 从已存七个尾部窗及空间运动选择证据复核适用性；继续保留失败，不通过丢弃窗口、改变门槛或重新选样本取得通过。此项与 1016 共同阻塞两次正式代理及 TASK-152 的后续数据生成，相关跳过项写入 `skipped-actions.json`。
+1. **0903、1016 的交接区间前提均不成立**：命中数字与本机图像如上。推荐 Claude 复核最后/最早有效人脸的精确 B 时间后修订边界；Codex 不自行挪动边界，不发布会被 TASK-302 消费的正式 worker_spans。约 5 秒采样与逐原生帧检查的粒度差异可能解释较早入场，但不是改写契约的授权。
+2. **历史重处理工具直接打开记录中的绝对路径**：`sync_calibrate.run`、`proxies.full_mapped_frames/prepare_camera/run`、`keyframes.source_keyframes`、`sync_validate.ProxyClockReader._pair`。新录制的映射使用新根，当前处理不受影响；旧录制在迁移后重处理会失败。推荐另以清单 root + relative_path 在外层解析到内存路径，并保留原哈希记录；本轮没有改写旧产物或受保护采样函数。
+3. **新录制作业者边界的时钟来源未逐项注明**：初稿与分析说明使用各摄像机自己的画面时钟，不能无证据统一当作 B。推荐 Claude 结合原检测记录明确 1016 两个内边界的来源摄像机，再按已通过的 A→B 映射转换；本轮给出候选换算供复核，不发布未确认的正式值。
+
+#### 待用户决定（C 级）
+
+- 无。尚待 Claude 独立审查与用户独立 checkout 验收。
+
 ## 3. 审查结论（Claude 追加）

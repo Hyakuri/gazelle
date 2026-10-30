@@ -12,10 +12,10 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 | pr | [#6](https://github.com/Hyakuri/gazelle/pull/6)（draft）；正文来源 `docs/collab/STAGE2_PR_BODY.md` |
 | writer | codex |
 | next_actor | codex |
-| current_task | 第 8 轮第 3 项：`docs/collab/tasks/TASK-150-new-sessions-and-webcam-intake.md`（契约 r2 至 r4）；TASK-125 第 4 轮与 TASK-101 已通过 Codex 检查，待 Claude 独立验收 |
-| after_current | 依次做 TASK-101（契约 r2）、TASK-150（契约 r2 至 r4）、TASK-140 第 3 轮。全部完成后结束本轮，把 `next_actor` 改为 `claude`。本轮不做 TASK-152、TASK-151、TASK-153，也不开始阶段 3 的任务 |
+| current_task | 第 8 轮第 4 项：`docs/collab/tasks/TASK-140-sync-validation-and-steps.md` 第 3 轮，只补测试与正式字段说明；TASK-150 的数据失败与交接边界问题已记录，待 Claude 判断 |
+| after_current | TASK-140 第 3 轮完成后结束本轮，把 `next_actor` 改为 `claude`。本轮不做 TASK-152、TASK-151、TASK-153，也不开始阶段 3 的任务 |
 | environment | `Gazelle-next`：`C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe`（用户 2026-10-17 决定 D16）。现有 `Gazelle` 作为回退保留，不改动 |
-| last_pushed | `569394b30fdbe2e586332e89c02e27483b9c59a9`（TASK-101 实现；本报告随后提交推送，以实时 Git HEAD 为准） |
+| last_pushed | `397c5d168ceaa67d0424659623232f548c65fe0d`（TASK-150 实现；两次新录制的真实校准仍在运行，尚未交回审查） |
 | last_accepted | `24baf57`。2026-10-30 第 7 轮审查：`36aa643`（协调文档）核对无误；`806068c`（TASK-125 第 3 轮）accepted；`342f5ed` 与 `24baf57` 只含报告与交接。第 6 轮审查：`60464e2` 核对无误，`ac89a66` changes-requested，`a9f0738` 与 `e605687` 只含报告与交接 |
 | 更新 | 2026-10-30 晚，Claude 完成第 7 轮审查：TASK-125 第 3 轮通过，正式标注可以开始；第 8 轮交给 Codex。同日较早：你确认 Q-027、Q-028，工作区域自动重配准方案已写入设计。此前的更新记录见 HISTORY |
 
@@ -61,7 +61,7 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 | Codex 第 7 轮 | TASK-125 第 3 轮：按住按键与撤销键、测试与文档的小项、手部类换色（Q-025） | accepted | Claude 2026-10-30 审查通过，真实按住重复事件已补测 |
 | Codex 第 8 轮 | TASK-125 第 4 轮：鼠标用过的滑块、下拉框与按钮释放焦点 | ready-for-review | `980d8ee`；717 tests / 0 skip、Node 与临时浏览器检查通过；待 Claude Edge 独立验收；不改正式数据 |
 | Codex 第 8 轮 | [TASK-101](tasks/TASK-101-face-pose-association.md) 人脸与姿态关联修正（D1，契约 r2） | ready-for-review | `569394b`；729 tests / 0 skip；Sunny A/B、office 及两段作业视频真实检查完成；待 Claude 独立验收 |
-| Codex 第 8 轮 | [TASK-150](tasks/TASK-150-new-sessions-and-webcam-intake.md) 新录制与 webcam 接入（D26） | ready | 契约 r2 至 r4（源目录迁移；分层数据集移到 TASK-152）；你标注期间不碰 `roi_r2` 的标签 |
+| Codex 第 8 轮 | [TASK-150](tasks/TASK-150-new-sessions-and-webcam-intake.md) 新录制与 webcam 接入（D26） | ready-for-review | `397c5d1` 与后续加载隐藏修正；744 tests / 0 skip；1016 E、1023 A 校准失败，两次代理未生成；两次交接区间与初稿时钟出处需 Claude 判断，数据目标未达成 |
 | Codex 第 8 轮 | TASK-140 第 3 轮：只补测试与正式字段说明 | ready | 见 TASK-140 §3 |
 | Codex 第 9 轮 | [TASK-152](tasks/TASK-152-recording-20261030-intake.md) 新录制 `20261030` 接入与 2026-10 分层数据集（12 段） | proposed | 等 TASK-150 通过审查；你决定纳入（Q-026） |
 | Codex 第 9 轮 | TASK-151 工作区域自动重配准：背景图、区域指纹、逐区域配准、检查提示、录制内监测 | proposed | 方案已确认（Q-028）；等 TASK-150；契约在第 8 轮审查时编写；`20261030` 要等 TASK-152 |
