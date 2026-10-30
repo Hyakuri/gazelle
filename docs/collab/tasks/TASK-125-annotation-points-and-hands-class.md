@@ -348,6 +348,20 @@ CIE76 由 sRGB 线性化、D65 XYZ/CIELAB 和 Lab 欧氏距离独立计算；结
 
 - 无。Q-025 已授权并完成换色；本轮不要求新的环境或权限变更。
 
+### 第 8 轮 / 第 4 轮要求实施报告（Codex，2026-10-31）
+
+- 接手：实时 STATE 为 `writer=none / next_actor=codex`，确认后取得写者；协调文档先独立提交 `acae8a12bba50c5df57ffd6e8c8480f264d082cd` 并推送，PR #6 正文同步。实现提交 `980d8ee0005abb6154da31846463669e3baaa551` — `Release annotation control focus after mouse interaction` 已推送当前分支。
+- 实现：主鼠标指针操作后的 range/select 在 change 时释放焦点；range 在 pointerup 时也释放，覆盖未改变值及拖出边界。按钮在鼠标 click 后释放。keydown 清除鼠标来源记录，Tab、键盘操作与备注文本框保留焦点。原快捷键输入隔离、重复处理、schema 和标签语义不变。
+- 改动：`annotation_page.html`、Node harness、文档测试，以及四份用户文档和两份中文指南，共 9 文件。未改任何正式类别、区域、manifest、帧或标签；未读取用户 `roi_r2/labels.json` 或其备份。
+- 验证（`Gazelle-next` Python 3.14.8；字节码在 TEMP）：先加回归测试，原代码 Node 失败于“鼠标改变控件后释放焦点”，修复后通过。最终 `python -m compileall main.py gazelle tests tools`、`python -m unittest discover -s tests -v`（**717 tests / 31.052s / 0 skip**）、`python main.py --help`、`python main.py --list-models`、`node tests/annotation_page_test.cjs`、`node tests/roi_page_test.cjs`、`python -m tools.docs build`、`python -m tools.docs check`、`git diff --check` 全部 exit 0。非致命输出：无效临时 MP4 测试的 `moov atom not found`；Git LF/CRLF 提示。逐命令日志和时间见仓库外 `gazelle_runs/codex-round8/task125-gate.json`。
+- 浏览器：未替换的 `annotate_server`，端口 8808；`--dataset-root gazelle_validation/roi_r2 --labels-path gazelle_runs/codex-round8/task125-browser.json --annotator codex-round8-test-only`。内置浏览器实测：鼠标选 0.5× 后焦点为 BODY、空格播放；换片段后方向键单步且片段不变；拖滑块后数字键标注；点击撤销后 Enter 不再撤销；Tab/Shift+Tab 到速度控件并用方向键改变值后保留焦点；备注框输入保留焦点。换段尚在异步加载时第一次方向键未移动，加载完成后通过，原帧就绪保护保持。证据 `task125-browser-checks.json`、`task125-controls.png` 留在上述仓库外目录；页面关闭，服务主动 Ctrl+C 停止（exit 1）。
+- 实际活动：CPU 离线测试、本机 HTTP、临时标签读写、GitHub 提交推送与报告；无模型构造/推理、下载、CUDA 推理、FFmpeg 转码、Conda/全局配置修改。FFmpeg/ffprobe、GPU 只在预检查询。普通权限的仓库/三个外部目录/TEMP 创建删除探针通过；普通 gh 认证仍无效，Git/GitHub 按已有批准在 yun 上下文执行，二者分开记录。
+- 反证式复核：鼠标来源与键盘来源分开；新增测试覆盖静态/动态按钮、鼠标转键盘、取消指针、未改变值的滑块及边界外释放。未触碰正式数据，也没有以 mock 代替真实浏览器结果。
+- 自主决定（A 级）：使用委托 pointer/change/click 事件覆盖动态生成的按钮，避免逐项绑定；range 补 pointerup，键盘任何 keydown 撤销鼠标来源；只改变焦点管理。
+- 范围外改动：无。
+- 待 Claude 判断（B 级）：无设计阻塞。独立验收仍待 Claude 按契约在 Edge 运行 E1–E3，并可用任务开始页面作负对照；内置浏览器结果不等同独立验收。
+- 待用户决定（C 级）：无。状态：**ready-for-review / Codex verified**；继续本轮 TASK-101，不结束第 8 轮。
+
 ## 3. 审查结论（Claude 追加）
 
 ### 2026-10-29 第 5 轮审查（Claude）
