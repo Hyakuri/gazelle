@@ -192,13 +192,16 @@ class CalibrationTest(unittest.TestCase):
                     frames=[dict(k=k,t_k=10.+k*.2,source=row['source'],pts=k*.2,delta_seconds=0.,gap=False) for k in range(3)],
                     source_decode=[dict(source=row['source'],decoded_frames=12,reached_eof=True)])))
                 original[target]=target.read_bytes();original[sidecar]=sidecar.read_bytes()
-            windows=[dict(t_mid_seconds=t,lag_seconds=0.,valid=True) for t in np.linspace(.02,.38,10)]
+            windows=[dict(t_mid_seconds=t,lag_seconds=.03,valid=True) for t in np.linspace(.02,.38,10)]
             with patch('tools.workdata.sync_calibrate.sample_camera',side_effect=AssertionError('must not decode')), \
                  patch('tools.workdata.keyframes.source_keyframes',return_value={r['source']:[] for r in files}), \
                  patch('tools.workdata.sync_calibrate.window_lags',return_value=windows), \
                  patch('tools.workdata.timemap.assemble_session',return_value=dict(session='session')):
                 result=run(mapping,root/'new',root/'samples',reuse_samples=True)
                 self.assertTrue(result['calibrated'])
+                for camera in ('cam_a','cam_e'):
+                    for row in result['calibration'][camera]['windows']:
+                        self.assertAlmostEqual(row['b_mid_seconds'], row['t_mid_seconds']+.03)
                 self.assertFalse(result['auxiliary_cameras']['cam_w']['available'])
                 self.assertIn('valid base map',result['auxiliary_cameras']['cam_w']['reason'])
                 self.assertEqual(result['sampling_evidence']['cam_a']['fingerprint']['implementation_sha256'],'original-code')

@@ -41,6 +41,10 @@ class SyncRevisionTest(unittest.TestCase):
         self.assertTrue(fit['valid'])
         self.assertEqual([p['adjacent_window_centers'] for p in fit['breakpoints']],
                          [[810.,870.],[2490.,2610.]])
+        self.assertAlmostEqual(fit['breakpoints'][0]['step_seconds'], .394, delta=.0005)
+        self.assertAlmostEqual(fit['breakpoints'][1]['step_seconds'], -.243, delta=.0005)
+        self.assertAlmostEqual(fit['residual_mad'], .0597, delta=.00005)
+        self.assertEqual(fit['residual_tail_fraction'], 0.)
         rng = np.random.default_rng(7)
         for sigma in (.03,.02,.02,.04,.06): rng.normal(0,sigma,60)
         for trial in range(24):
@@ -146,12 +150,12 @@ class SyncRevisionTest(unittest.TestCase):
         rng = np.random.default_rng(140)
         reference = rng.normal(size=6000)
         delayed = np.r_[np.zeros(2), reference[:-2]]
-        result = measure({'cam_b': reference, 'cam_a': delayed, 'cam_e': reference}, 1200.)
-        for name in ('A-B', 'A-E'):
+        result = measure({'cam_b': reference, 'cam_a': delayed, 'cam_e': np.r_[0., reference[:-1]]}, 1200.)
+        for name, expected in (('A-B', .4), ('E-B', .2), ('A-E', .2)):
             values = [row['lag_seconds'] for row in result[name]['windows'] if row['valid']]
             self.assertGreaterEqual(len(values), 10)
-            self.assertAlmostEqual(float(np.median(values)), .4, delta=.01)
-        self.assertAlmostEqual(result['E-B']['c0_at_midpoint'], 0., delta=.01)
+            self.assertAlmostEqual(float(np.median(values)), expected, delta=.01)
+        self.assertAlmostEqual(result['E-B']['c0_at_midpoint'], .2, delta=.01)
 
 
 if __name__ == '__main__':

@@ -92,6 +92,16 @@ v3 把窗中心改为自身基础时间 b=t+L，显式计算 `T(b) = b - L(b)`�
 切点不确定区间从两侧最近有效窗中心各外扩半个窗长（长窗 60 s、细化窗 20 s）。
 细化窗全无效时记 `localized: false`，覆盖整个证据空档。区间端点转换到网格时间，
 与缺口/重叠范围的网格步一起在旁注标为 `sync_uncertain`，供抽样和下游共同读取。
+
+正式数据的字段来源：不确定步以各代理旁注的 `sync_uncertain` 为准，抽样取 A/B/E
+三机标记的并集；不要另按映射重算。区间转换取两侧分段的外包，是保守范围。
+旧七次的 `sync_validation_r5` 验证文件以 `round5` 一节为准：0903、0911 的
+`audit.cam_e.sync_uncertain_steps` 仍保留旧值 202、203；当前
+`round5.uncertainty.union_uncertain_steps` 分别为 2059、451。
+`session.json` 与数据集的 `time_map_sha256` 记录生成代理时的映射，部分对应
+`.before-round5` 备份；当前正式映射的 SHA 以 `proxies/manifest.json` 中的
+`accepted_mapping_sha256` 为准。上述旧/新映射系数相同，区分的是区间元数据与生成出处。
+
 旧 v2 读取仍保留两次迭代的方程残差 / `abs(1+c1)` 保护。
 无人或静止时段不能提供校准窗；不能校准时记录原因，不能生成校准代理。
 
