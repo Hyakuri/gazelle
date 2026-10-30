@@ -9,7 +9,7 @@
 | 项目 | 内容 |
 | --- | --- |
 | 当前阶段 | 阶段 2：作业数据可用、多机同步、正确性修复，建立区域标注 |
-| 当前任务 | 第 8 轮第 2 项：`docs/collab/tasks/TASK-101-face-pose-association.md`（契约 r2）；TASK-125 第 4 轮已实现并通过 Codex 检查，待 Claude 独立验收 |
+| 当前任务 | 第 8 轮第 3 项：`docs/collab/tasks/TASK-150-new-sessions-and-webcam-intake.md`（契约 r2 至 r4）；TASK-125 第 4 轮与 TASK-101 已通过 Codex 检查，待 Claude 独立验收 |
 | 轮到 | Codex |
 | 最近更新 | 2026-10-30 晚，Claude 完成第 7 轮审查：TASK-125 第 3 轮通过，正式标注可以开始；第 8 轮交给 Codex。同日较早：你确认 Q-027、Q-028，工作区域自动重配准方案已写入设计。此前的更新记录见 HISTORY |
 
@@ -275,7 +275,7 @@ flowchart LR
 | Codex 第 6 轮 | TASK-125 第 2 轮：注视点与标记互斥、组合键与按住重复、页面隐藏时的保存、数据集版本门、测试与文档 | changes-requested | 一处回归：按住空格会点击获得焦点的按钮；其余通过真实浏览器实测 |
 | Codex 第 7 轮 | TASK-125 第 3 轮：按住按键与撤销键、测试与文档的小项、手部类换色（Q-025） | accepted | Claude 2026-10-30 审查通过，真实按住重复事件已补测 |
 | Codex 第 8 轮 | TASK-125 第 4 轮：鼠标用过的滑块、下拉框与按钮释放焦点 | ready-for-review | `980d8ee`；717 tests / 0 skip、Node 与临时浏览器检查通过；待 Claude Edge 独立验收；不改正式数据 |
-| Codex 第 8 轮 | [TASK-101](collab/tasks/TASK-101-face-pose-association.md) 人脸与姿态关联修正（D1，契约 r2） | ready | 阶段 3 的作业者锁定依赖它 |
+| Codex 第 8 轮 | [TASK-101](collab/tasks/TASK-101-face-pose-association.md) 人脸与姿态关联修正（D1，契约 r2） | ready-for-review | `569394b`；729 tests / 0 skip；Sunny A/B、office 及两段作业视频真实检查完成；待 Claude 独立验收 |
 | Codex 第 8 轮 | [TASK-150](collab/tasks/TASK-150-new-sessions-and-webcam-intake.md) 新录制与 webcam 接入（D26） | ready | 契约 r2 至 r4（源目录迁移；分层数据集移到 TASK-152）；你标注期间不碰 `roi_r2` 的标签 |
 | Codex 第 8 轮 | TASK-140 第 3 轮：只补测试与正式字段说明 | ready | 见 TASK-140 §3 |
 | Codex 第 9 轮 | [TASK-152](collab/tasks/TASK-152-recording-20261030-intake.md) 新录制 `20261030` 接入与 2026-10 分层数据集（12 段） | proposed | 等 TASK-150 通过审查；你决定纳入（Q-026） |

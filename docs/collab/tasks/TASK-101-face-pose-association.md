@@ -116,16 +116,39 @@ git status --short
 
 ## 2. 实施报告（Codex 追加，不要修改上文）
 
-- 接手核对：
-- 提交与推送（SHA）：
-- 变更文件：
-- 命令、退出码、测试数、warnings 与 skips：
-- 证据类型：
-- 真实 smoke 结果与基线对比：
-- 外部活动：
-- 反证式复核（v1.1 §9）：
-- 未运行的检查、限制、阻塞：
-- 状态标签（v1.1 §12）：
+### 第 8 轮实施记录（Codex，2026-10-31）
+
+- 接手基准 `476ebdfd6d04d2b97da91370fbf85dd55a00096b`；当前分支与 PR #6 延续，主线程 Inline Execution，无子代理。已读契约 r2 与设计 §1.2、§4、§6–9；不改研究阈值、跟踪配置、CLI 或 run_config 键。
+- 实现：共享 `candidate_pool_size`，人脸裁剪与姿态池至少 3；鼻点→头部关键点→双肩的优先级锚点门；所有模式统一配对后截断；视频依空间连续、身份连续、原优先级选择并保留原输出顺序；桥接修剪使用独立的非 provisional 选择；图片选择后重新编号。改变 5 个许可代码文件、5 个对应测试及四份用户文档。
+- 离线：先加锚点/跨人匹配/连续选择回归，旧实现 44 tests 中 7 failures、3 errors（不支持新参数）；修正后专项 73 tests 通过。完整 `python -m compileall main.py gazelle tests tools`、`python -m unittest discover -s tests -v`（**729 tests / 26.350s / 0 skip**）、`python main.py --help`、`python main.py --list-models`、两个 Node harness、`python -m tools.docs build/check`、`git diff --check` 均 exit 0。文档专项 23 tests 通过。执行使用 `Gazelle-next` 与仓库外 pycache；日志在 `gazelle_runs/codex-round8/task101-*`。无效临时 MP4 的 `moov atom not found` 属既有非致命输出。
+- 反证复核：仓库外 `task101-negative.py` 从 `git show 476ebdf:<文件>` 只在一次性进程加载旧函数。新锚点/匹配用例拒绝旧 fusion；保留新候选池调用，仅换回旧 `_assign_people` 时，S4 与图片编号用例均失败，证明不会只靠候选池断言掩盖桥接问题。进程退出，仓库文件不变。
+- 真实运行：`task101-smoke.py before` 与 `after` 调用 `task-136/smoke.py cli <repo> ...` 的缓存/网络审计包装。Sunny 使用指定文件（1,249,455 B，SHA-256 `1521746f8392e10ce01a5c6ee13784d35fecdaca5d12e4607af55895681d10b2`），前 30 帧。A：`--max-heads 1 --video-codec avc1`、默认 eligible；B：`--max-heads 2 --video-codec mp4v --gazelle-head-mode all --gaze-render-mode all-predictions --head-box --face-box`。两者另带 `--head-source mediapipe --device cuda --save-rendered --face-pose-ray --pose-head-ray`。office 使用 B 的选择/渲染参数、无视频选项；2026-10-14 图片对照用 max_heads=3，本次为 2，均实际输出 2 个头，故不把该差异归因于算法。
+
+| 对照 | 鼻点在 face-derived 头框外的 face_pose（其中选中推理） | eligible 帧 | 推理调用 / 头数 | valid / out_of_frame | 主体集合变化 |
+| --- | --- | --- | --- | --- | --- |
+| 2026-10-14 A | 14（12） | 14 | 14 / 14 | 3 / 11 | 7 |
+| 本任务开始 A | 14（12） | 15 | 15 / 15 | 4 / 11 | 9 |
+| 修改后 A | 0（0） | 17 | 17 / 17 | 6 / 11 | 1 |
+| 2026-10-14 B | 2（2） | 17 | 29 / 57 | 36 / 21 | 1 |
+| 本任务开始 B | 2（2） | 17 | 30 / 59 | 38 / 21 | 1 |
+| 修改后 B | 0（0） | 17 | 30 / 59 | 38 / 21 | 1 |
+| office 开始 / 修改后 | 0 / 0 | 0 / 0 | 各 1 / 2 | 各 2 / 0 | 不适用 |
+
+- Sunny 主体按面部框所在左右区域核对，集合变化不把两人输出顺序互换计为主体切换；ID 集合的变化数也相同。A 在初始阶段仍切换一次，此后稳定，不宣称长期身份锁定。各组完整 in/out min/median/max、逐帧框和 ID 在 `task101-summary.json`；开始/修改后 run_config 的键集合相同。office 渲染目视未见跨人融合框，但仍存在 MediaPipe 误检，不能把本项视作检测精度验收。
+- 真实环境：Python 3.14.8、torch 2.14.1+cu130、torchvision 0.29.1+cu130、MediaPipe 1.1.1、trackers 2.6.1、supervision 0.30.9、NumPy 2.5.4、OpenCV 5.0.0.93；RTX 4080 SUPER，运行前约 4.75/16.38 GB 占用，无外部训练进程。每次 CUDA 启动再次检查。复用已有 Gazelle/DINOv2/MediaPipe 缓存；Sunny/office 前后缓存文件大小/mtime 清单无变化。Python 审计阻止了每次 Torch Hub 的一次 `urllib.Request`，无下载；MediaPipe native 遥测未由 Python 审计覆盖，不声称对其网络做了完整抓包。实际 FFmpeg：A 的 H.264 finalization，及下述源 MP4 流复制；其余渲染使用 mp4v。无依赖安装、Conda 或全局配置修改。
+- 作业数据补充：第一次按拟合目标 PTS 1136.010265 截取 03:57 的 15 秒，FFmpeg stream-copy 含关键帧前导包，容器 426、实际解码 376 帧；运行时完整性检查正确 exit 1。保留失败日志及输出。源关键帧核对后改用 1136.019，仍流复制且保留原分辨率/帧率，ffprobe 两种计数均 376；运行完成 376/376、exit 0。04:10 附近改用源关键帧 1915.980，也完整通过，详见下表后补充结果。所有源视频只读，剪辑/运行/目视图留在仓库外；不放图像到 Git。
+- 自主决定（A 级）：旧几何门测试补明确的姿态锚点，保持其 IoU/距离边界；新合成例不要求两个合法扩展头框绝不重叠，而是检查各自宽度和姿态来源，避免错误的测试前提。流复制输入改为精确关键帧截取，运行时完整性标准不变。
+- 范围外改动：无仓库范围外代码改动；分析脚本与产物只在授权的仓库外运行目录。
+- 待 Claude 判断（B 级）：暂无设计阻塞；独立算法/真实运行验收待 Claude，用户独立 checkout 未验收。
+- 待用户决定（C 级）：无。
+
+#### 补充运行完成与提交
+
+- 两段关键帧对齐剪辑均完整通过：03:57 为 15.041 秒、约 25 fps；04:10 附近为 15.040 秒、25 fps；均原生 3840×2160、视频流复制、无音频。两次运行各 376 帧读取/输出，`decode_complete=true`，exit 0，耗时 160.20 / 160.42 秒。
+- 03:57：330 face_pose、25 pose_only、21 face_only；274 eligible/推理帧，valid 2、out_of_frame 272；nose-outside 为 0。04:10：297 face_pose、78 pose_only、1 face_only；197 eligible/推理帧，valid 28、out_of_frame 169；nose-outside 为 0。
+- 主体核对：逐帧记录中两段各有一个头；额外目视每秒帧及所有 ID 变化的前后帧，共 23 / 46 张，所选均为工位作业者，03:57 的旁人未被选中。第二段人物在画面内移动较多，未见换成旁人；这是抽查与连续轨迹证据，不是 752 帧逐帧人工验收。公开 ID 仍有 4 / 18 次变化，符合“物理主体连续，不承诺长期身份”的边界。图像证据留在本机，不入 Git。
+- 脚本失败项：首次统计在视频尚未完成写盘时发现 JSONL 行数不齐，未采用部分统计；等待完成后再统计。目视脚本按帧号随机定位第二段末帧失败，改用顺序解码，完整读取 376 帧并只保留抽查图；未改数据或运行时标准。首次失败剪辑与其日志保留，关键帧修正的新剪辑和新输出使用独立文件名。
+- 实现提交 **`569394b30fdbe2e586332e89c02e27483b9c59a9` — `Match face and pose anchors and preserve selected subject continuity`** 已推送；报告另行提交。状态 **ready-for-review / Codex verified**。完整命令、资源活动和统计见仓库外 `task101-before-commands.json`、`task101-after-commands.json`、`task101-workdata-keyframe-commands.json`、`task101-gate.json` 与 `task101-summary.json`。测试进程均已结束，无后台推理遗留。
 
 ## 3. 审查结论（Claude 追加）
 
