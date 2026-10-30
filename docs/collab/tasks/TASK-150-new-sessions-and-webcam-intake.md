@@ -322,5 +322,6 @@ git status --short
 #### 待用户决定（C 级）
 
 - 无。尚待 Claude 独立审查与用户独立 checkout 验收。
+- 图片加载补修与完整报告提交 `9684f1f4e9c9acdf3b5f14ed687d1c2f28ff0c77` — `Hide pending webcam images and report recording intake blockers` 已推送；[最终英中报告](https://github.com/Hyakuri/gazelle/pull/6#issuecomment-6528779201)。交付状态为实现待审、真实数据目标未达成，后续按 §3.5 继续不受影响的 TASK-140。
 
 ## 3. 审查结论（Claude 追加）

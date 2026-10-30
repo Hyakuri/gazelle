@@ -351,6 +351,22 @@ git status --short
 - 状态标签：已实现、离线验证通过、CPU 数据检查通过、已切换并生成数据集、待独立审查。
 - 第 2 轮双语发布报告：[PR #6 / TASK-140](https://github.com/Hyakuri/gazelle/pull/6#issuecomment-6494321115)。此处类别与 manifest 哈希是 TASK-140 交付时的值；TASK-125 后续只更新类别/schema 元数据，最终哈希见 TASK-125 §2，片段与帧未改变。
 
+### 第 3 轮实施报告（Codex，2026-10-31，第 8 轮）
+
+- 实现提交 `62703805f65c99d23fdf1ce4bec58f2c99d3c50b` — `Strengthen synchronization regression coverage and provenance guidance` 已推送；[英中双语报告](https://github.com/Hyakuri/gazelle/pull/6#issuecomment-6528871354)。遵循修订契约，只改测试与 `tools/workdata/README_CN.md`，主线程 Inline Execution，无子代理。
+- 新增 `test_workdata_sync_round8.py`：临时三机旁注的一台/两台标记并集及抽样排除；固化 0903、0911 的实际系数、区间与网格，断言 **1802/257/149/302** 步、并集 **2059/451**、精确端点包含，以及台阶缺口/重叠对区间的补充；断言 `ProxyClockReader.base_at` 选取对应源文件与 PTS 的基础映射；短窗中心为 b=t+L。
+- 原测试补强：长窗使用非零 lag 并断言 b=t+L；独立设置 A 晚 0.4、E 晚 0.2，分别断言 A–B +0.4、E–B +0.2、A–E +0.2；0911 的 53 窗另断言台阶 **+0.394/−0.243**、MAD **0.0597**、尾部 **0%**。默认测试只用数字与临时合成旁注，不打开正式数据。
+- 聚焦命令 `python -m unittest tests.test_workdata_sync_round8 tests.test_workdata_sync_revision tests.test_workdata_calibrate -v`：**32 tests / 3.083s / 0 skip**，exit 0。使用 Gazelle-next；默认边界均离线/mocked。
+- `gazelle_runs/codex-round8/task140_mutations.py` 对实际仓库测试做 **13 个进程内变异**，全部引起断言失败，0 errors；未修改磁盘中的生产源码。未变异的 8-test 对照通过。覆盖：不读/只读末机/交集三种错误；开端点、只用左段、不换算、T=b+L、不合并台阶区间；E–B 反号；长窗、细化窗 b=t−L；用网格代替源 PTS；把 53 窗 MAD 置零。结果为 `task140-mutations.json` 与逐变异日志。此前等待 TASK-150 解码时的仓库外预备测试单列在 `gazelle_runs/task-150/`，不代替本次实际仓库检验。
+- 最终完整门 `run-gate.ps1 -Tag task140-final`：`python -m compileall main.py gazelle tests tools`；`python -m unittest discover -s tests -v` **749 tests / 33.790s / 0 skip**；`python main.py --help`、`python main.py --list-models`、`node tests/annotation_page_test.cjs`、`node tests/roi_page_test.cjs`、`python -m tools.docs build`、`python -m tools.docs check`、`git diff --check` 全部 exit 0。字节码在仓库外；保留合成坏 MP4 的非致命 `moov atom not found` 与 Git 行尾提示。
+- README 明确正式字段：旁注的 `sync_uncertain`（三机并集）、`round5.uncertainty.union_uncertain_steps` 与 `proxies/manifest.json` 的 `accepted_mapping_sha256`。旧 audit 202/203 与当前 2059/451、生成映射与当前映射的区别已写明，不改旧 JSON。生产行为、schema、CLI、依赖均未变化，因此四份公共用户文档不作额外改动。
+- 实际活动：为准备数值夹具，只读核对已有映射/验证字段；其余为离线数值/合成测试及 Git/GitHub。没有真实模型、CUDA、FFmpeg 可执行程序、下载、新媒体处理或环境修改；TASK-150 的真实活动和失败单独记录。没有改数据、映射、代理、两个数据集或标签。
+- **自主决定（A 级）**：把已接受的数字嵌入测试，避免默认门依赖真实数据；使用隔离进程内变异，保留正常生产文件与正在处理的数据；保留两侧分段外包的保守语义。
+- **范围外改动**：无。
+- **待 Claude 判断（B 级）**：无新增协议问题；请独立复跑并审查覆盖是否充分。本轮 TASK-150 的两个校准失败、交接边界与历史绝对路径问题仍待判断，不能因本项测试通过而解除。
+- **待用户决定（C 级）**：无。
+- 状态：已实现、离线门与变异检查通过、已推送、待 Claude 独立审查及用户独立 checkout 验收。第 8 轮随后交回；没有开始 TASK-152、TASK-151、TASK-153 或阶段 3。
+
 ## 3. 审查结论（Claude 追加）
 
 ### 2026-10-18 第 4 轮审查（Claude）
