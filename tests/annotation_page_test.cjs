@@ -6,7 +6,10 @@ const vm=require('node:vm');
 const html=fs.readFileSync(path.join(__dirname,'../tools/validation/annotation_page.html'),'utf8');
 const script=html.match(/<script>([\s\S]*?)<\/script>/)[1].replace(/start\(\)\.catch\(e=>error\(e.message\)\);\s*$/,'');
 class Element {
-  constructor(){this.children=[];this.style={setProperty(){}};this.value='';this.attrs={};}
+  constructor(tagName='DIV',type=''){this.tagName=tagName.toUpperCase();this.type=type;this.children=[];this.style={setProperty(){}};this.value='';this.attrs={};}
+  focus(){document.activeElement=this;}
+  blur(){if(document.activeElement===this)document.activeElement=document.body;}
+  closest(selector){return selector.split(',').some(s=>s===this.tagName.toLowerCase()||(s==='input[type="range"]'&&this.tagName==='INPUT'&&this.type==='range'))?this:null;}
   setAttribute(name,value){this.attrs[name]=value;}
   getBoundingClientRect(){return {left:0,top:0,width:1920,height:720};}
   set src(value){this._src=value;if(!this.delayLoad)this.onload?.();}
@@ -17,8 +20,11 @@ class Element {
 }
 const elements=new Map(),events={},windowEvents={};
 let clock=0,nextTimer=0;const timers=new Map();
-const document={getElementById(id){if(!elements.has(id))elements.set(id,new Element());return elements.get(id);},
-                createElement(){return new Element();},createElementNS(){return new Element();},addEventListener(name,callback){events[name]=callback;}};
+const document={body:new Element('BODY'),getElementById(id){if(!elements.has(id)){
+                  const tag=html.match(new RegExp('<(\\w+)\\b[^>]*\\bid="'+id+'"[^>]*>'));
+                  elements.set(id,new Element(tag?.[1],tag?.[0].match(/type="([^"]+)"/)?.[1]));
+                }return elements.get(id);},
+                createElement(tag){return new Element(tag);},createElementNS(){return new Element();},addEventListener(name,callback){events[name]=callback;}};
 const context=vm.createContext({document,window:{addEventListener(name,callback){windowEvents[name]=callback;}},console,performance:{now:()=>clock},
   requestAnimationFrame(fn){fn();},setInterval(){},setTimeout(fn,delay){const id=++nextTimer;timers.set(id,{fn,due:clock+delay});return id;},clearTimeout(id){timers.delete(id);},fetch(){throw new Error('Unexpected network boundary');}});
 vm.runInContext(script,context);
@@ -200,6 +206,48 @@ advance(1199);assert.equal(run('step'),0);
 advance(1200);assert.equal(run('step'),1);
 run("pause();byId('image').delayLoad=false;");timers.clear();clock=0;
 console.log('PASS: mutually exclusive points/skips, merge and undo, modifier/repeat guards, slow-frame dwell');
+
+const emit=(name,target,extra={})=>events[name]?.({target,button:0,pointerType:'mouse',detail:1,...extra});
+const mouseStart=control=>{emit('pointerdown',control);control.focus();};
+for(const id of ['scrub','speed','segments']){
+  const control=document.getElementById(id);
+  mouseStart(control);emit('change',control);
+  assert.equal(document.activeElement,document.body,id+' releases mouse focus after change');
+  const before=run('playing');
+  key(' ',{target:document.activeElement});
+  assert.equal(run('playing'),!before,'space works immediately after mouse change');run('pause();');
+  const stepBefore=run('step'),segmentBefore=run('segmentId'),speedBefore=run("byId('speed').value");
+  key('ArrowRight',{target:document.activeElement});
+  assert.equal(run('step'),stepBefore+1,'arrow advances one step after mouse change');
+  assert.equal(run('segmentId'),segmentBefore,'arrow does not switch segment');
+  assert.equal(run("byId('speed').value"),speedBefore,'arrow does not change speed');
+  key('1',{target:document.activeElement});
+  assert.equal(run('expand(record().labels,50)[step]'),'target','digit annotates after mouse change');
+  run('undo();');
+  control.focus();key('Tab',{target:control});emit('change',control);
+  assert.equal(document.activeElement,control,id+' retains keyboard focus');
+  assert.equal(key(' ',{target:control}),false,'keyboard-focused input retains shortcut isolation');
+  mouseStart(control);key('ArrowRight',{target:control});emit('change',control);
+  assert.equal(document.activeElement,control,'switching from mouse to keyboard retains control focus');
+}
+const slider=document.getElementById('scrub');
+mouseStart(slider);emit('pointerup',slider);
+assert.equal(document.activeElement,document.body,'clicking an unchanged slider releases focus');
+mouseStart(slider);emit('pointerup',document.body);
+assert.equal(document.activeElement,document.body,'dragging beyond slider still releases focus');
+for(const button of [document.getElementById('undo'),document.createElement('button')]){
+  mouseStart(button);emit('pointerup',button);emit('click',button);
+  assert.equal(document.activeElement,document.body,'mouse clicks release static and dynamic buttons');
+  button.focus();key('Tab',{target:button});emit('click',button,{detail:0});
+  assert.equal(document.activeElement,button,'keyboard activation keeps button focus');
+}
+const note=document.getElementById('note');
+mouseStart(note);emit('change',note);emit('pointerup',note);emit('click',note);
+assert.equal(document.activeElement,note,'notes keep mouse focus');
+mouseStart(slider);emit('pointercancel',slider);emit('change',slider);
+assert.equal(document.activeElement,slider,'cancelled pointer gesture does not affect a later change');
+document.activeElement=document.body;
+console.log('PASS: mouse focus release, keyboard focus retention, notes and cancelled gestures');
 
 (async()=>{
   const writes=[];let serverRevision=0,staleRequests=0;

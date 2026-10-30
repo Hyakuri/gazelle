@@ -363,6 +363,8 @@ Only Ctrl/Cmd+Z without Shift or Alt performs keyboard undo; there is no redo. O
 combinations retain browser behavior and do not annotate. Holding S/O/X/Delete/digits/space or Ctrl/Cmd+Z
 acts only once and suppresses repeated browser actions; arrows can repeat. Slow frames receive a full step
 after loading. The `hands_object` class uses bright yellow-green `#b6ff00`.
+After using a slider or dropdown with the mouse, you can use shortcuts immediately. Mouse-clicked
+buttons also release focus; Tab/keyboard operation and the notes field retain focus.
 The editor and labels validator require manifest `annotation_schema_version: 3` before opening labels;
 regenerate old datasets or update their classes and manifest following TASK-125 section 5.
 With four targets, keys are 1–4 targets, 5 hands, 6 `cell_other`, 7 `away`, 8 `absent`, 0 `unknown`.

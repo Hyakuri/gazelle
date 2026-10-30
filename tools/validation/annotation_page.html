@@ -99,7 +99,17 @@ byId('segments').onchange=e=>switchSegment(e.target.value);byId('nextUnlabeled')
 byId('finish').onclick=async()=>{if(byId('finish').disabled)return;pause();await save(true);if(failed)return;const next=documentData.segments.find(r=>!r.finished_at);if(next){const unseen=Array.from({length:next.step_count},(_,i)=>i).find(i=>!viewed(next,i));const missing=expand(next.labels,next.step_count).indexOf(null);await switchSegment(next.segment_id,unseen??(missing<0?0:missing));}else render();};
 byId('otherStart').onclick=()=>{if(!frameReady())return;otherFrom=step;interact();render();};byId('otherCancel').onclick=()=>{otherFrom=null;render();};byId('otherEnd').onclick=()=>{if(!frameReady())return;if(otherFrom===null||step<otherFrom){error('结束步不能早于起点');return;}change(row=>{row.other_people=mergePeople(row.other_people,{start_step:otherFrom,end_step_exclusive:step+1});otherFrom=null;});};byId('note').oninput=e=>change(row=>row.note=e.target.value);
 byId('frameSurface').onclick=addPoint;byId('deletePoint').onclick=()=>change(row=>row.points=row.points.filter(p=>p.step!==step));byId('skipPoint').onclick=()=>toggleSkip('unsure');byId('outOfView').onclick=()=>toggleSkip('out_of_view');
+let mouseControl=null;
+function releaseMouseControl(control){if(control&&control===mouseControl){control.blur();mouseControl=null;}}
+document.addEventListener('pointerdown',e=>{
+  mouseControl=e.pointerType==='mouse'&&e.button===0?e.target.closest('button,select,input[type="range"]'):null;
+});
+document.addEventListener('change',e=>releaseMouseControl(e.target));
+document.addEventListener('pointerup',()=>{if(mouseControl?.type==='range')releaseMouseControl(mouseControl);});
+document.addEventListener('pointercancel',()=>{mouseControl=null;});
+document.addEventListener('click',e=>{if(e.detail>0)releaseMouseControl(e.target.closest('button'));});
 document.addEventListener('keydown',e=>{
+  mouseControl=null;
   if(!state||['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName))return;
   if((e.ctrlKey||e.metaKey)&&!e.shiftKey&&!e.altKey&&e.key.toLowerCase()==='z'){
     e.preventDefault();if(!e.repeat)undo();return;

@@ -547,14 +547,16 @@ class UsageDocumentationTest(unittest.TestCase):
             text=self._read(path)
             for token in ('first step','clearest','mutually exclusive','entire run','partly visible',
                           'tabletop','Ctrl/Meta/Alt','TASK-125 section 5',
-                          'no redo','without Shift or Alt','only once','#b6ff00'):
+                          'no redo','without Shift or Alt','only once','#b6ff00',
+                          'shortcuts immediately','Tab/keyboard','notes field retain focus'):
                 self.assertIn(token,text,str(path))
         for path in (CHINESE_README,CHINESE_GUIDE,
                      REPOSITORY_ROOT/'tools/validation/ANNOTATION_GUIDE_CN.md',REPOSITORY_ROOT/'tools/validation/ROI_GUIDE_CN.md'):
             text=self._read(path)
             for token in ('片段的第一步','最清楚','互斥','整个片段','部分可见','桌面或物体',
                           'Ctrl/Meta/Alt','TASK-125 第 5 条',
-                          '没有重做','不带 Shift 或 Alt','只执行一次','#b6ff00'):
+                          '没有重做','不带 Shift 或 Alt','只执行一次','#b6ff00',
+                          '直接使用快捷键','Tab 等键盘操作保留控件焦点','备注文本框'):
                 self.assertIn(token,text,str(path))
 
     def test_usage_guides_explain_old_label_reannotation_once(self):

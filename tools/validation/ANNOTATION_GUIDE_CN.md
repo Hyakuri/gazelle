@@ -105,6 +105,8 @@ python -m tools.validation.annotate_server --dataset-root $dataset --labels-path
 键盘撤销只用 Ctrl/Cmd+Z，且不带 Shift 或 Alt；工具没有重做。其他 Ctrl/Meta/Alt 组合键保留浏览器行为，
 不作标注快捷键。按住 S/O/X/Delete/数字/空格或 Ctrl/Cmd+Z 只执行一次，并阻止重复事件的浏览器默认动作；
 方向键可以重复。慢帧加载就绪后停留满一个步长再前进。`hands_object` 使用亮黄绿色 `#b6ff00`。
+用鼠标操作过滑块或下拉框后，可以直接使用快捷键；鼠标点击按钮后也会释放焦点。
+Tab 等键盘操作保留控件焦点，备注文本框始终保留输入焦点。
 编辑器和标签校验在打开标签前要求 manifest `annotation_schema_version: 3`；
 旧数据集须重新生成，或按 TASK-125 第 5 条更新类别与 manifest。
 
