@@ -10,14 +10,28 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 | stage | 阶段 2：作业数据可用、多机同步、正确性修复，建立区域标注 |
 | branch | `feature/stage2-correctness`（基于 PR #5 head `bbec056`） |
 | pr | [#6](https://github.com/Hyakuri/gazelle/pull/6)（draft）；正文来源 `docs/collab/STAGE2_PR_BODY.md` |
-| writer | codex |
-| next_actor | codex |
-| current_task | 第 8 轮第 4 项：`docs/collab/tasks/TASK-140-sync-validation-and-steps.md` 第 3 轮，只补测试与正式字段说明；TASK-150 的数据失败与交接边界问题已记录，待 Claude 判断 |
-| after_current | TASK-140 第 3 轮完成后结束本轮，把 `next_actor` 改为 `claude`。本轮不做 TASK-152、TASK-151、TASK-153，也不开始阶段 3 的任务 |
+| writer | none |
+| next_actor | claude |
+| current_task | 第 8 轮已交付审查：TASK-125 第 4 轮、TASK-101 契约 r2、TASK-150 契约 r2 至 r4、TASK-140 第 3 轮；TASK-150 真实数据目标未达成，见 Q-029 至 Q-031 |
+| after_current | Claude 独立审查本轮实现、验证与 A/B 记录，再决定后续契约。本轮未做 TASK-152、TASK-151、TASK-153，也未开始阶段 3 |
 | environment | `Gazelle-next`：`C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe`（用户 2026-10-17 决定 D16）。现有 `Gazelle` 作为回退保留，不改动 |
-| last_pushed | `397c5d168ceaa67d0424659623232f548c65fe0d`（TASK-150 实现；两次新录制的真实校准仍在运行，尚未交回审查） |
+| last_pushed | `319c5422cd8bb2f2ecae874ab4220a31908042e7`（本轮最后任务报告；随后仅有 STATE、生成视图与轮末基线的交接提交，其 SHA 以 Git HEAD 和 PR 评论为准） |
 | last_accepted | `24baf57`。2026-10-30 第 7 轮审查：`36aa643`（协调文档）核对无误；`806068c`（TASK-125 第 3 轮）accepted；`342f5ed` 与 `24baf57` 只含报告与交接。第 6 轮审查：`60464e2` 核对无误，`ac89a66` changes-requested，`a9f0738` 与 `e605687` 只含报告与交接 |
-| 更新 | 2026-10-30 晚，Claude 完成第 7 轮审查：TASK-125 第 3 轮通过，正式标注可以开始；第 8 轮交给 Codex。同日较早：你确认 Q-027、Q-028，工作区域自动重配准方案已写入设计。此前的更新记录见 HISTORY |
+| 更新 | 2026-10-31，Codex 完成第 8 轮可独立执行的工作并交回 Claude。最终离线门 749 tests / 0 skip；TASK-150 的两次校准与交接边界失败保留，待 Claude 判断，未放宽研究门槛。正式标注文件未读写 |
+
+## 第 8 轮交接记录（Codex，2026-10-31）
+
+- 主线程 Inline Execution，无子代理。协调文档 `acae8a1` 已推送并同步 PR #6 正文；任务实现、报告均在原分支推送，PR 保持 draft。`last_accepted=24baf57` 不变；以下为 Codex 验证结果，**尚待 Claude 独立审查及用户独立 checkout 验收**。
+- TASK-125 第 4 轮：实现 `980d8ee`、报告 `476ebdf`；鼠标用过的滑块、下拉框与按钮释放焦点，键盘使用和备注输入保留焦点。717 tests / 0 skip、两个 Node harness、临时浏览器 7 项通过；Claude 的 Edge 独立复测仍待进行。正式标签与数据集不改。
+- TASK-101：实现 `569394b`、报告 `aa13179`；人脸/姿态关联、融合与临时观测仲裁按契约 r2 修正。729 tests / 0 skip；真实缓存模型检查完成，Sunny A 的错误关联帧 14→0、ID 切换 9→1，B 的错误帧 2→0；两段作业视频各 376 帧通过，抽查与 ID 切换帧已检查。office 既有人脸误检仍存在；首次非关键帧裁剪导致容器/解码帧数不一致的失败已保留，重裁后通过。详见 TASK-101 §2，不将抽查等同于逐帧或科学精度验收。
+- TASK-150：实现 `397c5d1`、加载图片隐藏修正与完整报告 `9684f1f`，补充报告 `319c542`；指定录制接入、W 辅助同步/标注参考图、作业者分段与分层接口已实现，四份公共用户文档同步。最终 744 tests / 38.588s / 0 skip，Node、临时浏览器与故意延迟图片检查通过。**代码实现待审，真实数据目标未达成**。
+  - `20261016`、`20261023` inventory、E remux、基础映射与 8 组运动采样完成，W 文件名时钟与原生 PTS 已检查。两次内容校准均 exit 1：1016 E 尾部 6/50=12%，1023 A 为 7/53=13.2075%，均超过既定 10%。映射保留 `calibrated=false`，没有采用粗拟合替代失败的最终拟合，也未改阈值、窗口或算法。
+  - **未生成**这两次录制的正式代理、代理残差/时钟检查、事件条图、索引追加或正式作业者表；新分层数据集仍属于 TASK-152。W 的拟合通过不解除 A/B/E 失败。两次交接区间出现满足契约条件且经图像确认的人脸，原边界未改；初稿时钟来源未明确，只有仓库外候选表供审查。详见 Q-029、Q-030。
+- TASK-140 第 3 轮：实现 `6270380`、报告 `319c542`；只补测试和正式字段说明。固定 0903/0911 区间转换、并集与抽样排除、正负号、源 PTS 选择及 53 窗数值；32 项聚焦测试通过，实际仓库测试捕获 **13/13** 进程内变异。最终完整离线门 **749 tests / 33.790s / 0 skip**；compileall、help、list-models、两个 Node harness、docs build/check、diff check 全部 exit 0。非致命坏 MP4 提示与行尾提示保留。没有更改生产同步算法或正式数据。
+- 数据保护：对 **16,836 个文件、87,442,562,724 bytes** 做前后 SHA 核对；除授权的 inventory/remux report 扩展外，旧数据相同，旧 40/11 行保留，七次旧代理索引逐字节相同；两份正式数据集的元数据与帧不改。随后最终检查确认这些文件的大小/mtime 未再变化、8 组采样 SHA 与 EOF 通过。**没有读取或写入 `roi_r2/labels.json` 及 `.bak`**；正式区域、参考图、类别和完成标记不改。真实媒体、模型、候选表与运行输出全部留在仓库外，没有上传。
+- 实际活动：TASK-101 用缓存 Gazelle/CUDA 与 MediaPipe、真实 FFmpeg；TASK-150 用 CPU MediaPipe、FFmpeg remux、PyAV 原生解码及临时浏览器；TASK-140 只做离线检查。未下载模型、未训练、未安装依赖或修改 Conda/全局配置。Torch Hub 探测由测试包装阻止；MediaPipe 遥测按既有授权接受，未做网络抓包。普通文件权限预检与 yun 用户上下文 Git/GitHub 例外分开记录。全部本轮处理进程、临时浏览器与服务已结束。
+- 详细证据与命令：四个任务文件 §2；仓库外 `gazelle_runs/codex-round8/`、`gazelle_runs/task-150/`。后者包含完整失败日志、保护审计、候选 worker 表与 `skipped-actions.json`。后续先审查 Q-029 至 Q-031，不自动重跑旧数据或开始下一轮。
+- 本轮按 build → snapshot「第 8 轮结束」→ check 留下基线，再释放 writer。交接提交只更新协作记录与生成材料，不以 prose 改动重复运行整套测试。
 
 ## 第 7 轮审查结论（Claude，2026-10-30）
 
@@ -61,8 +75,8 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 | Codex 第 7 轮 | TASK-125 第 3 轮：按住按键与撤销键、测试与文档的小项、手部类换色（Q-025） | accepted | Claude 2026-10-30 审查通过，真实按住重复事件已补测 |
 | Codex 第 8 轮 | TASK-125 第 4 轮：鼠标用过的滑块、下拉框与按钮释放焦点 | ready-for-review | `980d8ee`；717 tests / 0 skip、Node 与临时浏览器检查通过；待 Claude Edge 独立验收；不改正式数据 |
 | Codex 第 8 轮 | [TASK-101](tasks/TASK-101-face-pose-association.md) 人脸与姿态关联修正（D1，契约 r2） | ready-for-review | `569394b`；729 tests / 0 skip；Sunny A/B、office 及两段作业视频真实检查完成；待 Claude 独立验收 |
-| Codex 第 8 轮 | [TASK-150](tasks/TASK-150-new-sessions-and-webcam-intake.md) 新录制与 webcam 接入（D26） | ready-for-review | `397c5d1` 与后续加载隐藏修正；744 tests / 0 skip；1016 E、1023 A 校准失败，两次代理未生成；两次交接区间与初稿时钟出处需 Claude 判断，数据目标未达成 |
-| Codex 第 8 轮 | TASK-140 第 3 轮：只补测试与正式字段说明 | ready | 见 TASK-140 §3 |
+| Codex 第 8 轮 | [TASK-150](tasks/TASK-150-new-sessions-and-webcam-intake.md) 新录制与 webcam 接入（D26） | ready-for-review | `397c5d1`、`9684f1f`；744 tests / 0 skip；1016 E、1023 A 校准失败，两次代理未生成；交接边界、初稿时钟出处与历史绝对路径见 Q-029 至 Q-031，数据目标未达成 |
+| Codex 第 8 轮 | TASK-140 第 3 轮：只补测试与正式字段说明 | ready-for-review | `6270380`；749 tests / 0 skip、13/13 变异捕获；待 Claude 独立审查 |
 | Codex 第 9 轮 | [TASK-152](tasks/TASK-152-recording-20261030-intake.md) 新录制 `20261030` 接入与 2026-10 分层数据集（12 段） | proposed | 等 TASK-150 通过审查；你决定纳入（Q-026） |
 | Codex 第 9 轮 | TASK-151 工作区域自动重配准：背景图、区域指纹、逐区域配准、检查提示、录制内监测 | proposed | 方案已确认（Q-028）；等 TASK-150；契约在第 8 轮审查时编写；`20261030` 要等 TASK-152 |
 | Codex 第 10 轮 | TASK-153 区域复核模式与盲测 | proposed | 等 TASK-151 |
@@ -268,6 +282,9 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 | Q-026 | C | Claude | 新录制 `20261030`（2026-10-30 出现，画面时钟 2026-10-29 17:57–19:01）：右侧 A、前方 B 各约 63 分钟，全局 E 约 60 分钟，另有一台 webcam 类摄像机“動作解析カメラ” 180 分钟（电脑时间 17:48:55 起），四台约重叠 1 小时。全局摄像机的画面时钟格式、位置与拍摄范围都与以前不同。请说明：（1）是否纳入研究集，与 `20261016`、`20261023` 一样作为 2026-10 分层（推荐纳入，在 TASK-150 之后另开任务接入）；（2）全局摄像机是否换了设备，或改了设置、位置；（3）“動作解析カメラ”是否就是之前的 webcam，位置是否变了；（4）今后是否还有新录制 | `evidence/2026-10-30-source-relocation-check.md` §3；TASK-150 契约修订 r3 第 5 条 | 待用户 | （1）已决定（2026-10-30）：用户原话“请将新数据纳入研究集”。纳入，作为 2026-10 分层的第三次录制；由 TASK-152 在 TASK-150 之后接入，新分层数据集改为 12 段、一次生成（接入方式由协调者安排）。（2）用户 2026-10-30 说明：可能是数据提供方移动了一些摄像头；是否也换了设备未确认（E 的时钟格式变了）。（3）已明确：用户说明共 4 台摄像机，画面比对确认“動作解析カメラ”就是第 4 台 W，这次偏移约 50–80 像素。（4）仍待用户。都不阻塞接入 |
 | Q-027 | C | Claude | W 的用法（D28）中影响评估的各条，都由协调者提出：（1）两份结果：所有录制都先只用 A、B、E 得到同一口径的主结果，关卡 GA 至 GF 与假设按它判定；有 W 的录制另算含 W 的结果，默认交付这一份，同时给出主结果；含 W 的结果不经过关卡与二次验证，W 不可用时交付主结果，在 12 段标注上更差时请用户决定；（2）W 只在 A、B、E 缺信息时使用：都没有头部信息时提供头部位置与朝向（E4 级证据），判断不出在场时提供人体，E 上缺双手时提供双手位置；（3）W 的标定单向进行，不进入 A、B、E 的联合标定；W 校准失败的录制不用 W，W 自己的 `sync_uncertain` 步不用 W；（4）二次验证只检查主结果，先只报告、不设通过门槛，不用于调参、选模型或改阈值；（5）12 段标注上的检验只作描述，标注时是否看过 W 不记录；（6）只在三机重叠段输出结果 | `../design/STAGE3_GAZE_ATTENTION_CN.md` §6.9、§8.3、§9 | 已解决 | 已决定（2026-10-30）：用户原话“确认 Q-027，请按照你的推荐进行。”六条全部按推荐执行，已写入 STAGE3 3.6.0 §6.9、§8.3、§9 |
 | Q-028 | C | Claude | 工作区域自动重配准方案（D29），都由协调者提出：（1）用逐区域配准、检查提示与录制内监测，取代“一个全局配准”，TASK-151 按此写契约；（2）固定区域跟着工作台走，不跟台面上的物品走；（3）`item_box` 通常不能靠特征找回，每次录制画一个多边形，推车明显离开时才按时段再画，统计单列；（4）所有区域都由用户确认，正式结果只用确认过的区域，检查项只作提示，TASK-305 要等用户确认完；（5）盲测：在确认之前，用户隐藏多边形，在 4 次录制上点约 10 个固定点，`20260821` 点两遍；（6）固定区域在录制中移动时，过渡时段标 `region_uncertain`，不进入区域统计与区域指标；（7）TASK-151 在第 9 轮、TASK-153 在第 10 轮，规模比原计划大 | `../design/REGION_REGISTRATION_CN.md` §15；`evidence/2026-10-30-region-drift-analysis.md` | 已解决 | 已决定（2026-10-30）：用户原话“确认 Q-028，请按照你的推荐进行。”七项全部按推荐执行；ROIREG 1.0.2 标为已确认，已写入 STAGE3 3.7.0 §6.5 |
+| Q-029 | B | Codex | TASK-150 两次新录制未通过最终内容校准：1016 E 的尾部 6/50=12%，1023 A 为 7/53=13.2075%，均超过 10%；其余相应 A/E/W 拟合通过。1016 E 粗拟合 5/50=10%，细化切点后变为 12%；1023 A 无切点，粗/最终结果一致 | TASK-150 §2；`gazelle_runs/task-150/calibration-summary-*.json`、`fit-gate-diagnostic-*.json` | 待 Claude | 推荐先复核最终拟合、细化目标与原始固定窗口，再给出修订契约；保留严格失败与采样。未替换成粗拟合、删窗口或放宽门槛；两次正式代理及后续验证暂停 |
+| Q-030 | B | Codex | TASK-150 交接“无人脸”前提不成立：0903 A 81 帧、B 64 帧（65 次检测），1016 A 20 帧、B 43 帧满足原宽度/得分门槛且位于交接内部；12 张诊断图确认真实人脸。1016 初稿内部端点的来源摄像机未明确 | TASK-150 §2；`gazelle_runs/task-150/handover-*-summary.json`、原始 hits、`worker-conversion-review.json` | 待 Claude | 原确认边界不变；推荐核对检测与来源时钟，并明确交接条件/端点精度后再写正式表。仅生成匿名候选表，未写 `workers/worker_spans.json`；0903 初始零帧日期错误已修正并保留失败记录，B 计数按原始 hits 去重 |
+| Q-031 | B | Codex | 源目录搬迁后，历史同步校准、代理、keyframe 与 ProxyClockReader 的入口仍直接使用旧映射绝对路径；新录制路径可用，但旧录制重处理受影响 | TASK-150 §2「待 Claude 判断」；对 `sync_calibrate.run`、`proxies.full_mapped_frames/prepare_camera/run`、`keyframes.source_keyframes`、`sync_validate.ProxyClockReader._pair` 的检查 | 待 Claude | 推荐在入口增加基于 inventory 相对路径、大小和源 SHA 的解析层；不改已哈希的旧数据或受保护算法。当前只完成契约授权的 inventory/remux/extract 路径兼容，其他入口待修订契约 |
 
 ## 已完成
 

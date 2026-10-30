@@ -2,16 +2,16 @@
 
 > 本文件由 `python -m tools.docs build` 自动生成，与 [总览网页](portal/index.html) 内容相同，不要手改。规则见 [文档记录体系与版本规则](rules/DOCS_SYSTEM_CN.md)。
 
-当前基线：**B020**（2026-10-30）；其后有更新的来源：`docs/collab/ROADMAP.md`、`docs/collab/STATE.md`。
+当前基线：**B021**（2026-10-31）；其后有更新的来源：`docs/collab/STATE.md`。
 
 ## 1. 总览
 
 | 项目 | 内容 |
 | --- | --- |
 | 当前阶段 | 阶段 2：作业数据可用、多机同步、正确性修复，建立区域标注 |
-| 当前任务 | 第 8 轮第 4 项：`docs/collab/tasks/TASK-140-sync-validation-and-steps.md` 第 3 轮，只补测试与正式字段说明；TASK-150 的数据失败与交接边界问题已记录，待 Claude 判断 |
-| 轮到 | Codex |
-| 最近更新 | 2026-10-30 晚，Claude 完成第 7 轮审查：TASK-125 第 3 轮通过，正式标注可以开始；第 8 轮交给 Codex。同日较早：你确认 Q-027、Q-028，工作区域自动重配准方案已写入设计。此前的更新记录见 HISTORY |
+| 当前任务 | 第 8 轮已交付审查：TASK-125 第 4 轮、TASK-101 契约 r2、TASK-150 契约 r2 至 r4、TASK-140 第 3 轮；TASK-150 真实数据目标未达成，见 Q-029 至 Q-031 |
+| 轮到 | Claude |
+| 最近更新 | 2026-10-31，Codex 完成第 8 轮可独立执行的工作并交回 Claude。最终离线门 749 tests / 0 skip；TASK-150 的两次校准与交接边界失败保留，待 Claude 判断，未放宽研究门槛。正式标注文件未读写 |
 
 ### 需要你处理
 
@@ -276,8 +276,8 @@ flowchart LR
 | Codex 第 7 轮 | TASK-125 第 3 轮：按住按键与撤销键、测试与文档的小项、手部类换色（Q-025） | accepted | Claude 2026-10-30 审查通过，真实按住重复事件已补测 |
 | Codex 第 8 轮 | TASK-125 第 4 轮：鼠标用过的滑块、下拉框与按钮释放焦点 | ready-for-review | `980d8ee`；717 tests / 0 skip、Node 与临时浏览器检查通过；待 Claude Edge 独立验收；不改正式数据 |
 | Codex 第 8 轮 | [TASK-101](collab/tasks/TASK-101-face-pose-association.md) 人脸与姿态关联修正（D1，契约 r2） | ready-for-review | `569394b`；729 tests / 0 skip；Sunny A/B、office 及两段作业视频真实检查完成；待 Claude 独立验收 |
-| Codex 第 8 轮 | [TASK-150](collab/tasks/TASK-150-new-sessions-and-webcam-intake.md) 新录制与 webcam 接入（D26） | ready-for-review | `397c5d1` 与后续加载隐藏修正；744 tests / 0 skip；1016 E、1023 A 校准失败，两次代理未生成；两次交接区间与初稿时钟出处需 Claude 判断，数据目标未达成 |
-| Codex 第 8 轮 | TASK-140 第 3 轮：只补测试与正式字段说明 | ready | 见 TASK-140 §3 |
+| Codex 第 8 轮 | [TASK-150](collab/tasks/TASK-150-new-sessions-and-webcam-intake.md) 新录制与 webcam 接入（D26） | ready-for-review | `397c5d1`、`9684f1f`；744 tests / 0 skip；1016 E、1023 A 校准失败，两次代理未生成；交接边界、初稿时钟出处与历史绝对路径见 Q-029 至 Q-031，数据目标未达成 |
+| Codex 第 8 轮 | TASK-140 第 3 轮：只补测试与正式字段说明 | ready-for-review | `6270380`；749 tests / 0 skip、13/13 变异捕获；待 Claude 独立审查 |
 | Codex 第 9 轮 | [TASK-152](collab/tasks/TASK-152-recording-20261030-intake.md) 新录制 `20261030` 接入与 2026-10 分层数据集（12 段） | proposed | 等 TASK-150 通过审查；你决定纳入（Q-026） |
 | Codex 第 9 轮 | TASK-151 工作区域自动重配准：背景图、区域指纹、逐区域配准、检查提示、录制内监测 | proposed | 方案已确认（Q-028）；等 TASK-150；契约在第 8 轮审查时编写；`20261030` 要等 TASK-152 |
 | Codex 第 10 轮 | TASK-153 区域复核模式与盲测 | proposed | 等 TASK-151 |
@@ -467,6 +467,9 @@ flowchart LR
 | Q-026 | C | Claude | 新录制 `20261030`（2026-10-30 出现，画面时钟 2026-10-29 17:57–19:01）：右侧 A、前方 B 各约 63 分钟，全局 E 约 60 分钟，另有一台 webcam 类摄像机“動作解析カメラ” 180 分钟（电脑时间 17:48:55 起），四台约重叠 1 小时。全局摄像机的画面时钟格式、位置与拍摄范围都与以前不同。请说明：（1）是否纳入研究集，与 `20261016`、`20261023` 一样作为 2026-10 分层（推荐纳入，在 TASK-150 之后另开任务接入）；（2）全局摄像机是否换了设备，或改了设置、位置；（3）“動作解析カメラ”是否就是之前的 webcam，位置是否变了；（4）今后是否还有新录制 | `evidence/2026-10-30-source-relocation-check.md` §3；TASK-150 契约修订 r3 第 5 条 | 待用户 | （1）已决定（2026-10-30）：用户原话“请将新数据纳入研究集”。纳入，作为 2026-10 分层的第三次录制；由 TASK-152 在 TASK-150 之后接入，新分层数据集改为 12 段、一次生成（接入方式由协调者安排）。（2）用户 2026-10-30 说明：可能是数据提供方移动了一些摄像头；是否也换了设备未确认（E 的时钟格式变了）。（3）已明确：用户说明共 4 台摄像机，画面比对确认“動作解析カメラ”就是第 4 台 W，这次偏移约 50–80 像素。（4）仍待用户。都不阻塞接入 |
 | Q-027 | C | Claude | W 的用法（D28）中影响评估的各条，都由协调者提出：（1）两份结果：所有录制都先只用 A、B、E 得到同一口径的主结果，关卡 GA 至 GF 与假设按它判定；有 W 的录制另算含 W 的结果，默认交付这一份，同时给出主结果；含 W 的结果不经过关卡与二次验证，W 不可用时交付主结果，在 12 段标注上更差时请用户决定；（2）W 只在 A、B、E 缺信息时使用：都没有头部信息时提供头部位置与朝向（E4 级证据），判断不出在场时提供人体，E 上缺双手时提供双手位置；（3）W 的标定单向进行，不进入 A、B、E 的联合标定；W 校准失败的录制不用 W，W 自己的 `sync_uncertain` 步不用 W；（4）二次验证只检查主结果，先只报告、不设通过门槛，不用于调参、选模型或改阈值；（5）12 段标注上的检验只作描述，标注时是否看过 W 不记录；（6）只在三机重叠段输出结果 | `../design/STAGE3_GAZE_ATTENTION_CN.md` §6.9、§8.3、§9 | 已解决 | 已决定（2026-10-30）：用户原话“确认 Q-027，请按照你的推荐进行。”六条全部按推荐执行，已写入 STAGE3 3.6.0 §6.9、§8.3、§9 |
 | Q-028 | C | Claude | 工作区域自动重配准方案（D29），都由协调者提出：（1）用逐区域配准、检查提示与录制内监测，取代“一个全局配准”，TASK-151 按此写契约；（2）固定区域跟着工作台走，不跟台面上的物品走；（3）`item_box` 通常不能靠特征找回，每次录制画一个多边形，推车明显离开时才按时段再画，统计单列；（4）所有区域都由用户确认，正式结果只用确认过的区域，检查项只作提示，TASK-305 要等用户确认完；（5）盲测：在确认之前，用户隐藏多边形，在 4 次录制上点约 10 个固定点，`20260821` 点两遍；（6）固定区域在录制中移动时，过渡时段标 `region_uncertain`，不进入区域统计与区域指标；（7）TASK-151 在第 9 轮、TASK-153 在第 10 轮，规模比原计划大 | `../design/REGION_REGISTRATION_CN.md` §15；`evidence/2026-10-30-region-drift-analysis.md` | 已解决 | 已决定（2026-10-30）：用户原话“确认 Q-028，请按照你的推荐进行。”七项全部按推荐执行；ROIREG 1.0.2 标为已确认，已写入 STAGE3 3.7.0 §6.5 |
+| Q-029 | B | Codex | TASK-150 两次新录制未通过最终内容校准：1016 E 的尾部 6/50=12%，1023 A 为 7/53=13.2075%，均超过 10%；其余相应 A/E/W 拟合通过。1016 E 粗拟合 5/50=10%，细化切点后变为 12%；1023 A 无切点，粗/最终结果一致 | TASK-150 §2；`gazelle_runs/task-150/calibration-summary-*.json`、`fit-gate-diagnostic-*.json` | 待 Claude | 推荐先复核最终拟合、细化目标与原始固定窗口，再给出修订契约；保留严格失败与采样。未替换成粗拟合、删窗口或放宽门槛；两次正式代理及后续验证暂停 |
+| Q-030 | B | Codex | TASK-150 交接“无人脸”前提不成立：0903 A 81 帧、B 64 帧（65 次检测），1016 A 20 帧、B 43 帧满足原宽度/得分门槛且位于交接内部；12 张诊断图确认真实人脸。1016 初稿内部端点的来源摄像机未明确 | TASK-150 §2；`gazelle_runs/task-150/handover-*-summary.json`、原始 hits、`worker-conversion-review.json` | 待 Claude | 原确认边界不变；推荐核对检测与来源时钟，并明确交接条件/端点精度后再写正式表。仅生成匿名候选表，未写 `workers/worker_spans.json`；0903 初始零帧日期错误已修正并保留失败记录，B 计数按原始 hits 去重 |
+| Q-031 | B | Codex | 源目录搬迁后，历史同步校准、代理、keyframe 与 ProxyClockReader 的入口仍直接使用旧映射绝对路径；新录制路径可用，但旧录制重处理受影响 | TASK-150 §2「待 Claude 判断」；对 `sync_calibrate.run`、`proxies.full_mapped_frames/prepare_camera/run`、`keyframes.source_keyframes`、`sync_validate.ProxyClockReader._pair` 的检查 | 待 Claude | 推荐在入口增加基于 inventory 相对路径、大小和源 SHA 的解析层；不改已哈希的旧数据或受保护算法。当前只完成契约授权的 inventory/remux/extract 路径兼容，其他入口待修订契约 |
 
 ## 6. 文档与版本
 
@@ -697,6 +700,7 @@ flowchart TB
 
 | 基线 | 日期 | 说明 | 文档版本 | 快照 |
 | --- | --- | --- | --- | --- |
+| B021 | 2026-10-31 | 第 8 轮结束 | COLLAB v0.10.0、DOCS v1.2.0、GOALS v3.5.1、PERCEPTION v1.1.2、ROIREG v1.0.2、STAGE3 v3.7.0、SYSTEM v1.7.1、VALSET v4.4.1 | [网页](archive/baselines/B021/index.html) |
 | B020 | 2026-10-30 | 用户确认工作区域自动重配准方案（Q-028，D29） | COLLAB v0.10.0、DOCS v1.2.0、GOALS v3.5.1、PERCEPTION v1.1.2、ROIREG v1.0.2、STAGE3 v3.7.0、SYSTEM v1.7.1、VALSET v4.4.1 | [网页](archive/baselines/B020/index.html) |
 | B019 | 2026-10-30 | ROIREG 1.0.1：§0 一处措辞按用户原话修正，更正 1.0.0 的审查轮数记录 | COLLAB v0.10.0、DOCS v1.2.0、GOALS v3.5.0、PERCEPTION v1.1.2、ROIREG v1.0.1、STAGE3 v3.6.0、SYSTEM v1.7.0、VALSET v4.4.0 | [网页](archive/baselines/B019/index.html) |
 | B018 | 2026-10-30 | 工作区域自动重配准（用户 2026-10-30，D29，方案待 Q-028）；Q-027 确认 | COLLAB v0.10.0、DOCS v1.2.0、GOALS v3.5.0、PERCEPTION v1.1.2、ROIREG v1.0.0、STAGE3 v3.6.0、SYSTEM v1.7.0、VALSET v4.4.0 | [网页](archive/baselines/B018/index.html) |
