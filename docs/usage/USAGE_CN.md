@@ -546,6 +546,27 @@ Perception quality 依赖 visible-face evidence。`pose_only` 使用近似 pose-
 
 ## 15. 研究数据工具
 
+接入范围为旧七次录制加 `20261016`、`20261023`；`20261030` 按单独契约接入。
+源根目录为只读的 `E:\Gazelle_Workdata`。清单与重封装支持重复的 `--session` 参数，
+保留未选录制的旧行；根目录有未知录制时不要全量扫描。共享清单追加前先备份。
+带哈希的旧产物保留历史路径作为出处记录；迁移后的重封装输入按相对路径、大小与 SHA-256 核对。
+
+可选 webcam `cam_w` 使用 `WIN_YYYYMMDD_HH_MM_SS_Pro.mp4` 文件名时间加原始 PTS
+（`filename_clock`，斜率 1；电脑时间不带时区，按 UTC epoch 秒编码）。
+它写在 `auxiliary_cameras`，必需的 `cameras` 仍为 A/B/E，重叠段只由三机决定。
+W 沿用同一 5 Hz 校准方法与不确定区间规则，输出仅视频的 1280×720 `proxy_webcam.mp4` 与旁注；
+A/B/E 仍为 1920×1080。W–B 沿用 A–B 残差门槛；W 失败仅将 W 标为不可用，不阻塞三机。
+时钟抽查只做 A/B/E。这些工具在本机 CPU 解码/编码（重封装与代理调用 FFmpeg），不调用模型、CUDA 或下载。
+
+已批准的新分层可用 `--no-pilot --cohort 2026-10` 与 `--worker-spans <worker_spans.json>` 抽样，
+默认保留旧试标协议。每段按最大时间重叠确定 `span_id`，完全处于交接空档时归到最近片段；
+相同时取较早片段，不因此重抽。抽样只读元数据与哈希并写新数据集，抽帧使用 CPU/OpenCV。
+W 参考须有通过 W–B 检查且由 `proxies/manifest.json` 哈希绑定的验证结果。
+每步另存 640×360 JPEG、SHA-256、缺口与 `sync_uncertain` 标记。
+页面显示可收起的 W 参考及同步不确定提示；注视点仍标在原三视角拼图的 E 上。
+保留已有数据集和标签；正式 `roi_r2_2026_10` 只在完整的已批准分层准备好后生成。
+
+
 在现有 Gazelle-next 环境、仓库根目录运行。源目录只读，数据根放在仓库与源目录之外。
 工具只使用 CPU 与磁盘，不构造模型、不使用 CUDA、不联网、不下载。
 长时间任务以低优先级运行。参见[中文指南](../../tools/workdata/README_CN.md)。
@@ -573,10 +594,10 @@ Perception quality 依赖 visible-face evidence。`pose_only` 使用近似 pose-
 | `tools.validation.render_roi_reference` | 区域与候选帧 | 参考 PNG、各会话叠加图、类别 JSON | Pillow、已有中文字体 |
 
 ```powershell
-$raw = 'E:\Gazelle_Workdata\秋田大学様解析用動画'
+$raw = 'E:\Gazelle_Workdata'
 $data = 'C:\Users\yun\Documents\Claude_Code\gazelle_data\workdata'
-python -m tools.workdata.inventory --root $raw --out "$data\inventory\inventory.json"
-python -m tools.workdata.remux --inventory "$data\inventory\inventory.json" --out-root "$data\remux"
+python -m tools.workdata.inventory --root $raw --out "$data\inventory\inventory.json" --session 20261016 --session 20261023
+python -m tools.workdata.remux --inventory "$data\inventory\inventory.json" --out-root "$data\remux" --session 20261016 --session 20261023
 ```
 
 两个入口支持 `--ffprobe`，重封装另支持 `--ffmpeg` 覆盖 PATH 查找。已有有效重封装默认跳过；
@@ -612,7 +633,7 @@ python -m tools.validation.render_roi_reference --regions-path "$data\roi\roi_re
 
 ```powershell
 python -m tools.workdata.osd_clock --image C:\path\outside-repository\clock.png
-python -m tools.workdata.timemap --inventory "$data\inventory\inventory.json" --remux-root "$data\remux" --out-root "$data\timemaps_v2_base"
+python -m tools.workdata.timemap --inventory "$data\inventory\inventory.json" --remux-root "$data\remux" --out-root "$data\timemaps_v2_base" --session 20261016
 python -m tools.workdata.sync_calibrate --timemaps "$data\timemaps_v2_base" --out-root "$data\timemaps_v3" --samples-root "$data\sync_samples_v2" --session 20260828
 python -m tools.workdata.sync_check --timemaps "$data\timemaps_v2" --out-root "$data\sync_checks" --session 20260828
 ```
@@ -671,7 +692,7 @@ python -m tools.workdata.sync_validate --proxies "$data\proxies" --timemaps "$da
 旁注记录最近源帧、原生 PTS、时间差；超过网格半步长的差异标记为缺口。
 
 共同覆盖包含多个区间时默认拒绝；显式 `--allow-internal-gaps` 保留整体起止间
-连续时钟网格，记录全部覆盖缺口与最近帧缺口标记，不压缩时间。七会话全部通过前保留旧代理原路径，之后改名备份并切换。
+连续时钟网格，记录全部覆盖缺口与最近帧缺口标记，不压缩时间。新增录制保留旧七次的产物；已批准的替换批次全部通过前保留旧代理原路径，之后改名备份并切换。
 `sync_validate` 复用已有固定 k，依次读代理 k、旁注记录的源帧，然后以相同次序读
 k−1/k+1/k−2/k+2；首次识别即停止。源帧解码 PTS 必须与旁注完全相同。
 每次记录来源与两帧 96×54 缩略图的平均绝对差；仍缺失记不可评估。
@@ -685,7 +706,7 @@ A/B −0.5 ≤ d <1.5 s，E −1.5 ≤ d <2.5 s。`reading_minus_grid_distributi
 A–B/E–B 必须通过；A–E 可证据不足，但须报告闭合推算。逐窗/整体 (A−B)−(E−B)−(A−E) 与端点最大偏差只报告、不设新门槛。
 每会话三张作业者运动 ±1 s 条图，每个切点 ±10 s 内另选一张；回读缩略图须与验证缓存逐像素相同。
 已有代理逐会话比较 v3/v2 全时长滞后：所有机位差 ≤0.05 s 时保留 v2 代理及原 SHA，否则重建，并记录来源。
-仅七会话全通过后重建试用集和已完成 ROI 的正式集；含 `sync_uncertain` 的片段在同层重抽、逐次记录。
+仅已批准的替换批次全通过后重建试用集和已完成 ROI 的正式集；含 `sync_uncertain` 的片段在同层重抽、逐次记录。
 不自动生成正式 labels。正式标注等待同步独立验收。详见
 [中文工具指南](../../tools/workdata/README_CN.md)。
 

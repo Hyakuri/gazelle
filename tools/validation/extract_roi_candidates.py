@@ -82,18 +82,10 @@ def extract_candidates(inventory_path, remux_root, out_root, source_factory=Open
         if not source.is_file():
             raise ValueError('Missing validated overview remux: {}'.format(source))
         if row['needs_remux']:
-            report_path = Path(remux_root) / 'remux_report.json'
-            if not report_path.is_file():
+            if not (Path(remux_root) / 'remux_report.json').is_file():
                 raise ValueError('Missing validated remux report')
-            report = json.loads(report_path.read_text(encoding='utf-8'))
-            original = source_path(inventory['root'], row['relative_path'])
-            matches = [item for item in report.get('files', [])
-                       if Path(item['output']).resolve() == source.resolve()
-                       and Path(item['input']).resolve() == original.resolve()]
-            if (len(matches) != 1 or matches[0].get('validation', {}).get('valid') is not True
-                    or matches[0].get('status') not in ('completed', 'skipped')
-                    or matches[0].get('output_size_bytes') != source.stat().st_size):
-                raise ValueError('Overview remux has no matching validated report: {}'.format(source))
+            from tools.workdata.video_source import media_path
+            source=media_path(row,inventory,remux_root)
         reader = source_factory(source)
         try:
             previous_time = -1

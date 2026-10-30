@@ -338,11 +338,38 @@ python main.py `
 
 ### Research data tools
 
+The intake scope is the original seven recordings plus `20261016` and `20261023`;
+`20261030` has a separate intake contract. Use `E:\Gazelle_Workdata` as the read-only
+source root. Inventory and remux accept repeated `--session` arguments and preserve
+unselected rows; do not rescan the whole root when an unrecognized recording is present.
+Back up shared manifests before appending records. Historical paths in hashed outputs
+remain provenance records; relocated remux inputs are checked by relative path, size and SHA-256.
+
+The optional webcam `cam_w` uses `WIN_YYYYMMDD_HH_MM_SS_Pro.mp4` filename time plus native PTS
+(`filename_clock`, slope 1; naive computer time encoded as UTC epoch seconds).
+It is stored in `auxiliary_cameras`; required `cameras` remain A/B/E and only they determine overlap.
+W uses the same 5 Hz calibration method and uncertainty rules, with a 1280×720 video-only
+`proxy_webcam.mp4` and sidecar; A/B/E remain 1920×1080. W–B uses the A–B residual thresholds;
+W failure makes W unavailable without blocking A/B/E. OSD checks apply only to A/B/E.
+These tools decode/encode locally on CPU (FFmpeg for remux/proxies), with no model, CUDA or downloads.
+
+For an approved additional cohort, sampling accepts `--no-pilot --cohort 2026-10` and
+`--worker-spans <worker_spans.json>`. Defaults retain the original pilot protocol.
+Each segment gets `span_id` by maximum time overlap, or nearest worker interval if entirely
+inside a handover gap; ties use the earlier interval and never trigger resampling.
+Sampling only reads metadata/hashes and writes a new dataset; extraction uses CPU/OpenCV.
+A W reference requires passing W–B validation bound by `proxies/manifest.json` hashes.
+It is a separate 640×360 JPEG per step with SHA-256, gap and `sync_uncertain` flags.
+The editor shows a collapsible W reference with an uncertainty notice; gaze points remain
+on E in the unchanged three-view montage. Preserve existing datasets and labels.
+The formal `roi_r2_2026_10` dataset is generated only after its complete approved cohort is ready.
+
+
 The local annotation toolkit samples 60-second three-view segments, extracts
 JPEG steps, and serves an autosaving browser editor at `127.0.0.1`. Completed
 region definitions supply the classes. Omit `--regions-path` for a default-class
 trial dataset; an explicit unfinished region file is rejected. Each session uses
-`seed + int(session)` independently; `--sessions` defaults to the seven approved dates
+`seed + int(session)` independently; `--sessions` defaults to the original seven dates
 and formal segments never overlap the pilot. Labels use version 3: `viewed_ranges`
 records displayed steps, unseen steps retain stripes, and **本段完成** explicitly
 writes `finished_at` only after every step has been viewed, labelled and point-covered. Editing
@@ -425,7 +452,8 @@ receipts are explicitly recorded as unknown, separately from later verification 
 Residual results are passed, failed, or `insufficient_evidence` (<10 windows or <30% coverage).
 A–B/E–B must pass; A–E may lack evidence, with closure inference reported. Clock checks use
 `d = base_X(pts) - reading`: A/B −0.5 ≤ d <1.5 s, E −1.5 ≤ d <2.5 s.
-Only after all seven sessions pass may directories be switched with dated backups and datasets rebuilt.
+Preserve the original seven recordings' outputs and datasets when adding recordings.
+Any approved replacement batch must pass validation before a backed-up directory switch or dataset rebuild.
 
 Local research data tools build a read-only source inventory and losslessly
 remux AVI empty packets. Run `python -m tools.workdata.inventory` and

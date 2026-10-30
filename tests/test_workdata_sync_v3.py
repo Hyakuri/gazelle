@@ -17,6 +17,40 @@ def windows(values):
 
 
 class SynchronizationV3Test(unittest.TestCase):
+    def test_optional_webcam_residual_does_not_gate_required_camera_pairs(self):
+        from tools.workdata.sync_validate import residual_pairs,session_passed
+        rng=np.random.default_rng(150);signal=rng.normal(size=6000)
+        pairs=residual_pairs(dict(cam_a=signal,cam_b=signal,cam_e=signal,cam_w=np.roll(signal,4)),1200.)
+        self.assertTrue(session_passed(pairs))
+        self.assertFalse(pairs['W-B']['passed'])
+        self.assertAlmostEqual(pairs['W-B']['windows'][3]['lag_seconds'],.8,delta=.02)
+
+    def test_optional_webcam_validation_never_reads_a_clock(self):
+        from contextlib import ExitStack
+        from tools.workdata.sync_validate import webcam_evidence
+        from tools.workdata.common import hash_file
+        class Capture:
+            def __init__(self,*args): self.k=0
+            def read(self):
+                self.k+=1
+                return (True,np.zeros((54,96,3),dtype=np.uint8)) if self.k<=4 else (False,None)
+            def get(self,key): return (self.k-1)*200.
+            def release(self): pass
+        with tempfile.TemporaryDirectory() as directory, ExitStack() as stack:
+            root=Path(directory);video=root/'w.mp4';video.write_bytes(b'fake')
+            grid=dict(t0=0.,step=.2,N=4,step_hz=5.)
+            rows=[dict(k=k,t_k=k*.2,source='w',pts=k*.2,delta_seconds=0.,gap=False) for k in range(4)]
+            (root/'w.json').write_text(json.dumps(dict(frames=rows,video_sha256=hash_file(video))))
+            session=dict(N=4,grid=grid,auxiliary_cameras={'cam_w':dict(available=True,video='w.mp4',frames='w.json',sha256=hash_file(video))})
+            with patch('tools.workdata.sync_validate.ClockReader',side_effect=AssertionError('W has no OSD')), \
+                 patch('tools.workdata.sync_validate.source_keyframes',return_value={'w':[]}), \
+                 patch('tools.workdata.sync_validate.scan_keyframes',return_value={'pts':[]}), \
+                 patch('tools.workdata.sync_validate.cv2.VideoCapture',side_effect=Capture):
+                cells,thumbs,audit=webcam_evidence(session,root,root,dict(files=[dict(camera='cam_w',source='w')]),root,stack)
+            self.assertEqual(cells.shape,(3,72))
+            self.assertEqual(thumbs.shape,(4,54,96))
+            self.assertEqual(audit['decoded_frames'],4)
+
     def test_sampling_fingerprint_covers_base_wrapper_but_not_motion_fitting(self):
         from tools.workdata.sampling_fingerprint import COMPONENTS, sampling_hash
 

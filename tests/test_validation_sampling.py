@@ -12,6 +12,72 @@ from tests.test_validation_roi import document
 
 
 class SamplingTest(unittest.TestCase):
+    def test_webcam_reference_requires_passing_bound_validation(self):
+        from tools.validation.sample_segments import read_webcam_reference
+        from tools.workdata.common import hash_file
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);session_root=root/'20261016';session_root.mkdir()
+            path=session_root/'session.json';path.write_text('{}')
+            video=session_root/'w.mp4';video.write_bytes(b'fake')
+            grid=dict(t0=10.,N=3,step=.2,step_hz=5.)
+            webcam=dict(video='w.mp4',frames='w.json',sha256=hash_file(video))
+            session=dict(session='20261016',grid=grid,time_map_sha256='m'*64)
+            sidecar=dict(camera='cam_w',role='webcam',grid=grid,video_sha256=hash_file(video),
+                         frames=[dict(k=k,t_k=10+k*.2,pts=k*.2,source='w',delta_seconds=0.,gap=False) for k in range(3)])
+            (session_root/'w.json').write_text(json.dumps(sidecar))
+            self.assertIsNone(read_webcam_reference(path,session,webcam))
+            validation=dict(auxiliary_cameras={'cam_w':dict(available=True)},pairs={'W-B':dict(passed=True)},
+                calibration_map_sha256='m'*64,proxy_session_sha256=hash_file(path),audit={'cam_w':dict(sha256=hash_file(video))})
+            checked=root/'validation.json'
+            def save():
+                checked.write_text(json.dumps(validation))
+                (root/'manifest.json').write_text(json.dumps(dict(sessions={'20261016':dict(
+                    validation_path=str(checked),validation_sha256=hash_file(checked))})))
+            save()
+            self.assertEqual(read_webcam_reference(path,session,webcam)['sha256'],hash_file(video))
+            validation['auxiliary_cameras']['cam_w']['available']=False;save()
+            self.assertIsNone(read_webcam_reference(path,session,webcam))
+            validation['auxiliary_cameras']['cam_w']['available']=True
+            validation['calibration_map_sha256']='changed';save()
+            with self.assertRaisesRegex(ValueError,'provenance'):read_webcam_reference(path,session,webcam)
+
+    def test_no_pilot_cohort_keeps_session_rng_and_assigns_spans_without_redraw(self):
+        def read(path):
+            return dict(session=path.parent.name,grid=dict(t0=100.,N=18000,step_hz=5.,step=.2),
+                        cameras={c:dict(path='fake',sha256='a'*64) for c in ('cam_a','cam_b','cam_e')},
+                        time_map_version=3,time_map_sha256='b'*64),[False]*18000
+        with tempfile.TemporaryDirectory() as directory, patch('tools.validation.sample_segments.read_session',side_effect=read):
+            root=Path(directory)
+            for session in ('20261016','20261023'):
+                (root/session).mkdir();(root/session/'session.json').touch()
+            spans=dict(version=1,spans=[dict(session=s,span_id=s+'_01',start_wall=100.,end_wall=3700.,worker_id='P1')
+                                        for s in ('20261016','20261023')])
+            path=root/'workers.json';path.write_text(json.dumps(spans))
+            result=plan(root,sessions=['20261016','20261023'],include_pilot=False,cohort='2026-10',worker_spans=path)
+            plain=plan(root,sessions=['20261016'],include_pilot=False)
+            self.assertEqual(result['cohort'],'2026-10')
+            self.assertEqual(result['pilot_policy'],'none')
+            self.assertEqual(len(result['segments']),8)
+            self.assertTrue(all(not r['pilot'] for r in result['segments']))
+            self.assertEqual([r['start_frame'] for r in result['segments'][:4]],[r['start_frame'] for r in plain['segments']])
+            self.assertTrue(all(r['span_id']==r['session']+'_01' for r in result['segments']))
+
+    def test_worker_spans_exclude_handover_and_use_maximum_overlap_then_nearest(self):
+        from tools.workdata.workers import validate_worker_spans,assign_span
+        rows=[dict(session='20261016',span_id='s1',start_wall=100.,end_wall=200.,worker_id='P1'),
+              dict(session='20261016',span_id='s2',start_wall=300.,end_wall=500.,worker_id='P2')]
+        document=dict(version=1,spans=rows,handover_intervals=[dict(session='20261016',start_wall=200.,end_wall=300.)])
+        self.assertEqual(validate_worker_spans(document,{'20261016':(100.,500.)}),document)
+        self.assertEqual(assign_span(rows,'20261016',180,350),'s2')
+        self.assertEqual(assign_span(rows,'20261016',210,220),'s1')
+        self.assertEqual(assign_span(rows,'20261016',280,290),'s2')
+        self.assertEqual(assign_span(rows,'20261016',240,260),'s1')
+        for change in (dict(start_wall=190.),dict(worker_id='person-name'),dict(end_wall=501.)):
+            bad=deepcopy(document);bad['spans'][1].update(change)
+            with self.assertRaises(ValueError):validate_worker_spans(bad,{'20261016':(100.,500.)})
+        with self.assertRaisesRegex(ValueError,'No worker spans'):
+            assign_span(rows,'20261023',100,150)
+
     def test_uncertain_segment_is_redrawn_within_same_stratum_and_audited(self):
         session=dict(session='short',grid=dict(t0=100.,N=9000,step_hz=5.,step=.2),
                      cameras={},time_map_version=3,time_map_sha256='a'*64,sync_uncertain=[False]*9000)

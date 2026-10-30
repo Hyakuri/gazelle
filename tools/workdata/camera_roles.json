@@ -5,6 +5,7 @@
   "cameras": {
     "cam_a": {"role": "right", "clock_style": "flush_left", "mp4_container_fps": 30},
     "cam_b": {"role": "front", "clock_style": "indented_right", "mp4_container_fps": 50},
-    "cam_e": {"role": "overview", "clock_style": "weekday_and_CAM3", "mp4_container_fps": null}
+    "cam_e": {"role": "overview", "clock_style": "weekday_and_CAM3", "mp4_container_fps": null},
+    "cam_w": {"role": "webcam", "clock_style": "filename_clock", "mp4_container_fps": null}
   }
 }

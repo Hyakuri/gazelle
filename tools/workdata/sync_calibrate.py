@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import subprocess
 
 import numpy as np
 
@@ -321,7 +322,7 @@ def implementation_hash():
     root=Path(__file__).parent
     return hashlib.sha256(b''.join((root/name).read_bytes() for name in
         ('sync_calibrate.py','sample_cache.py','sampling_fingerprint.py','keyframes.py',
-         'sync_check.py','timemap.py','video_source.py','proxies.py','calibrated_frames.py'))).hexdigest()
+         'sync_check.py','timemap.py','video_source.py','proxies.py','calibrated_frames.py','webcam.py'))).hexdigest()
 
 
 def sample_camera(mapping,camera,root,grid,fingerprint):
@@ -362,12 +363,13 @@ def run(path,out_root,samples_root,reuse_samples=False,keyframes_root=None,sampl
     from .keyframes import source_keyframes,step_mask
     from .sampling_fingerprint import sampling_hash
     mapping=json.loads(Path(path).read_text(encoding='utf-8'))
-    if mapping['version']!=2 or any(r['status']!='valid' or 'calibration' in r for r in mapping['files']):
+    required=[r for r in mapping['files'] if r['camera']!='cam_w']
+    if mapping['version']!=2 or any(r['status']!='valid' or 'calibration' in r for r in required):
         raise ValueError('Every source requires a valid v2 base map')
     target=Path(out_root)/(mapping['session']+'.json')
     if reuse_samples and target.exists():
         raise FileExistsError('Calibration refit requires a fresh output map: '+str(target))
-    for row in mapping['files']:
+    for row in required:
         stat=Path(row['media_path']).stat()
         if (stat.st_size,stat.st_mtime_ns)!=(row['fingerprint']['media_size'],row['fingerprint']['media_mtime_ns']):
             raise ValueError('Source changed since mapping: '+row['source'])
@@ -376,7 +378,7 @@ def run(path,out_root,samples_root,reuse_samples=False,keyframes_root=None,sampl
     fingerprint=dict(mapping_sha256=hash_file(path),implementation_sha256=implementation_hash(),
                      sampling_sha256=sampling_hash()[0],grid=grid)
     receipts=json.loads(Path(sampling_provenance).read_text(encoding='utf-8')) if sampling_provenance else {}
-    keys=source_keyframes(mapping['files'],keyframes_root or Path(out_root)/'keyframes')
+    keys=source_keyframes(required,keyframes_root or Path(out_root)/'keyframes')
     cells={};evidence={};masked={}
     for camera in ('cam_b','cam_a','cam_e'):
         camera_fingerprint=dict(fingerprint,camera=camera)
@@ -409,7 +411,18 @@ def run(path,out_root,samples_root,reuse_samples=False,keyframes_root=None,sampl
             for row in mapping['files']:
                 if row['camera']==camera:
                     row['calibration']=fit
+    webcam=None
+    if any(r['camera']=='cam_w' for r in mapping['files']):
+        from .webcam import calibrate_webcam
+        try:
+            webcam=calibrate_webcam(mapping,root,grid,fingerprint,cells['cam_b'],
+                keyframes_root or Path(out_root)/'keyframes',reuse_samples,
+                receipts.get(mapping['session'],{}).get('cam_w'))
+        except subprocess.SubprocessError as error:
+            webcam=dict(available=False,reason=str(error),error_type=type(error).__name__)
     result=assemble_session(mapping['session'],mapping['files'])
+    if webcam is not None:
+        result.setdefault('auxiliary_cameras',{}).setdefault('cam_w',{}).update(webcam)
     result.update(version=3,calibration=calibrations,calibrated=all(f['valid'] for f in calibrations.values()),
                   reference_camera='cam_b',base_mapping_sha256=hash_file(path),implementation_sha256=implementation_hash(),
                   sampling_evidence=evidence,keyframe_masks=masked)

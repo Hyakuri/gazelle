@@ -4,6 +4,7 @@ import argparse
 from contextlib import ExitStack
 import json
 from pathlib import Path
+import subprocess
 
 import cv2
 import numpy as np
@@ -101,7 +102,9 @@ class ProxyClockReader:
 
 def residual_pairs(signals,duration):
     pairs={}
-    for name,reference,other in (('A-B','cam_b','cam_a'),('E-B','cam_b','cam_e'),('A-E','cam_e','cam_a')):
+    definitions=[('A-B','cam_b','cam_a'),('E-B','cam_b','cam_e'),('A-E','cam_e','cam_a')]
+    if 'cam_w' in signals: definitions.append(('W-B','cam_b','cam_w'))
+    for name,reference,other in definitions:
         windows=window_lags(signals[reference],signals[other])
         pairs[name]=dict(windows=windows,**residual_summary(windows,duration))
     return pairs
@@ -167,15 +170,20 @@ def export_events(session,root,out_root,signals,thumbnails,calibrations):
             if lo>hi:raise ValueError('No event frames near calibration cut')
             k=max(range(lo,hi+1),key=lambda i:strength[i-1])
             selected.append(dict(k=k,kind='cut',camera=camera,cut_base_seconds=point['seconds'],cut_time=cut_time))
-    cameras=('cam_b','cam_a','cam_e');captures={}
+    cameras=['cam_b','cam_a','cam_e'];captures={}
+    metadata=dict(session['cameras'])
+    if 'cam_w' in thumbnails:
+        cameras.append('cam_w')
+        metadata['cam_w']=session['auxiliary_cameras']['cam_w']
     records=[]
     try:
-        captures={c:cv2.VideoCapture(str(root/session['cameras'][c]['video'])) for c in cameras}
+        captures={c:cv2.VideoCapture(str(root/metadata[c]['video'])) for c in cameras}
         for number,event in enumerate(selected):
             k=event['k']
-            canvas=Image.new('RGB',(11*320,3*180+36),'white')
+            canvas=Image.new('RGB',(11*320,len(cameras)*180+36),'white')
             draw=ImageDraw.Draw(canvas)
-            draw.text((8,8),'{} k={} +/-1s; columns 0.2s; rows B/A/E'.format(session['session'],k),fill='black')
+            draw.text((8,8),'{} k={} +/-1s; columns 0.2s; rows {}'.format(session['session'],k,
+                '/'.join(c[-1].upper() for c in cameras)),fill='black')
             for column,index in enumerate(range(k-5,k+6)):
                 for row,camera in enumerate(cameras):
                     image=read_frame(captures[camera],index)
@@ -191,6 +199,44 @@ def export_events(session,root,out_root,signals,thumbnails,calibrations):
     return records
 
 
+def webcam_evidence(session,root,output,mapping,keyframes_root,stack):
+    meta=session['auxiliary_cameras']['cam_w']
+    video=root/meta['video'];sidecar=json.loads((root/meta['frames']).read_text(encoding='utf-8'))
+    if hash_file(video)!=meta['sha256'] or sidecar['video_sha256']!=meta['sha256']:
+        raise ValueError('W proxy checksum mismatch')
+    validate_sidecar(sidecar['frames'],session['grid'])
+    keys=source_keyframes([r for r in mapping['files'] if r['camera']=='cam_w'],keyframes_root)
+    proxy_keys=scan_keyframes(video,keyframes_root,meta['sha256'])['pts']
+    path=output/'cam_w.npy'
+    images=np.lib.format.open_memmap(path,mode='w+',dtype=np.uint8,shape=(session['N'],54,96))
+    stack.callback(images._mmap.close)
+    capture=cv2.VideoCapture(str(video));rows=[]
+    try:
+        while True:
+            ok,image=capture.read()
+            if not ok: break
+            if len(rows)>=session['N']: raise ValueError('W proxy has extra frames')
+            images[len(rows)]=validation_thumbnail(image)
+            pts=float(capture.get(cv2.CAP_PROP_POS_MSEC))/1000
+            if not np.isfinite(pts) or (rows and pts<=rows[-1]['pts']):
+                raise ValueError('W proxy timestamps must increase')
+            rows.append(dict(source=str(video),pts=pts))
+    finally:
+        capture.release()
+    if len(rows)!=session['N']: raise ValueError('W proxy decoded count differs from sidecar')
+    images.flush()
+    source_mask=step_mask(sidecar['frames'],keys)
+    proxy_mask=step_mask(rows,{str(video):proxy_keys})
+    mask=source_mask|proxy_mask
+    cells=motion_cells(images,np.array([r['gap'] for r in sidecar['frames']]),mask)
+    images._mmap.close()
+    thumbnails=np.load(path,mmap_mode='r');stack.callback(thumbnails._mmap.close)
+    return cells,thumbnails,dict(decoded_frames=len(rows),sha256=meta['sha256'],
+        source_keyframe_mask_fraction=float(source_mask[1:].mean()),
+        proxy_keyframe_mask_fraction=float(proxy_mask[1:].mean()),masked_fraction=float(mask[1:].mean()),
+        sync_uncertain_steps=sum(r.get('sync_uncertain',False) for r in sidecar['frames']))
+
+
 def run(proxies,out_root,session_name,clock_samples,timemaps,keyframes_root):
     with ExitStack() as stack:
         return _run(proxies,out_root,session_name,clock_samples,timemaps,keyframes_root,stack)
@@ -204,7 +250,7 @@ def _run(proxies,out_root,session_name,clock_samples,timemaps,keyframes_root,sta
     if mapping.get('version')!=3 or mapping.get('calibrated') is not True:
         raise ValueError('Validation requires successful v3 calibration')
     sources={r['source']:r for r in mapping['files']}
-    keys=source_keyframes(mapping['files'],keyframes_root)
+    keys=source_keyframes([r for r in mapping['files'] if r.get('camera')!='cam_w'],keyframes_root)
     saved=json.loads(Path(clock_samples).read_text(encoding='utf-8'))
     indices=next(s['indices'] for s in saved['sessions'] if s['session']==session_name)
     output=Path(out_root)/session_name;output.mkdir(parents=True,exist_ok=True)
@@ -255,8 +301,22 @@ def _run(proxies,out_root,session_name,clock_samples,timemaps,keyframes_root,sta
             proxy_keyframe_mask_fraction=float(proxy_mask[1:].mean()),masked_fraction=float(mask[1:].mean()),
             sync_uncertain_steps=sum(r.get('sync_uncertain',False) for r in sidecar['frames']))
     signals,selection=select_signals(cells)
+    webcam=session.get('auxiliary_cameras',{}).get('cam_w')
+    auxiliary={}
+    if webcam is not None:
+        auxiliary['cam_w']=dict(available=False,reason=webcam.get('reason','W proxy unavailable'))
+        if webcam.get('available'):
+            try:
+                from .webcam import select_webcam_signal
+                cells['cam_w'],thumbnails['cam_w'],audits['cam_w']=webcam_evidence(
+                    session,root,output,mapping,keyframes_root,stack)
+                signals['cam_w'],selection['cam_w']=select_webcam_signal(cells['cam_b'],cells['cam_w'])
+            except (OSError,ValueError,RuntimeError,subprocess.SubprocessError) as error:
+                auxiliary['cam_w']=dict(available=False,reason=str(error),error_type=type(error).__name__)
     duration=(session['N']-1)*.2
     pairs=residual_pairs(signals,duration)
+    if 'W-B' in pairs:
+        auxiliary['cam_w']=dict(available=pairs['W-B']['passed'],reason=pairs['W-B']['conclusion'])
     events=export_events(session,root,output,signals,thumbnails,mapping['calibration'])
     clock=dict(indices=indices,rows=clock_rows,**clock_summary(clock_rows))
     result=dict(session=session_name,version=3,implementation_sha256=implementation_hash(),
@@ -266,6 +326,7 @@ def _run(proxies,out_root,session_name,clock_samples,timemaps,keyframes_root,sta
                 pairs=pairs,closure=closure_summary(pairs),selection=selection,clock=clock,events=events,audit=audits,
                 synchronization_passed=session_passed(pairs),
                 passed=session_passed(pairs) and clock['passed'] and sum(e['kind']=='motion' for e in events)==3)
+    if auxiliary: result['auxiliary_cameras']=auxiliary
     atomic_json(Path(out_root)/(session_name+'.json'),result)
     print(session_name,json.dumps(dict(pairs={k:v['passed'] for k,v in pairs.items()},
                                       clock=clock['passed'],events=len(events))),flush=True)

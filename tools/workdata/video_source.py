@@ -5,7 +5,7 @@ from pathlib import Path
 
 import av
 
-from .common import source_path
+from .common import hash_file, source_path
 
 
 def media_path(entry, inventory, remux_root):
@@ -15,12 +15,16 @@ def media_path(entry, inventory, remux_root):
     path=source_path(remux_root,str(Path(entry['relative_path']).with_suffix('.mp4')))
     report=json.loads((Path(remux_root)/'remux_report.json').read_text(encoding='utf-8'))
     original=source_path(inventory['root'],entry['relative_path'])
-    matches=[r for r in report['files'] if Path(r['input']).resolve()==original.resolve()
+    relative=Path(entry['relative_path']).parts
+    matches=[r for r in report['files'] if Path(r['input']).parts[-len(relative):]==relative
+             and r.get('input_size_bytes')==entry['size_bytes']==original.stat().st_size
              and Path(r['output']).resolve()==path.resolve()]
     if (len(matches)!=1 or matches[0].get('validation',{}).get('valid') is not True
             or matches[0].get('status') not in ('completed','skipped')
             or matches[0].get('output_size_bytes')!=path.stat().st_size):
         raise ValueError('Missing valid remux provenance: '+entry['relative_path'])
+    if hash_file(original)!=entry['sha256']:
+        raise ValueError('Source checksum differs from inventory: '+entry['relative_path'])
     return path
 
 

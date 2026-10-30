@@ -8,6 +8,46 @@ from tools.workdata.proxies import make_grid, encoder_command, validate_sidecar,
 
 
 class ProxyTest(unittest.TestCase):
+    def test_optional_webcam_uses_same_grid_720p_and_does_not_change_roles(self):
+        from tools.workdata.proxies import ROLES
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);source=root/'fake.mp4';source.write_bytes(b'fake')
+            stat=source.stat()
+            files=[dict(camera=c,status='valid',source=c,media_path=str(source),
+                        fingerprint=dict(media_size=stat.st_size,media_mtime_ns=stat.st_mtime_ns))
+                   for c in ('cam_a','cam_b','cam_e','cam_w')]
+            mapping=dict(version=3,calibrated=True,session='test',overlap=[[10,11]],files=files,
+                         auxiliary_cameras={'cam_w':{'available':True}})
+            path=root/'map.json';path.write_text(json.dumps(mapping))
+            payload=dict(video_sha256='hash',video_size_bytes=4,gap_count=0,source_decode=[],elapsed_seconds=0)
+            with patch('tools.workdata.proxies.subprocess.run') as command, \
+                 patch('tools.workdata.proxies.generate_camera',return_value=payload) as generate:
+                command.return_value.stdout='test'
+                result=run(path,root/'out')
+                self.assertEqual(set(ROLES),{'cam_a','cam_b','cam_e'})
+                self.assertEqual(set(result['cameras']),set(ROLES))
+                calls=generate.call_args_list
+                self.assertEqual(len(calls),4)
+                self.assertEqual(calls[-1].args[2],(1280,720))
+                self.assertEqual(calls[-1].args[1],calls[0].args[1])
+                self.assertEqual(calls[-1].args[3].name,'proxy_webcam.mp4')
+                self.assertEqual(result['auxiliary_cameras']['cam_w']['video'],'proxy_webcam.mp4')
+                def failure(*args):
+                    if args[6]=='cam_w':raise ValueError('W decode failed')
+                    return payload
+                generate.side_effect=failure
+                failed=run(path,root/'optional-failure')
+                self.assertEqual(set(failed['cameras']),set(ROLES))
+                self.assertFalse(failed['auxiliary_cameras']['cam_w']['available'])
+                self.assertEqual(failed['auxiliary_cameras']['cam_w']['reason'],'W decode failed')
+                generate.side_effect=None
+                mapping['auxiliary_cameras']['cam_w']=dict(available=False,reason='insufficient evidence')
+                files[-1]['status']='failed'
+                path.write_text(json.dumps(mapping));generate.reset_mock()
+                result=run(path,root/'other')
+                self.assertEqual(generate.call_count,3)
+                self.assertFalse(result['auxiliary_cameras']['cam_w']['available'])
+
     def test_existing_unverified_output_requires_explicit_force(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory);source=root/'source.mp4';source.write_bytes(b'synthetic')

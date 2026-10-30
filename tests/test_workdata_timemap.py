@@ -6,6 +6,38 @@ from tools.workdata.timemap import assemble_session, fit_time_map, map_time, ove
 
 
 class TimeMapTest(unittest.TestCase):
+    def test_filename_clock_preserves_native_pts_and_does_not_read_osd(self):
+        from datetime import datetime, timezone
+        from tools.workdata.webcam import sample_filename_clock
+        class Source:
+            start=4.
+            def __init__(self,path): pass
+            def __enter__(self): return self
+            def __exit__(self,*args): pass
+            def frames(self):
+                for pts in (4.125,4.2,6.,6.1): yield pts,object()
+        result=sample_filename_clock('WIN_20261014_12_05_36_Pro.mp4',Source)
+        origin=datetime(2026,10,14,12,5,36,tzinfo=timezone.utc).timestamp()
+        self.assertEqual(result['clock_source'],'filename_clock')
+        self.assertEqual(result['decoded_frames'],4)
+        self.assertEqual(len(result['segments']),2)
+        self.assertEqual([s['b'] for s in result['segments']],[1.,1.])
+        self.assertEqual(map_time(result['segments'],4.125,0),origin+4.125)
+        self.assertEqual(map_time(result['segments'],6.1,3),origin+6.1)
+        with self.assertRaises(ValueError):
+            sample_filename_clock('WIN_20261314_12_05_36_Pro.mp4',Source)
+
+    def test_optional_webcam_does_not_shorten_three_camera_overlap(self):
+        rows=[dict(camera=c,source=c,segments=[dict(pts_start=0,pts_end=10,a=100,b=1)])
+              for c in ('cam_a','cam_b','cam_e')]
+        original=assemble_session('test',rows)
+        self.assertNotIn('auxiliary_cameras',original)
+        webcam=dict(camera='cam_w',source='w',segments=[dict(pts_start=2,pts_end=3,a=100,b=1)])
+        result=assemble_session('test',rows+[webcam])
+        self.assertEqual(result['overlap'],original['overlap'])
+        self.assertEqual(result['cameras'],original['cameras'])
+        self.assertEqual(result['auxiliary_cameras']['cam_w']['coverage'],[(102,103)])
+
     def test_robust_fit_recovers_drift_without_hiding_outliers(self):
         rng=np.random.default_rng(31)
         x=np.arange(100)*10.

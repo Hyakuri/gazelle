@@ -26,16 +26,23 @@ class AnnotationApplication:
         self.token=secrets.token_urlsafe(32)
 
     def state(self):
-        return dict(segments=[{k:row[k] for k in ('segment_id','session','start_wall_time','step_hz','step_count','pilot')}
+        return dict(segments=[dict({k:row[k] for k in ('segment_id','session','start_wall_time','step_hz','step_count','pilot')},
+                                  **(dict(has_webcam=True,
+                                  webcam_uncertain_steps=[f['step'] for f in row['frames']
+                                      if f.get('webcam',{}).get('sync_uncertain') or f.get('webcam',{}).get('gap')])
+                                     if 'cam_w' in row.get('auxiliary_proxies',{}) else {}))
                               for row in self.by_id.values()],
                     document=self.store.document(),classes=self.store.classes,
                     resume=self.store.resume(),has_reference=bool(self.store.manifest.get('roi_reference_sha256')),
                     classes_source=self.store.manifest.get('classes_source','default-trial'),token=self.token)
 
-    def frame(self,identifier,step):
+    def frame(self,identifier,step,webcam=False):
         if identifier not in self.by_id or type(step) is not int or not 0<=step<self.by_id[identifier]['step_count']:
             raise ValueError('Unknown segment or step')
         row=self.by_id[identifier]['frames'][step]
+        if webcam:
+            if 'webcam' not in row:raise ValueError('No webcam reference at this step')
+            row=row['webcam']
         path=source_path(self.root,row['path'])
         if hash_file(path)!=row['sha256']:raise ValueError('Frame differs from manifest')
         return path.read_bytes()
@@ -44,10 +51,10 @@ class AnnotationApplication:
         if method=='GET':
             if path=='/':return 200,Path(__file__).with_name('annotation_page.html').read_bytes(),'text/html; charset=utf-8'
             if path=='/api/state':return self.json(self.state())
-            if path.startswith('/frame/'):
+            if path.startswith(('/frame/','/webcam/')):
                 pieces=path.split('/')
                 if len(pieces)!=4:raise ValueError('Invalid frame path')
-                return 200,self.frame(unquote(pieces[2]),int(pieces[3])),'image/jpeg'
+                return 200,self.frame(unquote(pieces[2]),int(pieces[3]),pieces[1]=='webcam'),'image/jpeg'
             if path=='/reference':
                 expected=self.store.manifest.get('roi_reference_sha256')
                 if not expected:return 404,b'', 'image/png'

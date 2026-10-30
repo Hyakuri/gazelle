@@ -187,7 +187,7 @@ def generate_camera(files, grid, size, target, sidecar, fingerprint, camera, ffm
         if v3:
             for row in rows:row['sync_uncertain']=is_uncertain(row['t_k'],ranges)
         validate_sidecar(rows,grid)
-        payload=dict(version=1,camera=camera,role=ROLES[camera],grid=grid,
+        payload=dict(version=1,camera=camera,role='webcam' if camera=='cam_w' else ROLES[camera],grid=grid,
                      fingerprint=fingerprint,frames=rows,source_decode=counts,
                      gap_count=sum(row['gap'] for row in rows),elapsed_seconds=time.monotonic()-started)
         if v3:payload.update(sync_uncertain_ranges=ranges,selection_audit=selection_audit,
@@ -214,13 +214,36 @@ def resume_camera(target,sidecar,fingerprint,grid,size,ffprobe):
         return None
 
 
+def prepare_camera(files,root,grid,size,version,camera,role,force,ffmpeg,ffprobe):
+    if not files:
+        raise ValueError('Missing physical camera '+camera)
+    # Check input provenance even when an output can be resumed.
+    for row in files:
+        stat=Path(row['media_path']).stat()
+        if (stat.st_size,stat.st_mtime_ns)!=(row['fingerprint']['media_size'],row['fingerprint']['media_mtime_ns']):
+            raise ValueError('Source changed since mapping: '+row['source'])
+    target=root/('proxy_'+role+'.mp4'); sidecar=root/('proxy_'+role+'.frames.json')
+    fingerprint=dict(version,camera=camera,size=list(size))
+    payload=None if force else resume_camera(target,sidecar,fingerprint,grid,size,ffprobe)
+    skipped=payload is not None
+    if payload is None:
+        if not force and (target.exists() or sidecar.exists()):
+            raise FileExistsError('Existing proxy cannot be resumed; inspect it and use --force to rebuild: '+str(target))
+        payload=generate_camera(files,grid,size,target,sidecar,fingerprint,camera,ffmpeg,ffprobe)
+    return dict(role=role,video=target.name,frames=sidecar.name,
+                sha256=payload['video_sha256'],size_bytes=payload['video_size_bytes'],
+                gap_count=payload['gap_count'],gap_fraction=payload['gap_count']/grid['N'],
+                source_decode=payload['source_decode'],elapsed_seconds=payload['elapsed_seconds'],
+                status='skipped-valid' if skipped else 'completed')
+
+
 def run(path,out_root,hz=5.,size=(1920,1080),force=False,ffmpeg='ffmpeg',ffprobe='ffprobe',allow_internal_gaps=False):
     if len(size)!=2 or any(type(v) is not int or v<=0 or v%2 for v in size):
         raise ValueError('Positive even output dimensions are required')
     mapping=json.loads(Path(path).read_text(encoding='utf-8'))
     if mapping['version']>=2 and mapping.get('calibrated') is not True:
         raise ValueError('v2 proxies require successful content calibration for both cameras')
-    if any(row['status']!='valid' for row in mapping['files']):
+    if any(row['status']!='valid' for row in mapping['files'] if row['camera']!='cam_w'):
         raise ValueError('Every source requires a valid time map')
     grid=make_grid(mapping['overlap'],hz,allow_internal_gaps)
     root=Path(out_root)/mapping['session']
@@ -234,34 +257,32 @@ def run(path,out_root,hz=5.,size=(1920,1080),force=False,ffmpeg='ffmpeg',ffprobe
     implementation=hashlib.sha256(b''.join((Path(__file__).parent/name).read_bytes() for name in
                                  ('proxies.py','calibrated_frames.py','sync_check.py','sync_calibrate.py','video_source.py','timemap.py'))).hexdigest()
     version=dict(timemap_sha256=hash_file(path),implementation_sha256=implementation,grid=grid,size=list(size))
-    cameras={}; started=time.monotonic()
-    for camera,role in ROLES.items():
+    cameras={}; auxiliary={}; started=time.monotonic()
+    roles=list(ROLES.items())
+    webcam=mapping.get('auxiliary_cameras',{}).get('cam_w')
+    if webcam is not None:
+        if webcam.get('available'):
+            roles.append(('cam_w','webcam'))
+        else:
+            auxiliary['cam_w']=dict(available=False,reason=webcam.get('reason','W calibration unavailable'))
+    for camera,role in roles:
+        camera_size=(1280,720) if camera=='cam_w' else size
         files=[row for row in mapping['files'] if row['camera']==camera]
-        if not files:
-            raise ValueError('Missing physical camera '+camera)
-        # Check input provenance even when an output can be resumed.
-        for row in files:
-            stat=Path(row['media_path']).stat()
-            if (stat.st_size,stat.st_mtime_ns)!=(row['fingerprint']['media_size'],row['fingerprint']['media_mtime_ns']):
-                raise ValueError('Source changed since mapping: '+row['source'])
-        target=root/('proxy_'+role+'.mp4'); sidecar=root/('proxy_'+role+'.frames.json')
-        fingerprint=dict(version,camera=camera)
-        payload=None if force else resume_camera(target,sidecar,fingerprint,grid,size,ffprobe)
-        skipped=payload is not None
-        if payload is None:
-            if not force and (target.exists() or sidecar.exists()):
-                raise FileExistsError('Existing proxy cannot be resumed; inspect it and use --force to rebuild: '+str(target))
-            payload=generate_camera(files,grid,size,target,sidecar,fingerprint,camera,ffmpeg,ffprobe)
-        cameras[camera]=dict(role=role,video=target.name,frames=sidecar.name,
-                             sha256=payload['video_sha256'],size_bytes=payload['video_size_bytes'],
-                             gap_count=payload['gap_count'],gap_fraction=payload['gap_count']/grid['N'],
-                             source_decode=payload['source_decode'],elapsed_seconds=payload['elapsed_seconds'],
-                             status='skipped-valid' if skipped else 'completed')
-        print('{} {}: {} N={} gaps={}'.format(mapping['session'],camera,cameras[camera]['status'],grid['N'],payload['gap_count']),flush=True)
+        records=auxiliary if camera=='cam_w' else cameras
+        try:
+            records[camera]=prepare_camera(files,root,grid,camera_size,version,camera,role,force,ffmpeg,ffprobe)
+        except (OSError,ValueError,RuntimeError,subprocess.SubprocessError) as error:
+            if camera!='cam_w': raise
+            auxiliary[camera]=dict(available=False,reason=str(error),error_type=type(error).__name__)
+            print('{} cam_w: unavailable: {}'.format(mapping['session'],error),flush=True)
+            continue
+        if camera=='cam_w': records[camera]['available']=True
+        print('{} {}: {} N={} gaps={}'.format(mapping['session'],camera,records[camera]['status'],grid['N'],records[camera]['gap_count']),flush=True)
     result=dict(version=1,session=mapping['session'],grid=grid,t0=grid['t0'],N=grid['N'],
                 cameras=cameras,time_map_version=mapping['version'],time_map_sha256=version['timemap_sha256'],
                 code_commit_sha=commit,code_worktree_dirty=dirty,implementation_sha256=version['implementation_sha256'],
                 elapsed_seconds=time.monotonic()-started)
+    if auxiliary: result['auxiliary_cameras']=auxiliary
     atomic_json(root/'session.json',result)
     return result
 

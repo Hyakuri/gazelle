@@ -152,7 +152,7 @@ def overlap_intervals(groups):
 def implementation_hash():
     root=Path(__file__).parent
     return hashlib.sha256(b''.join((root/name).read_bytes() for name in (
-        'timemap.py','video_source.py','osd_clock.py','osd_layouts.json','osd_glyphs.json'))).hexdigest()
+        'timemap.py','video_source.py','osd_clock.py','osd_layouts.json','osd_glyphs.json','webcam.py'))).hexdigest()
 
 
 def sample_file(path,camera,step=10.,window=2.25,source_factory=VideoSource,reader=None):
@@ -222,15 +222,21 @@ def coverage_intervals(row):
 
 def assemble_session(session,files):
     cameras={}
-    for camera in ('cam_a','cam_b','cam_e'):
+    for camera in ('cam_a','cam_b','cam_e','cam_w'):
+        if camera=='cam_w' and not any(f['camera']==camera for f in files):
+            continue
         selected=[f for f in files if f['camera']==camera and 'segments' in f]
         selected.sort(key=lambda f:map_file_time(f,f['segments'][0]['pts_start'],f['segments'][0].get('frame_start')))
         intervals=[interval for f in selected for interval in coverage_intervals(f)]
         merged=_merge(intervals)
         cameras[camera]=dict(files=[f['source'] for f in selected],coverage=merged,
                              gaps=[dict(start=b,end=c,seconds=c-b) for (_,b),(c,_) in zip(merged,merged[1:])])
-    return dict(version=2,session=session,wall_clock_encoding='OSD clock encoded as UTC epoch seconds; not calibrated UTC',
+    auxiliary=cameras.pop('cam_w',None)
+    result=dict(version=2,session=session,wall_clock_encoding='OSD clock encoded as UTC epoch seconds; not calibrated UTC',
                 files=files,cameras=cameras,overlap=overlap_intervals([c['coverage'] for c in cameras.values()]))
+    if auxiliary is not None:
+        result['auxiliary_cameras']={'cam_w':auxiliary}
+    return result
 
 
 def run(inventory_path,remux_root,out_root,session=None,step=10.,window=2.25,force=False,sample_cache=None):
@@ -278,12 +284,19 @@ def run(inventory_path,remux_root,out_root,session=None,step=10.,window=2.25,for
                     sampled=old['sampled']
                 else:
                     print('Sampling '+entry['relative_path'],flush=True)
-                    sampled=sample_file(path,entry['physical_camera'],step,window)
+                    if entry['physical_camera']=='cam_w':
+                        from .webcam import sample_filename_clock
+                        sampled=sample_filename_clock(path)
+                    else:
+                        sampled=sample_file(path,entry['physical_camera'],step,window)
                     atomic_json(cache,dict(version=2,fingerprint=fingerprint,sampled=sampled))
                 row.update(pts_start=sampled['pts_start'],pts_end=sampled['pts_end'],
-                           segments=fit_time_map(sampled['anchors'],sampled['pts_start'],sampled['pts_end'],sampled['pts_runs']),
+                           segments=(sampled['segments'] if row['camera']=='cam_w' else
+                                     fit_time_map(sampled['anchors'],sampled['pts_start'],sampled['pts_end'],sampled['pts_runs'])),
                            anchor_count=len(sampled['anchors']),sampling={k:sampled[k] for k in ('windows','decoded_samples','recognized_samples')},
                            anchors_path=str(cache))
+                if row['camera']=='cam_w':
+                    row.update(clock_source=sampled['clock_source'],clock_description=sampled['clock_description'])
                 row['status']='valid' if all(s['valid'] for s in row['segments']) else 'review'
             except (ValueError,OSError,RuntimeError) as error:
                 row.update(status='failed',error=str(error))
@@ -312,7 +325,7 @@ def main(argv=None):
     process=psutil.Process()
     process.nice(psutil.BELOW_NORMAL_PRIORITY_CLASS if hasattr(psutil,'BELOW_NORMAL_PRIORITY_CLASS') else 10)
     results=run(args.inventory,args.remux_root,args.out_root,args.session,args.sample_step,args.window_seconds,args.force,args.sample_cache)
-    return int(any(r['status']!='valid' for s in results for r in s['files']))
+    return int(any(r['status']!='valid' for s in results for r in s['files'] if r['camera']!='cam_w'))
 
 
 if __name__=='__main__':

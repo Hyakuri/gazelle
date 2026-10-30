@@ -42,13 +42,15 @@ def write_jpeg(path,image):
 def _inputs(manifest):
     seen={}
     for row in manifest['segments']:
-        for camera,proxy in row['proxies'].items():
+        for camera,proxy in {**row['proxies'],**row.get('auxiliary_proxies',{})}.items():
             path=Path(proxy['path'])
             if path in seen and seen[path]!=proxy['sha256']:
                 raise ValueError('Conflicting proxy fingerprints')
             if path not in seen:
                 if hash_file(path)!=proxy['sha256']:raise ValueError('Proxy changed since sampling: '+str(path))
                 seen[path]=proxy['sha256']
+            if camera=='cam_w' and hash_file(proxy['sidecar_path'])!=proxy['sidecar_sha256']:
+                raise ValueError('Webcam sidecar changed since sampling')
 
 
 def validate_dataset(root,check_inputs=True):
@@ -68,6 +70,11 @@ def validate_dataset(root,check_inputs=True):
             if hash_file(path)!=frame['sha256']:raise ValueError('Extracted JPEG changed: '+str(path))
             image=cv2.imread(str(path))
             if image is None or image.shape!=(720,1920,3):raise ValueError('Invalid montage dimensions')
+            if 'webcam' in frame:
+                reference=source_path(root,frame['webcam']['path'])
+                if hash_file(reference)!=frame['webcam']['sha256']:raise ValueError('Webcam JPEG changed: '+str(reference))
+                image=cv2.imread(str(reference))
+                if image is None or image.shape!=(360,640,3):raise ValueError('Invalid webcam reference dimensions')
             count+=1
     return dict(segments=len(manifest['segments']),frames=count,valid=True)
 
@@ -82,15 +89,19 @@ def extract(root):
     for row in manifest['segments']:
         if 'frames' in row:
             # Resuming still verifies existing pixels; corrupted steps are not silently accepted.
-            if all(hash_file(source_path(root,f['path']))==f['sha256'] for f in row['frames']):continue
+            if all(hash_file(source_path(root,f['path']))==f['sha256'] and
+                   ('webcam' not in f or hash_file(source_path(root,f['webcam']['path']))==f['webcam']['sha256'])
+                   for f in row['frames']):continue
             raise ValueError('Existing extracted frames changed: '+row['segment_id'])
-        captures={};frames=[]
+        captures={};frames=[];webcam_rows=None
         try:
-            for camera,proxy in row['proxies'].items():
+            for camera,proxy in {**row['proxies'],**row.get('auxiliary_proxies',{})}.items():
                 capture=cv2.VideoCapture(proxy['path']);captures[camera]=capture
                 if not capture.isOpened():raise ValueError('Cannot decode proxy '+proxy['path'])
                 if not capture.set(cv2.CAP_PROP_POS_FRAMES,row['start_frame']):
                     raise ValueError('Cannot seek proxy to selected segment')
+                if camera=='cam_w':
+                    webcam_rows=json.loads(Path(proxy['sidecar_path']).read_text(encoding='utf-8'))['frames']
             for step in range(row['step_count']):
                 images={}
                 for camera,capture in captures.items():
@@ -100,6 +111,12 @@ def extract(root):
                     images[camera]=image
                 relative='frames/{}/{:04d}.jpg'.format(row['segment_id'],step)
                 frames.append(dict(step=step,path=relative,sha256=write_jpeg(root/relative,montage(images))))
+                if webcam_rows is not None:
+                    reference='webcam/{}/{:04d}.jpg'.format(row['segment_id'],step)
+                    evidence=webcam_rows[row['start_frame']+step]
+                    frames[-1]['webcam']=dict(path=reference,
+                        sha256=write_jpeg(root/reference,cv2.resize(images['cam_w'],(640,360),interpolation=cv2.INTER_AREA)),
+                        gap=evidence['gap'],sync_uncertain=evidence.get('sync_uncertain',False))
         finally:
             for capture in captures.values():capture.release()
         row['frames']=frames

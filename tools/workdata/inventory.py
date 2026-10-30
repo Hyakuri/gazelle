@@ -12,6 +12,9 @@ def load_roles():
 
 
 def identify(session, filename, roles):
+    if re.fullmatch(r'WIN_\d{8}_\d{2}_\d{2}_\d{2}_Pro\.mp4', filename):
+        datetime.strptime(filename, 'WIN_%Y%m%d_%H_%M_%S_Pro.mp4')
+        return 'cam_w', 'filename_clock', None
     matches = [key for key, pattern in roles['filename_patterns'].items() if pattern in filename]
     if len(matches) != 1:
         raise ValueError('Ambiguous or unknown camera filename: {}'.format(filename))
@@ -34,14 +37,20 @@ def fingerprint(path, cached=None):
     return {**values, 'sha256': digest}
 
 
-def create_inventory(root, out, ffprobe='ffprobe'):
+def create_inventory(root, out, ffprobe='ffprobe', sessions=None):
     root = Path(root).resolve(strict=True)
     out = outside_source(out, root)
     old = json.loads(out.read_text(encoding='utf-8')) if out.exists() else {}
     cache = {row['relative_path']: row for row in old.get('files', [])} if old.get('root') == str(root) else {}
     roles = load_roles()
-    records = []
-    for path in sorted(root.rglob('*')):
+    selected = None if sessions is None else set(sessions)
+    if selected is not None and (not selected or any(not re.fullmatch(r'\d{8}', s) for s in selected)):
+        raise ValueError('Sessions must be eight-digit recording names')
+    directories = [root] if selected is None else [source_path(root, s) for s in sorted(selected)]
+    if any(not path.is_dir() for path in directories):
+        raise ValueError('Selected session directory is missing')
+    records = [] if selected is None else [row for row in old.get('files', []) if row['session'] not in selected]
+    for path in sorted(p for directory in directories for p in directory.rglob('*')):
         if not path.is_file() or path.suffix.lower() not in ('.avi', '.mp4'):
             continue
         relative = path.relative_to(root).as_posix()
@@ -66,12 +75,13 @@ def build_parser():
     parser.add_argument('--root', required=True, type=Path)
     parser.add_argument('--out', required=True, type=Path)
     parser.add_argument('--ffprobe', default='ffprobe')
+    parser.add_argument('--session', action='append', help='Scan only this recording; repeat to select several, preserving other rows')
     return parser
 
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
-    result = create_inventory(args.root, args.out, args.ffprobe)
+    result = create_inventory(args.root, args.out, args.ffprobe, args.session)
     print('Files: {}'.format(len(result['files'])))
     return 0
 

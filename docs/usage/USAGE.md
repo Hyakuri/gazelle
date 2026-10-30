@@ -556,6 +556,33 @@ There is no webcam/real-time mode, automatic ROI/process logic, Multi-Pose integ
 
 ## 15. Research data tools
 
+The intake scope is the original seven recordings plus `20261016` and `20261023`;
+`20261030` has a separate intake contract. Use `E:\Gazelle_Workdata` as the read-only
+source root. Inventory and remux accept repeated `--session` arguments and preserve
+unselected rows; do not rescan the whole root when an unrecognized recording is present.
+Back up shared manifests before appending records. Historical paths in hashed outputs
+remain provenance records; relocated remux inputs are checked by relative path, size and SHA-256.
+
+The optional webcam `cam_w` uses `WIN_YYYYMMDD_HH_MM_SS_Pro.mp4` filename time plus native PTS
+(`filename_clock`, slope 1; naive computer time encoded as UTC epoch seconds).
+It is stored in `auxiliary_cameras`; required `cameras` remain A/B/E and only they determine overlap.
+W uses the same 5 Hz calibration method and uncertainty rules, with a 1280×720 video-only
+`proxy_webcam.mp4` and sidecar; A/B/E remain 1920×1080. W–B uses the A–B residual thresholds;
+W failure makes W unavailable without blocking A/B/E. OSD checks apply only to A/B/E.
+These tools decode/encode locally on CPU (FFmpeg for remux/proxies), with no model, CUDA or downloads.
+
+For an approved additional cohort, sampling accepts `--no-pilot --cohort 2026-10` and
+`--worker-spans <worker_spans.json>`. Defaults retain the original pilot protocol.
+Each segment gets `span_id` by maximum time overlap, or nearest worker interval if entirely
+inside a handover gap; ties use the earlier interval and never trigger resampling.
+Sampling only reads metadata/hashes and writes a new dataset; extraction uses CPU/OpenCV.
+A W reference requires passing W–B validation bound by `proxies/manifest.json` hashes.
+It is a separate 640×360 JPEG per step with SHA-256, gap and `sync_uncertain` flags.
+The editor shows a collapsible W reference with an uncertainty notice; gaze points remain
+on E in the unchanged three-view montage. Preserve existing datasets and labels.
+The formal `roi_r2_2026_10` dataset is generated only after its complete approved cohort is ready.
+
+
 Run from the repository root in the existing Gazelle-next environment. Keep the source
 read-only and choose a data root outside both the repository and source root.
 These tools use CPU/disk only: no models, CUDA, network access, or downloads.
@@ -585,10 +612,10 @@ The report includes `last_pts`, actual decoded counts and `tail_eof`.
 | `tools.validation.render_roi_reference` | Regions and candidate images | Reference PNG, session overlays, classes JSON | Pillow and an existing CJK font |
 
 ```powershell
-$raw = 'E:\Gazelle_Workdata\秋田大学様解析用動画'
+$raw = 'E:\Gazelle_Workdata'
 $data = 'C:\Users\yun\Documents\Claude_Code\gazelle_data\workdata'
-python -m tools.workdata.inventory --root $raw --out "$data\inventory\inventory.json"
-python -m tools.workdata.remux --inventory "$data\inventory\inventory.json" --out-root "$data\remux"
+python -m tools.workdata.inventory --root $raw --out "$data\inventory\inventory.json" --session 20261016 --session 20261023
+python -m tools.workdata.remux --inventory "$data\inventory\inventory.json" --out-root "$data\remux" --session 20261016 --session 20261023
 ```
 
 Use `--ffprobe` on either entry and `--ffmpeg` on remux to override PATH lookup.
@@ -633,7 +660,7 @@ Clock commands, from the repository root using the same external `$data`:
 
 ```powershell
 python -m tools.workdata.osd_clock --image C:\path\outside-repository\clock.png
-python -m tools.workdata.timemap --inventory "$data\inventory\inventory.json" --remux-root "$data\remux" --out-root "$data\timemaps_v2_base"
+python -m tools.workdata.timemap --inventory "$data\inventory\inventory.json" --remux-root "$data\remux" --out-root "$data\timemaps_v2_base" --session 20261016
 python -m tools.workdata.sync_calibrate --timemaps "$data\timemaps_v2_base" --out-root "$data\timemaps_v3" --samples-root "$data\sync_samples_v2" --session 20260828
 python -m tools.workdata.sync_check --timemaps "$data\timemaps_v2" --out-root "$data\sync_checks" --session 20260828
 ```
@@ -711,7 +738,7 @@ time difference and a gap flag when the difference exceeds half a grid step.
 Multiple common-coverage intervals are rejected by default. The explicit
 `--allow-internal-gaps` option retains one continuous clock grid
 across the entire range and records every coverage gap and nearest-frame gap flag;
-it does not compress time. Keep old proxies in place until all seven sessions pass;
+it does not compress time. Adding recordings preserves the original seven outputs. For an approved replacement batch, keep old proxies in place until the entire batch passes;
 then rename them to dated backups and switch the validated directories. `sync_validate`
 reuses the saved fixed k indices: proxy k, then its recorded source frame, then the same
 pairs at k−1/k+1/k−2/k+2, stopping at the first recognized reading. The decoded source PTS
@@ -733,7 +760,7 @@ Three ±1 s worker-motion strips plus one within ±10 s of each cut support visu
 every reread frame's thumbnail must match cached validation pixels exactly.
 Compare v3/v2 lag over each existing session: retain v2 proxies and their original SHA
 when every camera differs by ≤0.05 s, otherwise regenerate. Record that provenance.
-Only after all seven sessions pass, regenerate trial and completed-ROI datasets;
+Only after the approved replacement batch passes, regenerate trial and completed-ROI datasets;
 redraw segments containing `sync_uncertain` in the same stratum and record every attempt.
 Never create formal labels automatically. Formal annotation waits
 for independent synchronization acceptance. See the

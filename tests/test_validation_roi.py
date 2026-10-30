@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from PIL import Image, ImageFont
+from tools.workdata.common import hash_file
 from tools.validation import roi_regions as regions
 from tools.validation.extract_roi_candidates import extract_candidates, validate_candidates
 from tools.validation.roi_server import RoiApplication, make_handler
@@ -218,16 +219,18 @@ class RoiRegionsTest(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
             inventory = root / 'inventory.json'
+            original=root/'raw/session/e.avi';original.parent.mkdir(parents=True);original.write_bytes(b'original')
             inventory.write_text(json.dumps(dict(root=str(root / 'raw'), files=[
-                dict(session='session', physical_camera='cam_e', needs_remux=True, relative_path='session/e.avi')
+                dict(session='session', physical_camera='cam_e', needs_remux=True, relative_path='session/e.avi',
+                     size_bytes=original.stat().st_size,sha256=hash_file(original))
             ])), encoding='utf-8')
             (root / 'remux/session').mkdir(parents=True)
             (root / 'remux/session/e.mp4').touch()
             with self.assertRaisesRegex(ValueError, 'validated'):
                 extract_candidates(inventory, root / 'remux', root / 'roi', source_factory=FakeSource)
             (root / 'remux/remux_report.json').write_text(json.dumps(dict(version=1, files=[dict(
-                input=str(root / 'raw/session/e.avi'), output=str(root / 'remux/session/e.mp4'),
-                output_size_bytes=0, status='completed', validation=dict(valid=True))])), encoding='utf-8')
+                input=str(root / 'previous-root/session/e.avi'), output=str(root / 'remux/session/e.mp4'),
+                input_size_bytes=original.stat().st_size,output_size_bytes=0, status='completed', validation=dict(valid=True))])), encoding='utf-8')
             manifest = extract_candidates(inventory, root / 'remux', root / 'roi', source_factory=FakeSource)
             self.assertEqual(len(manifest['candidates']), 12)
             self.assertEqual([row['container_time_ms'] for row in manifest['candidates']], list(range(5000, 120000, 10000)))

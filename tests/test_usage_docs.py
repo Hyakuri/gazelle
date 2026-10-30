@@ -546,6 +546,7 @@ class UsageDocumentationTest(unittest.TestCase):
                           '--labels-path', '--allow-incomplete', 'roi_r2_trial',
                           '../../tools/validation/ANNOTATION_GUIDE_CN.md'):
                 self.assertIn(token, text, str(path))
+
         for path in (ENGLISH_README,ENGLISH_GUIDE):
             self.assertIn('viewed only means displayed',self._read(path))
         for path in (CHINESE_README,CHINESE_GUIDE):
@@ -556,6 +557,17 @@ class UsageDocumentationTest(unittest.TestCase):
                           'points', 'point_skips', 'out_of_view', 'unsure', '--backup-existing', 'annotation_schema_version: 3',
                           'viewed_ranges', 'finished_at', 'keepalive', '--segment', '--sessions', 'export_root', '0.5%'):
                 self.assertIn(token, text, str(path))
+
+    def test_optional_webcam_and_cohort_contract_is_in_all_six_guides(self):
+        for path in (ENGLISH_README,CHINESE_README,ENGLISH_GUIDE,CHINESE_GUIDE,
+                     REPOSITORY_ROOT/'tools/workdata/README_CN.md',
+                     REPOSITORY_ROOT/'tools/validation/ANNOTATION_GUIDE_CN.md'):
+            text=self._read(path)
+            for token in ('cam_w','auxiliary_cameras','filename_clock','--session','--no-pilot',
+                          '--cohort 2026-10','--worker-spans','span_id','640×360','1280×720',
+                          'W–B','20261030','proxies/manifest.json','sync_uncertain'):
+                self.assertIn(token,text,str(path))
+            self.assertNotIn('Gazelle_Workdata\\秋田大学様解析用動画',text,str(path))
 
     def test_annotation_point_exclusivity_and_shortcuts_are_in_all_six_guides(self):
         for path in (ENGLISH_README,ENGLISH_GUIDE):

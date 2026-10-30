@@ -45,6 +45,11 @@ class AnnotationServerTest(unittest.TestCase):
                 relative='frames/s1/{:04d}.jpg'.format(step)
                 path=root/relative;path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(b'fake image')
                 row['frames'].append(dict(step=step,path=relative,sha256=hash_file(path)))
+                reference=root/'webcam/s1'/(str(step).zfill(4)+'.jpg')
+                reference.parent.mkdir(parents=True,exist_ok=True);reference.write_bytes(b'webcam image')
+                row['frames'][-1]['webcam']=dict(path=reference.relative_to(root).as_posix(),sha256=hash_file(reference),
+                                               gap=False,sync_uncertain=step==2)
+            row['auxiliary_proxies']={'cam_w':dict(path='w.mp4',sha256='a'*64)}
             (root/'manifest.json').write_text(json.dumps(manifest))
             path=root/'trial.json'
             app=AnnotationApplication(root,path,'reviewer')
@@ -53,6 +58,9 @@ class AnnotationServerTest(unittest.TestCase):
             state=json.loads(data)
             self.assertEqual(state['resume'],['s1',0])
             self.assertFalse(path.exists())
+            self.assertTrue(state['segments'][0]['has_webcam'])
+            self.assertEqual(state['segments'][0]['webcam_uncertain_steps'],[2])
+            self.assertEqual(app.dispatch('GET','/webcam/s1/2')[1],b'webcam image')
             self.assertEqual(app.dispatch('GET','/frame/s1/0')[1],b'fake image')
             payload=dict(segment_id='s1',revision=0,labels=[dict(start_step=0,end_step_exclusive=5,label='unknown')],
                          other_people=[],note='',active_seconds_delta=1)

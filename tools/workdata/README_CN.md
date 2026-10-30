@@ -1,15 +1,36 @@
 # 作业数据工具
 
+接入范围为旧七次录制加 `20261016`、`20261023`；`20261030` 按单独契约接入。
+源根目录为只读的 `E:\Gazelle_Workdata`。清单与重封装支持重复的 `--session` 参数，
+保留未选录制的旧行；根目录有未知录制时不要全量扫描。共享清单追加前先备份。
+带哈希的旧产物保留历史路径作为出处记录；迁移后的重封装输入按相对路径、大小与 SHA-256 核对。
+
+可选 webcam `cam_w` 使用 `WIN_YYYYMMDD_HH_MM_SS_Pro.mp4` 文件名时间加原始 PTS
+（`filename_clock`，斜率 1；电脑时间不带时区，按 UTC epoch 秒编码）。
+它写在 `auxiliary_cameras`，必需的 `cameras` 仍为 A/B/E，重叠段只由三机决定。
+W 沿用同一 5 Hz 校准方法与不确定区间规则，输出仅视频的 1280×720 `proxy_webcam.mp4` 与旁注；
+A/B/E 仍为 1920×1080。W–B 沿用 A–B 残差门槛；W 失败仅将 W 标为不可用，不阻塞三机。
+时钟抽查只做 A/B/E。这些工具在本机 CPU 解码/编码（重封装与代理调用 FFmpeg），不调用模型、CUDA 或下载。
+
+已批准的新分层可用 `--no-pilot --cohort 2026-10` 与 `--worker-spans <worker_spans.json>` 抽样，
+默认保留旧试标协议。每段按最大时间重叠确定 `span_id`，完全处于交接空档时归到最近片段；
+相同时取较早片段，不因此重抽。抽样只读元数据与哈希并写新数据集，抽帧使用 CPU/OpenCV。
+W 参考须有通过 W–B 检查且由 `proxies/manifest.json` 哈希绑定的验证结果。
+每步另存 640×360 JPEG、SHA-256、缺口与 `sync_uncertain` 标记。
+页面显示可收起的 W 参考及同步不确定提示；注视点仍标在原三视角拼图的 E 上。
+保留已有数据集和标签；正式 `roi_r2_2026_10` 只在完整的已批准分层准备好后生成。
+
+
 在已存在的 Gazelle-next 环境、仓库根目录运行。源目录只读，数据根必须在源目录和仓库之外。
 工具只进行本地 CPU 与磁盘操作，不调用模型、不使用 CUDA、不联网、不下载或安装依赖。
 长时间任务请以低优先级运行。
 
 ```powershell
 conda activate Gazelle-next
-$raw = 'E:\Gazelle_Workdata\秋田大学様解析用動画'
+$raw = 'E:\Gazelle_Workdata'
 $data = 'C:\Users\yun\Documents\Claude_Code\gazelle_data\workdata'
-python -m tools.workdata.inventory --root $raw --out "$data\inventory\inventory.json"
-python -m tools.workdata.remux --inventory "$data\inventory\inventory.json" --out-root "$data\remux"
+python -m tools.workdata.inventory --root $raw --out "$data\inventory\inventory.json" --session 20261016 --session 20261023
+python -m tools.workdata.remux --inventory "$data\inventory\inventory.json" --out-root "$data\remux" --session 20261016 --session 20261023
 ```
 
 清单调用 ffprobe，记录文件指纹、视频流信息、音轨存在性和前 60 秒的小包比例。
@@ -33,7 +54,7 @@ OpenCV 开头和中间各 30 帧；尾部从估计末尾前 60 帧定位，最�
 
 ```powershell
 python -m tools.workdata.osd_clock --image C:\path\outside-repository\clock.png
-python -m tools.workdata.timemap --inventory "$data\inventory\inventory.json" --remux-root "$data\remux" --out-root "$data\timemaps_v2_base"
+python -m tools.workdata.timemap --inventory "$data\inventory\inventory.json" --remux-root "$data\remux" --out-root "$data\timemaps_v2_base" --session 20261016
 python -m tools.workdata.sync_calibrate --timemaps "$data\timemaps_v2_base" --out-root "$data\timemaps_v3" --samples-root "$data\sync_samples_v2" --session 20260828
 python -m tools.workdata.sync_check --timemaps "$data\timemaps_v2" --out-root "$data\sync_checks" --session 20260828
 ```
@@ -115,7 +136,7 @@ python -m tools.workdata.sync_validate --proxies "$data\proxies" --timemaps "$da
 
 共同覆盖有内部缺口时默认报错。r2 流程显式加 `--allow-internal-gaps`：
 保留总体起止的固定网格，记录 `coverage_gaps` 与 `gap_policy=nearest_with_gap_flag_provisional`，
-沿用最近帧规则，不丢弃区间或拼接压缩时间。七会话全部通过前旧代理/试用集保持原路径，之后才改名备份并切换。
+沿用最近帧规则，不丢弃区间或拼接压缩时间。新增录制保留旧七次产物；已批准的替换批次全部通过前旧代理/试用集保持原路径，之后才改名备份并切换。
 
 `sync_validate` 在新代理上测 A–B/E–B/A–E：有效窗 ≥90% 的 |L| ≤0.2 s，中位 |L| ≤0.1 s，
 会话中点 |c0| ≤0.1 s、|c1| ≤0.1 s/小时。时钟抽查复用 TASK-134 已保存的固定 k，
@@ -131,5 +152,5 @@ A–E 可证据不足但须报告闭合推算。逐窗/整体闭合差 (A−B)�
 保留失败与各类非测量窗，不能靠删窗口通过。每会话优先从 A/E 所选作业者格选三个运动起点，
 每切点 ±10 s 内另选一个事件，导出 ±1 s、逐 0.2 s 的 B/A/E 条图；回读缩略图与验证缓存逐像素核对，不同则失败。
 对已有代理比较 v3/v2 全时长滞后，每机均 ≤0.05 s 则保留 v2 代理及原 SHA，否则重建并记录来源。
-七会话全通过才切换目录、重建 `roi_r2_trial` 和已完成 ROI 的 `roi_r2`；不生成正式 labels。
+已批准的替换批次全通过才切换目录、重建 `roi_r2_trial` 和已完成 ROI 的 `roi_r2`；不生成正式 labels。
 含 `sync_uncertain` 步的片段在同层重抽，记录每次尝试；正式标注等待独立同步验收。

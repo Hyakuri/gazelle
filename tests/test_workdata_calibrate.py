@@ -178,9 +178,12 @@ class CalibrationTest(unittest.TestCase):
                 files.append(dict(camera=camera,source=media.name,media_path=str(media),status='valid',
                     fingerprint=dict(media_size=stat.st_size,media_mtime_ns=stat.st_mtime_ns)))
             mapping=root/'base.json'
+            # An unusable optional W must not block the required A/B/E refit.
+            files.append(dict(camera='cam_w',source='missing-webcam.mp4',status='failed',error='no frames'))
             mapping.write_text(json.dumps(dict(version=2,session='session',files=files,overlap=[[10.,10.4]])))
             grid=dict(t0=10.,N=3,step=.2,step_hz=5.)
             for row in files:
+                if row['camera']=='cam_w': continue
                 camera=row['camera'];target=samples/(camera+'.npy');sidecar=samples/(camera+'.json')
                 np.save(target,np.zeros((3,54,96),dtype=np.uint8))
                 sidecar.write_text(json.dumps(dict(grid=grid,sha256=hash_file(target),
@@ -196,10 +199,18 @@ class CalibrationTest(unittest.TestCase):
                  patch('tools.workdata.timemap.assemble_session',return_value=dict(session='session')):
                 result=run(mapping,root/'new',root/'samples',reuse_samples=True)
                 self.assertTrue(result['calibrated'])
+                self.assertFalse(result['auxiliary_cameras']['cam_w']['available'])
+                self.assertIn('valid base map',result['auxiliary_cameras']['cam_w']['reason'])
                 self.assertEqual(result['sampling_evidence']['cam_a']['fingerprint']['implementation_sha256'],'original-code')
                 self.assertNotEqual(result['implementation_sha256'],'original-code')
                 for path,content in original.items():
                     self.assertEqual(path.read_bytes(),content)
+                import subprocess
+                with patch('tools.workdata.webcam.calibrate_webcam',side_effect=subprocess.CalledProcessError(1,['ffprobe'])):
+                    optional_failure=run(mapping,root/'optional-probe-failure',root/'samples',reuse_samples=True)
+                self.assertTrue(optional_failure['calibrated'])
+                self.assertFalse(optional_failure['auxiliary_cameras']['cam_w']['available'])
+                self.assertEqual(optional_failure['auxiliary_cameras']['cam_w']['error_type'],'CalledProcessError')
                 with self.assertRaisesRegex(FileExistsError,'fresh'):
                     run(mapping,root/'new',root/'samples',reuse_samples=True)
                 Path(files[0]['media_path']).write_bytes(b'changed source')
@@ -260,6 +271,35 @@ class CalibrationTest(unittest.TestCase):
         _,selection=select_signals(cells)
         for value in selection.values():
             self.assertEqual(set(value['cells']),set(range(6)))
+
+    def test_webcam_uses_existing_fit_on_base_time_without_changing_required_rows(self):
+        from tools.workdata.webcam import calibrate_webcam
+        from tools.workdata.common import hash_file
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);media=root/'w.mp4';media.write_bytes(b'fake')
+            stat=media.stat();grid=dict(t0=100.,N=6001,step=.2,step_hz=5.)
+            row=dict(camera='cam_w',source='w',media_path=str(media),status='valid',
+                     fingerprint=dict(media_size=stat.st_size,media_mtime_ns=stat.st_mtime_ns))
+            required=dict(camera='cam_a',source='a',calibration={'preserved':True})
+            mapping=dict(session='s',files=[required,row])
+            np.save(root/'cam_w.npy',np.zeros((6001,54,96),dtype=np.uint8))
+            frames=[dict(k=k,gap=False,source='w',pts=k*.2) for k in range(6001)]
+            evidence=dict(frames=frames,fingerprint={'original':True},sha256=hash_file(root/'cam_w.npy'))
+            (root/'cam_w.json').write_text(json.dumps(evidence))
+            windows=[dict(t_mid_seconds=30.+60*i,lag_seconds=-2.,valid=True,reason='valid') for i in range(20)]
+            with patch('tools.workdata.sync_calibrate.sample_camera',return_value=evidence) as sample, \
+                 patch('tools.workdata.keyframes.source_keyframes',return_value={'w':[]}), \
+                 patch('tools.workdata.webcam.select_webcam_signal',return_value=(np.zeros(6000),{'cells':[0]})), \
+                 patch('tools.workdata.sync_calibrate.window_lags',return_value=windows):
+                result=calibrate_webcam(mapping,root,grid,{},np.zeros((6000,72)),root)
+            self.assertTrue(result['available'])
+            self.assertEqual(result['calibration']['time_domain'],'base')
+            self.assertEqual(result['calibration']['origin'],100.)
+            self.assertAlmostEqual(result['calibration']['segments'][0]['c0'],-2.)
+            self.assertTrue(all(w['b_mid_seconds']==w['t_mid_seconds']-2. for w in result['calibration']['windows']))
+            self.assertEqual(sample.call_args.args[1],'cam_w')
+            self.assertEqual(required,dict(camera='cam_a',source='a',calibration={'preserved':True}))
+            self.assertIs(row['calibration'],result['calibration'])
 
     def test_residual_gate_keeps_failing_values_and_reports_invalid_windows(self):
         rows=[dict(t_mid_seconds=t,lag_seconds=.02,valid=True,reason='valid') for t in range(30,1200,60)]

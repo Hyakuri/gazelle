@@ -11,6 +11,75 @@ from tools.workdata import common
 
 
 class WorkdataToolsTest(unittest.TestCase):
+    def test_webcam_names_are_strict_and_do_not_accept_unknown_variants(self):
+        roles=inventory.load_roles()
+        self.assertEqual(inventory.identify('20261016','WIN_20261014_12_05_36_Pro.mp4',roles),
+                         ('cam_w','filename_clock',None))
+        for name in ('WIN_bad_Pro.mp4','WIN_20260230_12_05_36_Pro.mp4',
+                     'WIN_20261014_25_05_36_Pro.mp4','other_20261014_12_05_36_Pro.mp4'):
+            with self.subTest(name=name),self.assertRaises(ValueError):
+                inventory.identify('20261016',name,roles)
+
+    def test_selected_inventory_preserves_old_rows_across_root_relocation(self):
+        with TemporaryDirectory() as tmp:
+            root=Path(tmp)/'new';(root/'20261016').mkdir(parents=True)
+            (root/'20261030').mkdir()
+            (root/'20261016/WIN_20261014_12_05_36_Pro.mp4').write_bytes(b'webcam')
+            (root/'20261030/unknown.mp4').write_bytes(b'not selected')
+            output=Path(tmp)/'inventory.json'
+            old=dict(session='20260821',relative_path='20260821/old.avi',private_marker='unchanged')
+            output.write_text(json.dumps(dict(root=str(Path(tmp)/'old'),files=[old])))
+            with patch.object(inventory,'probe_metadata',return_value=dict(duration=100,has_audio=True)),patch.object(
+                    inventory,'probe_packets',return_value=dict(count=10,small_count=0)):
+                result=inventory.create_inventory(root,output,sessions=['20261016'])
+            self.assertEqual(result['files'][0],old)
+            self.assertEqual(result['root'],str(root.resolve()))
+            self.assertEqual(len(result['files']),2)
+            self.assertTrue(result['files'][1]['video']['has_audio'])
+            self.assertFalse(result['files'][1]['needs_remux'])
+
+    def test_selected_remux_preserves_old_report_rows(self):
+        with TemporaryDirectory() as tmp:
+            root=Path(tmp)/'raw';(root/'20261016').mkdir(parents=True)
+            source=root/'20261016/new.avi';source.write_bytes(b'source')
+            out=Path(tmp)/'remux';out.mkdir()
+            old=dict(input='/old/20260821/old.avi',output='/old/out.mp4',status='completed',marker=[1,2])
+            common.atomic_json(out/'remux_report.json',dict(version=1,files=[old]))
+            inv=Path(tmp)/'inventory.json'
+            common.atomic_json(inv,dict(root=str(root),files=[
+                dict(session='20260821',relative_path='20260821/old.avi',needs_remux=True),
+                dict(session='20261016',relative_path='20261016/new.avi',needs_remux=True)]))
+            def fake_remux(source,target,*args):
+                return dict(input=str(source),output=str(target),status='completed')
+            with patch.object(remux,'remux_one',side_effect=fake_remux) as run:
+                result=remux.run_inventory(inv,out,sessions=['20261016'])
+            self.assertEqual(run.call_count,1)
+            self.assertEqual(len(result),1)
+            rows=json.loads((out/'remux_report.json').read_text())['files']
+            self.assertEqual(rows[0],old)
+            self.assertEqual(len(rows),2)
+
+    def test_remux_provenance_survives_relocation_but_rejects_mismatches(self):
+        from tools.workdata.video_source import media_path
+        with TemporaryDirectory() as tmp:
+            root=Path(tmp)/'relocated';(root/'20261016').mkdir(parents=True)
+            original=root/'20261016/e.avi';original.write_bytes(b'source')
+            out=Path(tmp)/'remux';(out/'20261016').mkdir(parents=True)
+            target=out/'20261016/e.mp4';target.write_bytes(b'video')
+            entry=dict(needs_remux=True,relative_path='20261016/e.avi',size_bytes=6,sha256=common.hash_file(original))
+            report=dict(input=str(Path(tmp)/'old/20261016/e.avi'),output=str(target),input_size_bytes=6,
+                        output_size_bytes=5,status='completed',validation=dict(valid=True))
+            common.atomic_json(out/'remux_report.json',dict(files=[report]))
+            self.assertEqual(media_path(entry,dict(root=str(root)),out),target.resolve())
+            for update in (dict(input_size_bytes=7),dict(input=str(Path(tmp)/'old/20261023/e.avi'))):
+                common.atomic_json(out/'remux_report.json',dict(files=[{**report,**update}]))
+                with self.assertRaisesRegex(ValueError,'provenance'):
+                    media_path(entry,dict(root=str(root)),out)
+            common.atomic_json(out/'remux_report.json',dict(files=[report]))
+            original.write_bytes(b'tamper')
+            with self.assertRaisesRegex(ValueError,'checksum'):
+                media_path(entry,dict(root=str(root)),out)
+
     def test_roles_and_override_and_parts(self):
         roles = inventory.load_roles()
         for session in ('20260821', '20260903', '20261009'):

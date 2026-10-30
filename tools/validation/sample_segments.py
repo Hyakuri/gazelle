@@ -21,11 +21,14 @@ DEFAULT_SESSIONS=('20260821','20260828','20260903','20260911','20260925','202610
 
 def _segment(session,start,count,identifier,pilot=False,attempts=None):
     grid=session['grid']
-    return dict(segment_id=identifier,session=session['session'],
+    result=dict(segment_id=identifier,session=session['session'],
                 start_wall_time=grid['t0']+start/grid['step_hz'],proxy_t0=grid['t0'],
                 step_hz=grid['step_hz'],step_count=count,start_frame=start,end_frame_exclusive=start+count,
                 proxies=session['cameras'],time_map_version=session['time_map_version'],
                 time_map_sha256=session['time_map_sha256'],pilot=pilot,attempts=attempts or [])
+    if session.get('webcam_reference'):
+        result['auxiliary_proxies']={'cam_w':session['webcam_reference']}
+    return result
 
 
 def sample_session(session,gaps,rng,per_session=4,seconds=60,excluded=()):
@@ -83,7 +86,9 @@ def validate_manifest(manifest):
                 or abs(row['start_wall_time']-(row['proxy_t0']+start/hz))>1e-6
                 or set(row['proxies'])!=set(ROLES)):
             raise ValueError('Invalid segment grid or camera schema')
-        for camera,proxy in row['proxies'].items():
+        auxiliary=row.get('auxiliary_proxies',{})
+        if set(auxiliary)-{'cam_w'}: raise ValueError('Unknown optional proxy role')
+        for camera,proxy in {**row['proxies'],**auxiliary}.items():
             if not isinstance(proxy.get('path'),str) or not re.fullmatch('[0-9a-f]{64}',proxy.get('sha256','')):
                 raise ValueError('Invalid proxy path or hash')
         if 'frames' in row:
@@ -92,6 +97,13 @@ def validate_manifest(manifest):
                 expected='frames/{}/{:04d}.jpg'.format(identifier,step)
                 if frame.get('step')!=step or frame.get('path')!=expected or not re.fullmatch('[0-9a-f]{64}',frame.get('sha256','')):
                     raise ValueError('Invalid extracted frame schema')
+                webcam=frame.get('webcam')
+                if ('cam_w' in auxiliary)!=(webcam is not None):
+                    raise ValueError('Missing or unexpected webcam reference')
+                if webcam is not None and (webcam.get('path')!='webcam/{}/{:04d}.jpg'.format(identifier,step)
+                        or not re.fullmatch('[0-9a-f]{64}',webcam.get('sha256',''))
+                        or type(webcam.get('gap')) is not bool or type(webcam.get('sync_uncertain')) is not bool):
+                    raise ValueError('Invalid webcam reference schema')
     return manifest
 
 
@@ -120,10 +132,43 @@ def read_session(path):
                              sidecar_path=str(sidecar),sidecar_sha256=hash_file(sidecar))
     session['cameras']=cameras
     session['sync_uncertain']=uncertain
+    webcam=session.get('auxiliary_cameras',{}).get('cam_w')
+    if webcam and webcam.get('available'):
+        reference=read_webcam_reference(path,session,webcam)
+        if reference is not None: session['webcam_reference']=reference
     return session,gaps
 
 
-def plan(proxies_root,seed=20261015,per_session=4,seconds=60,sessions=DEFAULT_SESSIONS):
+def read_webcam_reference(path,session,webcam):
+    # Only validated optional evidence becomes an annotation reference. The
+    # shared index binds the validation without rewriting the proxy session.
+    index_path=path.parent.parent/'manifest.json'
+    if not index_path.exists(): return None
+    record=json.loads(index_path.read_text(encoding='utf-8')).get('sessions',{}).get(session['session'],{})
+    if not record.get('validation_path'): return None
+    validation_path=Path(record['validation_path'])
+    if hash_file(validation_path)!=record['validation_sha256']:
+        raise ValueError('Webcam synchronization validation hash differs')
+    validation=json.loads(validation_path.read_text(encoding='utf-8'))
+    if not validation.get('auxiliary_cameras',{}).get('cam_w',{}).get('available'): return None
+    if (validation.get('calibration_map_sha256')!=session['time_map_sha256']
+            or validation.get('proxy_session_sha256')!=hash_file(path)
+            or validation.get('audit',{}).get('cam_w',{}).get('sha256')!=webcam['sha256']
+            or validation.get('pairs',{}).get('W-B',{}).get('passed') is not True):
+        raise ValueError('Webcam validation provenance differs')
+    video=source_path(path.parent,webcam['video']);sidecar=source_path(path.parent,webcam['frames'])
+    rows=json.loads(sidecar.read_text(encoding='utf-8'))
+    digest=hash_file(video)
+    if (digest!=webcam['sha256'] or digest!=rows['video_sha256']
+            or rows['camera']!='cam_w' or rows['role']!='webcam' or rows['grid']!=session['grid']):
+        raise ValueError('Webcam proxy provenance or grid differs')
+    validate_sidecar(rows['frames'],session['grid'])
+    return dict(role='webcam',path=str(video),sha256=digest,sidecar_path=str(sidecar),
+                sidecar_sha256=hash_file(sidecar),validation_sha256=record['validation_sha256'])
+
+
+def plan(proxies_root,seed=20261015,per_session=4,seconds=60,sessions=DEFAULT_SESSIONS,
+         include_pilot=True,cohort=None,worker_spans=None):
     if not sessions or len(set(sessions))!=len(sessions) or any(not re.fullmatch(r'\d{8}',s) for s in sessions):
         raise ValueError('sessions must contain unique recording dates')
     paths=sorted(Path(proxies_root).glob('*/session.json'))
@@ -140,21 +185,35 @@ def plan(proxies_root,seed=20261015,per_session=4,seconds=60,sessions=DEFAULT_SE
         grid=session['grid'];offset=(PILOT_TIME-grid['t0'])*grid['step_hz']
         first=round(offset);count=round(60*grid['step_hz'])
         excluded=[]
-        if 0<=first and first+count<=grid['N'] and abs(offset-first)<1e-4:
+        if include_pilot and 0<=first and first+count<=grid['N'] and abs(offset-first)<1e-4:
             if any(session.get('sync_uncertain',[])[first:first+count]):
                 raise ValueError('Fixed pilot intersects sync uncertainty; coordinator review required')
             excluded=[(first,first+count)]
             pilots.append(_segment(session,first,count,session['session']+'_pilot',pilot=True,
                                    attempts=[dict(attempt=0,start_frame=first,gap_seconds=sum(gaps[first:first+count])/grid['step_hz'],sync_uncertain_steps=0)]))
         segments.extend(sample_session(session,gaps,random.Random(seed+int(session['session'])),per_session,seconds,excluded))
-    if len(pilots)!=1:raise ValueError('Exactly one session must cover the fixed pilot clock interval')
+    if include_pilot and len(pilots)!=1:raise ValueError('Exactly one session must cover the fixed pilot clock interval')
     manifest=dict(version=2,seed=seed,sessions=sorted(sessions),session_seed_rule='seed + int(session)',method='stratified-uniform-grid',per_session=per_session,
                   segment_seconds=seconds,max_redraws=10,max_gap_seconds=2,max_sync_uncertain_steps=0,
                   segments=pilots+segments,created_at=datetime.now(timezone.utc).isoformat())
+    if not include_pilot: manifest['pilot_policy']='none'
+    if cohort is not None:
+        if not isinstance(cohort,str) or not re.fullmatch(r'[A-Za-z0-9_-]+',cohort):
+            raise ValueError('Invalid cohort identifier')
+        manifest['cohort']=cohort
+    if worker_spans is not None:
+        from tools.workdata.workers import validate_worker_spans,assign_span
+        workers=validate_worker_spans(json.loads(Path(worker_spans).read_text(encoding='utf-8')))
+        for row in manifest['segments']:
+            row['span_id']=assign_span(workers['spans'],row['session'],row['start_wall_time'],
+                                       row['start_wall_time']+row['step_count']/row['step_hz'])
+        manifest.update(worker_spans_sha256=hash_file(worker_spans),worker_spans_path=str(Path(worker_spans).resolve()),
+                        span_assignment_rule='maximum time overlap; nearest interval if empty; ties use earlier interval; no redraw')
     return validate_manifest(manifest)
 
 
-def create_dataset(proxies_root,dataset_root,seed=20261015,per_session=4,seconds=60,regions_path=None,overwrite=False,sessions=DEFAULT_SESSIONS):
+def create_dataset(proxies_root,dataset_root,seed=20261015,per_session=4,seconds=60,regions_path=None,overwrite=False,sessions=DEFAULT_SESSIONS,
+                   include_pilot=True,cohort=None,worker_spans=None):
     root=Path(dataset_root).resolve();proxies_root=Path(proxies_root).resolve()
     repository=Path(__file__).resolve().parents[2]
     if root==proxies_root or proxies_root in root.parents or root==repository or repository in root.parents or root in proxies_root.parents:
@@ -176,7 +235,7 @@ def create_dataset(proxies_root,dataset_root,seed=20261015,per_session=4,seconds
     else:
         classes=json.loads(Path(__file__).with_name('default_classes.json').read_text(encoding='utf-8'))
     validate_classes(classes)
-    manifest=plan(proxies_root,seed,per_session,seconds,sessions)
+    manifest=plan(proxies_root,seed,per_session,seconds,sessions,include_pilot,cohort,worker_spans)
     if regions and hash_file(regions_path)!=marker['regions_sha256']:
         raise ValueError('Regions changed during sampling; export again')
     manifest.update(annotation_schema_version=3,regions_sha256=hash_file(regions_path) if regions else None,
@@ -208,8 +267,12 @@ def main(argv=None):
     parser.add_argument('--segment-seconds',type=float,default=60.)
     parser.add_argument('--overwrite',action='store_true')
     parser.add_argument('--sessions',nargs='+',default=DEFAULT_SESSIONS)
+    parser.add_argument('--no-pilot',action='store_true',help='Omit the fixed pilot; keep independent per-recording random seeds')
+    parser.add_argument('--cohort',help='Cohort identifier recorded in the manifest')
+    parser.add_argument('--worker-spans',type=Path,help='Validated anonymous spans on the B clock; assign without resampling')
     args=parser.parse_args(argv)
-    result=create_dataset(args.proxies_root,args.dataset_root,args.seed,args.per_session,args.segment_seconds,args.regions_path,args.overwrite,args.sessions)
+    result=create_dataset(args.proxies_root,args.dataset_root,args.seed,args.per_session,args.segment_seconds,args.regions_path,args.overwrite,args.sessions,
+                          not args.no_pilot,args.cohort,args.worker_spans)
     print('Created {} segments; classes: {}'.format(len(result['segments']),result['classes_source']))
     return 0
 

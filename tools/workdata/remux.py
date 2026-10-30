@@ -124,13 +124,18 @@ def remux_one(source, output, ffmpeg='ffmpeg', ffprobe='ffprobe', force=False):
     return result
 
 
-def run_inventory(inventory_path, out_root, ffmpeg='ffmpeg', ffprobe='ffprobe', force=False):
+def run_inventory(inventory_path, out_root, ffmpeg='ffmpeg', ffprobe='ffprobe', force=False, sessions=None):
     inventory = json.loads(Path(inventory_path).read_text(encoding='utf-8'))
     root = Path(inventory['root'])
     out_root = outside_source(out_root, root)
+    selected = None if sessions is None else set(sessions)
+    if selected is not None and (not selected or not selected.issubset({r['session'] for r in inventory['files']})):
+        raise ValueError('No matching selected session in inventory')
+    report_path = out_root / 'remux_report.json'
+    saved = json.loads(report_path.read_text(encoding='utf-8')).get('files', []) if report_path.exists() else []
     results = []
     for row in inventory['files']:
-        if not row['needs_remux']:
+        if not row['needs_remux'] or (selected is not None and row['session'] not in selected):
             continue
         source = source_path(root, row['relative_path'])
         if source.suffix.lower() != '.avi':
@@ -138,7 +143,9 @@ def run_inventory(inventory_path, out_root, ffmpeg='ffmpeg', ffprobe='ffprobe', 
         output = source_path(out_root, str(Path(row['relative_path']).with_suffix('.mp4')))
         result = remux_one(source, output, ffmpeg, ffprobe, force)
         results.append(result)
-        atomic_json(out_root / 'remux_report.json', dict(version=1, files=results))
+        saved = [record for record in saved if Path(record['output']).resolve() != output.resolve()]
+        saved.append(result)
+        atomic_json(report_path, dict(version=1, files=saved))
         print('{}: {}'.format(result['status'], row['relative_path']), flush=True)
     return results
 
@@ -150,12 +157,13 @@ def build_parser():
     parser.add_argument('--ffmpeg', default='ffmpeg')
     parser.add_argument('--ffprobe', default='ffprobe')
     parser.add_argument('--force', action='store_true')
+    parser.add_argument('--session', action='append', help='Remux only selected recordings; preserve other report rows')
     return parser
 
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
-    results = run_inventory(args.inventory, args.out_root, args.ffmpeg, args.ffprobe, args.force)
+    results = run_inventory(args.inventory, args.out_root, args.ffmpeg, args.ffprobe, args.force, args.session)
     return int(any(row['status'] == 'failed' for row in results))
 
 
