@@ -54,14 +54,15 @@ Details: `docs/collab/analysis/2026-10-15-workdata-analysis.md`.
 | 8 | TASK-101 Face–pose association fix (D1, contract r2) | changes requested (2026-10-31): cross-person fusion is fixed; a winning one-frame head and a coexisting bystander can still take the subject away |
 | 8 | TASK-150 Intake of the two new recordings (20261016, 20261023) and the webcam | changes requested (2026-10-31): main implementation correct; W isolation, the page and tests need work; the data goal is not met |
 | 8 | TASK-140 round 3: test follow-ups only | accepted (2026-10-31) |
-| 9 | TASK-101 contract r3: same identity first, a track seen with the subject cannot replace it, neutrality; real smoke again | ready |
-| 9 | TASK-150 revision r5: cut rule, path resolver, W isolation, page, tests, worker table, proxies and validation; item 10 waits for Q-032 | ready |
+| 9 | TASK-101 contract r3: same identity first, a track seen with the subject cannot replace it, neutrality; real smoke again | changes requested (2026-10-31): the implementation follows the contract, the r3 rule itself is flawed and clip 03:57 regressed |
+| 9 | TASK-150 revision r5, items 1 to 9: cut rule, path resolver, W isolation, page, tests, 20261016 proxies and validation | changes requested (2026-10-31): behaviour holds and 20261016 passes review; the path resolver gap, tests and a guide need work |
+| 9 (continued) | TASK-101 contract r4: overlapping boxes are not two people, pairs last through the bridge window, global pairing, conditions on neutrality; real smoke again | ready |
+| 9 (continued) | TASK-150 revisions r7 and r6: path resolver, tests and guide; second look; 20261016 index row; 20261023 proxies and validation; formal worker table | ready |
 | 10 | TASK-152 Intake of the new recording 20261030 and the 2026-10 cohort dataset (12 segments) | proposed |
 | 10 | TASK-151 Per-region re-registration of the formal regions with in-recording monitoring (D27, D29) | proposed; the design is confirmed (Q-028) |
 | 11 | TASK-153 Review mode and blind landmark test; the user confirms the regions of each recording | proposed |
 | Stage 4 | Pixel-isotropic reference rays (GZ-28) | proposed; no longer a stage-3 prerequisite because stage 3 uses 3D gaze |
 | User | Label 26 one-minute segments with scheme r3 (about 3 hours) | can start; dataset `roi_r2` is ready |
-| User | Answer Q-032: how the new recordings are judged for synchronization | waiting; blocks 20261023 and TASK-152, not labelling |
 | User | Label the 12 segments of the new recordings (about 1.5 hours) | after TASK-152 |
 | — | Stage acceptance by Claude, final acceptance by the user | not started |
 
@@ -114,7 +115,7 @@ New recordings and design approval on 2026-10-29 (`docs/collab/analysis/2026-10-
 - **User decisions.**
   - D22: the system design and the stage-3 design v2 are approved.
   - D23: MIT- and Apache-licensed models first, tried in a cloned sandbox environment, with each download authorized item by item; non-commercial models are not used until the user judges them at download time.
-  - D24: a new stage-3 branch and draft PR from the stage-2 acceptance point, so this PR stays stage 2 only. Rounds 6 to 10, including TASK-151 and TASK-153, are stage-2 work and stay on this branch.
+  - D24: a new stage-3 branch and draft PR from the stage-2 acceptance point, so this PR stays stage 2 only. Rounds 6 to 11, including TASK-151 and TASK-153, are stage-2 work and stay on this branch.
   - D25: the documentation records system is confirmed.
   - D26: the new recordings join as a separate cohort; the webcam is an auxiliary view; evaluation becomes leave-one-worker-out.
   - D27: the formal regions are registered to each recording and reviewed by the user.
@@ -179,6 +180,19 @@ Round 8 review on 2026-10-31 (`docs/collab/evidence/2026-10-31-round8-review.md`
 - **Why the two calibrations failed.** The 20261016 E failure is a real defect: cut refinement can leave the bracket of the neighbouring long windows. All four accepted cuts stay inside it and all three new cuts leave it. A bracket rule goes into TASK-150 revision r5. It keeps the gate numbers but changes a frozen fit function, and it was set after seeing the failure. In an in-memory simulation the accepted cuts do not move, 20261016 E passes exactly at the limit (5/50 = 10.0%), and 20261023 E improves from 7.3% to 3.6% with moved cuts; round 9 gives the real result. The 20261023 A failure is mostly measurement noise: offset windows give 9.6% and 120 s windows 3.7%, though some measures do not improve. A systematic offset of about 0.05 to 0.14 s remains, and the A–E drift of 20261016 is a real small difference.
 - **The user decides Q-032.** An offline preview shows that 20261023 A–B and the A–E pair of both recordings would miss the unchanged proxy gates. The recommended option adds a second look and records a `sync_grade`. Its rule was written after seeing these two recordings, so only 20261030 would be a first use on unseen data. Other options drop 20261023, which is about half of P2's data, or redesign the calibration.
 - **Plan.** Labelling uses `476ebdf`. Round 9 is TASK-101 contract r3 and TASK-150 revision r5. The coordinator proposes moving TASK-152 and TASK-151 to round 10 and TASK-153 to round 11. This changes the rounds the user confirmed in Q-028 item 7, so it waits for Q-033.
+
+User decisions on 2026-10-31:
+
+- **Q-032, option 1 (D30).** The original gates keep their numbers. A second look on 120 s windows applies only in the three cases fixed in `docs/design/VALIDATION_SET_DESIGN.md` §11.7, for 20261016, 20261023, 20261030 and later recordings. Recordings that use it carry `sync_grade: second_look` and are listed separately in stage 3. The core of the rule was written after offline previews of 20261016 and 20261023, and its final wording after their real round-9 results, so among the three recordings only 20261030, whose synchronization has not been measured, is a first use on unseen data. The coordinator added two stricter clarifications: W has no second look, and too little evidence at 120 s counts as not passed. The cut rule of TASK-150 revision r5 stays a separate coordinator decision that the user may overrule.
+- **Q-033.** TASK-152 and TASK-151 move to round 10, TASK-153 to round 11. Item 10 of TASK-150 stays in round 9, after the review of the part Codex has handed back.
+
+Round 9 review on 2026-10-31 (`docs/collab/evidence/2026-10-31-round9-review.md`):
+
+- **TASK-101 goes back, and the fault is in the coordinator's rule.** The implementation follows contract r3 and the round-8 findings are fixed. The r3 rule says two tracks seen together are two people. On work video they appear to be two candidates of one head, an inference from box overlap and Codex's visual sampling (the review viewed no images). Eligible frames in clip 03:57 fell from 274 to 223. A bystander missed for one frame could also take the subject. Contract r4 and PERCEPTION 1.3.0 correct this: a pair counts only when the two boxes overlap below IoU 0.05, a threshold set after seeing these clips, and a pair lasts through the bridge window. The cost is that two real heads overlapping by 5% or more may replace each other. A replay restores 274 on 03:57. This is a replay, so the real smoke runs again, and it is no held-out test because the same clips set the threshold.
+- **TASK-150 goes back with no must-fix.** Items 1 to 9 hold. An independent re-hash of 16,891 protected files found only the three allowed changes. A replay of 18 fits found no difference, and the four accepted cuts did not move. The path resolver compared size only, which was a gap in revision r5. Sixty-six mutants survive, 40 of them test gaps, and a guide was not updated. Revision r7 covers these.
+- **20261016 passes review.** All four pairs were recomputed from the saved proxy thumbnails and match, and the nine clock readings were read again and match. Codex records it as `official` next. The margin lies within measurement noise: the bootstrap intervals of the E–B and W–B shares and of the A–E drift contain the gates. The preview differed from the real result by typically 0.02 s per window, up to 0.19 s, with no systematic offset.
+- **W panel.** Codex's headless Edge did not start, so the coordinator ran it: 19 of 19 on a synthetic fixture, and the old page scripts all pass.
+- **Plan.** Round 9 continues with TASK-101 r4, TASK-150 r7 and r6, 20261023, and the formal worker table. The contracts of TASK-151 and TASK-153 are written. Labelling stays on `476ebdf`.
 
 ## How this PR is used
 
@@ -248,14 +262,15 @@ Work videos stay read-only on the local drive. Derived data, labels, and outputs
 | 8 | TASK-101 人脸与姿态关联修正（D1，契约 r2） | 退回修改（2026-10-31）：跨人融合已修好；胜出的一帧临时头与共存的旁人仍会让主体丢失 |
 | 8 | TASK-150 两次新录制（20261016、20261023）与 webcam 的接入 | 退回修改（2026-10-31）：主体实现正确；W 的隔离、页面与测试要补；数据目标未达成 |
 | 8 | TASK-140 第 3 轮：只补测试 | accepted（2026-10-31） |
-| 9 | TASK-101 契约修订 r3：同身份优先、共存过的轨迹不能接替主体、中立性，重跑真实 smoke | ready |
-| 9 | TASK-150 契约修订 r5：切点规则、路径解析、W 的隔离、页面、测试、作业者表、代理与验证；第 10 条等 Q-032 | ready |
+| 9 | TASK-101 契约修订 r3：同身份优先、共存过的轨迹不能接替主体、中立性，重跑真实 smoke | 退回修改（2026-10-31）：实现符合契约，r3 的规则本身有缺陷，03:57 回退 |
+| 9 | TASK-150 契约修订 r5 第 1 至 9 条：切点规则、路径解析、W 的隔离、页面、测试、20261016 的代理与验证 | 退回修改（2026-10-31）：行为成立，20261016 通过审查；路径解析缺口、测试与指南要补 |
+| 9（续） | TASK-101 契约修订 r4：两框重叠不算两个人、共存保留到桥接窗口结束、全局配对、中立性的条件，重跑真实 smoke | ready |
+| 9（续） | TASK-150 修订 r7 与 r6：路径解析、测试与指南；同步复核规则；20261016 索引行；20261023 的代理与验证；正式作业者表 | ready |
 | 10 | TASK-152 新录制 `20261030` 的接入与 2026-10 分层数据集（12 段） | proposed |
 | 10 | TASK-151 正式区域逐区域重配准与录制内监测（D27、D29） | proposed；方案已确认（Q-028） |
 | 11 | TASK-153 区域复核模式与盲测，用户逐次确认 | proposed |
 | 阶段 4 | 参考射线改为像素各向同性方向（GZ-28） | proposed；阶段 3 改用三维视线，不再是其前置 |
 | 用户 | 按方案 r3 标注 26 个一分钟片段（约 3 小时） | 可以开始；数据集 `roi_r2` 已就绪 |
-| 用户 | 回复 Q-032：新录制的同步判定 | 等待中；阻塞 20261023 与 TASK-152，不阻塞标注 |
 | 用户 | 标注新录制的 12 段（约 1.5 小时） | TASK-152 之后 |
 | — | Claude 阶段验收，用户最终验收 | 未开始 |
 
@@ -308,7 +323,7 @@ Work videos stay read-only on the local drive. Derived data, labels, and outputs
 - **用户的决定。**
   - D22：批准系统总体设计与阶段 3 设计 v2。
   - D23：先只用 MIT 与 Apache 许可的模型，在克隆的沙盒环境中试用，下载逐项授权；非商业许可的模型暂不使用，需要时随下载授权请用户判断。
-  - D24：从阶段 2 的验收点新建阶段 3 分支与 draft PR，本 PR 只含阶段 2；第 6 至 10 轮（含 TASK-151、TASK-153）属于阶段 2，仍在本分支。
+  - D24：从阶段 2 的验收点新建阶段 3 分支与 draft PR，本 PR 只含阶段 2；第 6 至 11 轮（含 TASK-151、TASK-153）属于阶段 2，仍在本分支。
   - D25：确认文档记录体系。
   - D26：新录制作为单独分层纳入；webcam 作辅助视角；评估改为按作业者留一。
   - D27：正式区域按录制配准，由用户复核。
@@ -373,6 +388,19 @@ Work videos stay read-only on the local drive. Derived data, labels, and outputs
 - **两次校准失败的原因。** 20261016 E 是真实缺陷：切点细化可以越出相邻长窗。已通过的 4 个切点都在其间，新的 3 个都不在。切点规则写入 TASK-150 修订 r5。它不改门槛数字，但改了冻结的拟合函数，也是看过失败之后定的。内存模拟中已通过的切点不动，20261016 E 恰好在门槛上通过（5/50=10.0%），20261023 E 由 7.3% 降到 3.6%，切点移动；真实结果要等第 9 轮。20261023 A 主要是测量噪声：错开窗口 9.6%，120 秒窗口 3.7%，但也有几种测量没有改善。还剩约 0.05 至 0.14 秒的系统差，20261016 的 A–E 漂移也是真实的小差异。
 - **Q-032 由用户决定。** 离线预演显示，20261023 的 A–B 与两次录制的 A–E 过不了未改动的代理门槛。推荐方案加一道复核，并记录 `sync_grade`。规则是看过这两次录制才写的，只有 20261030 是第一次用在没看过的数据上。其他选项是放弃 20261023（约占 P2 数据的一半），或重做校准方法。
 - **计划。** 标注用 `476ebdf`。第 9 轮做 TASK-101 契约 r3 与 TASK-150 修订 r5。协调者提议把 TASK-152、TASK-151 移到第 10 轮，TASK-153 移到第 11 轮。这改动用户在 Q-028 第 7 项确认过的轮次，所以等 Q-033。
+
+用户 2026-10-31 的决定：
+
+- **Q-032 选项 1（D30）。** 原门槛的数字不变。120 秒窗口的复核只用于 `docs/design/VALIDATION_SET_DESIGN.md` §11.7 写定的三种情况，只适用于 20261016、20261023、20261030 及以后的录制。用过复核的录制记 `sync_grade: second_look`，阶段 3 单列。规则的主体是看过 20261016、20261023 的离线预演才写的，最终文字写于它们第 9 轮的真实结果之后；这三次录制中只有 20261030 的同步还没有测过，是规则第一次用在没测过的数据上。其中 W 不复核、120 秒窗口证据不足算没通过两处由协调者写定时补充。TASK-150 修订 r5 的切点规则仍是单独的协调者决定，用户可以推翻。
+- **Q-033。** TASK-152、TASK-151 移到第 10 轮，TASK-153 移到第 11 轮。TASK-150 第 10 条留在第 9 轮，在 Codex 已交回部分的审查之后做。
+
+2026-10-31 的第 9 轮审查（`docs/collab/evidence/2026-10-31-round9-review.md`）：
+
+- **TASK-101 退回，问题在协调者写的规则。** 实现符合契约 r3，第 8 轮的发现都修好了。r3 的规则说同时被观测的两条轨迹是两个人，但在作业视频上它们看来是同一个头的两个候选，这是由框的重叠与 Codex 的目视抽查推断的，审查没有看图。03:57 片段的 eligible 帧由 274 降到 223。旁人漏检一帧也可能抢走主体。契约 r4 与 PERCEPTION 1.3.0 改为：两框重叠低于 IoU 0.05 才算两个人，这个阈值是看过片段之后定的；共存关系保留到桥接窗口结束。代价是两个真人的框重叠 5% 以上时可能互相接替。回放中 03:57 恢复到 274。这只是回放，真实 smoke 要重跑；定阈值用的就是这几段，它也不是留出检验。
+- **TASK-150 退回，没有 must-fix。** 第 1 至 9 条成立。16,891 个受保护文件独立重算，只有三个获准的变化。18 组拟合重放没有差异，4 个已通过的切点没有移动。路径解析只比大小，这是修订 r5 的缺口。66 个变异存活，其中 40 个是测试缺口，一份指南没有更新。这些写入修订 r7。
+- **20261016 通过审查。** 四对都从保存的代理缩略图复算，全部一致，9 个时钟读数也重读过，全部相同。将由 Codex 记 `official`。余量在测量噪声范围内：E–B、W–B 的占比与 A–E 漂移的自助法区间都包含门槛。预演与实测的差别，典型大小约 0.02 秒，最大 0.19 秒，没有系统偏移。
+- **W 面板。** Codex 的无界面 Edge 没有启动，由协调者实测：合成夹具 19/19，旧页面脚本全部通过。
+- **计划。** 第 9 轮继续做 TASK-101 r4、TASK-150 r7 与 r6、20261023 与正式作业者表。TASK-151、TASK-153 的契约已写。标注仍用 `476ebdf`。
 
 ## 本 PR 的用法
 

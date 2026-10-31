@@ -1,6 +1,6 @@
 # TASK-150：新录制（20261016、20261023）与 webcam 的接入
 
-状态：changes-requested（Claude 2026-10-31 第 8 轮审查，见 §3）。主体实现正确，W 的隔离、页面与测试要补；真实数据目标未达成。契约修订 r5 在 §1 末尾，排在第 9 轮；此前的修订说明见“契约修订 r2”至“r4”
+状态：changes-requested（Claude 2026-10-31 第 9 轮审查，见 §3）。r5 第 1 至 9 条的行为成立，`20261016` 的代理与验证通过审查。契约修订 r7 与 r6 在第 9 轮继续执行，都在 §1 末尾。此前的修订说明见“契约修订 r2”至“r5”
 创建：2026-10-29（Asia/Tokyo）　协调者：Claude　实现者：Codex　验收：Claude，之后用户在独立 checkout 验收
 依据：
 - 用户 2026-10-29 的决定 D26、D27（Q-020、Q-021），原话为“Q-018至Q-021 我已经确认，请按你的推荐进行。”；
@@ -333,6 +333,70 @@ git status --short
     - 第 7 条：两个交接时段按第 6 条核实。
     - 其余验收不变。旧产物不变的核对范围相同，另加 `timemaps_v3` 中改名保留的失败映射。
 
+### 契约修订 r6（Claude，2026-10-31，用户回答 Q-032 之后）
+
+用户 2026-10-31 回复“确认 Q-032，选 1”，r5 第 10 条生效。规则的正式文本是[验证集设计](../../design/VALIDATION_SET_DESIGN.md) §11.7（5.0.0）。它与 Q-032 或 r5 第 10 条不一致时按更严的一条执行，并按 B 级报告。规则到此写定。下面只写实施方式，本修订优先于上文中与之冲突的条款。
+
+1. **时机**：Claude 审查完第 9 轮已交回的部分、把 `next_actor` 改为 `codex` 之后才开始。审查要稳定的目标。
+2. **开关**：`sync_calibrate`、`sync_validate` 增加 `--second-look`，默认关闭；不传时判定结果与现在相同。旧 7 次与 `20261016` 不重跑。
+3. **W 不复核**（协调者写定时补充）：W–B 按原门槛，失败时只把这次录制的 W 标为不可用，不影响 `sync_grade`。
+4. **受保护组件**：
+   - 48 个受保护组件的 AST 按 `c1b8416` 核对，全部不变，本修订没有获准改动的受保护函数。`_fit_gate`、`fit_calibration`、`refine_breakpoints`、`window_lags`、`lag_peak`、`_line` 都在其中。
+   - `residual_summary`、`session_passed` 不在这 48 个之内，也不改，验收时加入 AST 核对。`window_lags` 已支持 120 秒窗口。
+   - 复核写成新函数，由 `sync_calibrate.run` 与 `sync_validate._run` 调用。采样 SHA 保持 `7c6c32f4…`。
+   - 拟合层的新函数放在 `sync_calibrate.py`。`residual_summary` 只能在函数内导入，因为 `sync_validate` 在模块顶层导入 `sync_calibrate`。不要调用 `corrected_time`：这时 `valid` 为假，它会报错。
+   - `implementation_hash` 不含 `sync_validate.py`，也不改；`fit['second_look']` 记录 `sync_validate.py` 的 SHA-256。
+5. **拟合层**：
+   - 在 `refine_breakpoints` 之后、写入 `row['calibration']` 之前判定，只处理 A、E，`reason` 恰为 `residual_tail_exceeds_0_2` 时才运行。
+   - 窗口用 `window_lags(signals['cam_b'],signals[camera],window=120.,step=60.)`。有效窗的时间取 `t=t_mid_seconds+lag_seconds`，按 `corrected_time` 的规则归入 `segments`；有切点时，跨切点的窗口也这样归段，不剔除。残差为 `lag_seconds-c0-c1*t`。
+   - 残差替换 `lag_seconds` 后交给 `residual_summary(rows,fit['duration'])`，`passed` 为真才算通过。
+   - 无论是否通过，窗口与四个数字都写入 `fit['second_look']`。通过时 `valid=true`、`reason='valid_second_look'`；`segments`、`residual_mad`、`residual_tail_fraction` 保留原值。
+   - Claude 用现有映射与缩略图按这个算法在内存中算过：`20261023` A 有效窗 54/59，±0.2 秒内 96.30%，中位绝对值 0.036 秒，中点偏差 0.002 秒，漂移 0.034 秒/小时，四项都过。这是预演，以实测为准；实测不同时按 B 级报告，不调整方法去迎合。脚本在 `gazelle_runs\claude-review-r9\data\fit_second_look.py`。
+6. **`20261023` 重新拟合**：
+   - 本修订的代码全部提交之后运行，同 r5 第 2 条。
+   - 现有失败映射 `20261023.json`（SHA `255a798a…`）先改名保留为 `20261023.json.before-second-look`，不得覆盖已有的 `20261023.json.before-task150-r5`。
+   - 用 `--reuse-samples --second-look --inventory …` 重新拟合，不重新解码。A 的窗口与系数、E 与 W 的窗口、系数、切点、有效状态与尾部值必须与现有映射相同。比较时排除必然变化的字段：`calibrated`，A 的 `valid`、`reason`、`second_look`，A 各行新增的 `calibration`，`cameras.cam_a`，`overlap`，以及各处的 `implementation_sha256` 与 `fingerprint`。不相同时停下，按 B 级报告，不生成代理。
+7. **代理验证层**：
+   - `pairs[name]` 的 `conclusion`、`passed`、`reason` 仍是 60 秒窗口、原门槛的结果，复核结果写在 `pairs[name]['second_look']`。
+   - A–B、E–B 的 `reason` 恰为 `fraction_within_0_2 < 0.9` 时才复核。A–E 的 `conclusion` 为 `failed` 时复核；`insufficient_evidence` 沿用原规则，不复核。
+   - 带 `--second-look` 时，`synchronization_passed` 与 `passed` 由新函数按 §11.7 计算。不带时结果等于 `session_passed`，不写 `sync_grade`；这时映射里有 `valid_second_look` 就报错退出。
+   - `sync_grade` 写入验证文件顶层与索引行。同步未通过时为 null，不省略。同步通过时，`mapping['calibration']` 的 A、E 有 `reason=='valid_second_look'`，或代理验证用过任何一种复核，就是 `second_look`，否则是 `official`。
+   - 读取 `sync_grade` 写成一个函数，放在 `tools/validation/sample_segments.py` 读取索引的地方：旧 7 次缺字段视为 `official`，其他录制缺字段报错。TASK-152 复用。
+8. **`20261016`**：不重跑，验证文件也不改：它写于这条规则之前，SHA 记在索引行与 W 的绑定中。这是 r5 第 10 条“写入验证文件”的唯一例外。第 9 轮审查通过后，在它的索引行加 `sync_grade: official`，并更新 `acceptance_status`。做法与追加相同：先保留备份，再核对旧 7 行逐字段不变。审查不通过时按审查结论处理。r5 第 10 条“预期”中 1016 的数字是预演，实测以 §2 为准。
+9. **继续 r5 第 9 条**：`20261023` 的代理（`--allow-internal-gaps`）、四对残差（`sync_validate --second-look`）、时钟抽查、事件条图。验证文件顶层 `passed` 为真之后追加索引；W–B 失败只把 W 标为不可用，不挡索引。验证文件的目录与 `20261016` 相同，以第 9 轮审查的确认为准。`append_proxy_manifest.py` 现在要求全部 `pairs` 通过，并写死了 `20261016`，要相应修改。按规则仍失败时保留代理，不写索引，按 B 级报告，不调整规则。
+10. **正式作业者表**：两次录制的最终映射都确定之后写入，同 r5 第 6 条。文件头依据验证集设计 5.0.0 §11.3。
+11. **文档与测试**：
+    - 四份用户文档与两份中文指南写明 `--second-look`、`sync_grade` 与它们的含义。
+    - 测试默认隔离，覆盖三种情况各自的通过与失败、边界值（0.9、0.1、0.15）、中点偏差与漂移为负值时按绝对值判定、有切点时的归段、不该复核时不运行、证据不足、W 不复核、默认关闭时与现有结果相同、`sync_grade` 的取值，以及缺字段时旧 7 次视为 `official`、其他录制报错。
+12. **验收**：r5 第 11 条第 1 点改为：第 4、6 条按 §11.7 判定，`20261016` 不重跑。其余两点不变。另核对受保护组件与采样 SHA，核对改名保留的映射，核对旧 7 条索引行不变。需要独立审查。
+
+### 契约修订 r7（Claude，2026-10-31，第 9 轮审查后；与 r6 一起执行）
+
+依据[第 9 轮审查记录](../evidence/2026-10-31-round9-review.md) §3 与本任务 §3。本修订优先于上文中与之冲突的条款。先完成并提交本修订与 r6 的代码，再运行 r6 的真实步骤。
+
+1. **路径解析闭合**（r5 第 3 条的缺口）：
+   - 磁盘 `st_mtime_ns` 必须等于清单行 `mtime_ns`，映射行 `media_mtime_ns` 也必须等于它，不等时拒绝。Claude 2026-10-31 核对：56 个文件与 43 行映射全部相等。
+   - 去掉内存中的 mtime 副本。比对通过后 mtime 本来就相同，`checked_source` 对解析后的路径同样比较 mtime。
+   - 清单行 `needs_remux` 为真、记录路径失效时直接拒绝，不用 AVI 顶替重封装文件。
+   - 测试加：搬迁后 mtime 改变的文件被拒绝；同大小不同内容、mtime 不同的文件被拒绝。
+2. **W 分支的异常**：`sync_validate`、`proxies`、`sync_calibrate`、`timemap`、`sample_segments` 的纯 W 分支改用 `except Exception`，记录 `error_type`。A、B、E 的路径不改。
+3. **测试**：
+   - FFmpegError 用例必须用不继承 ValueError、OSError、RuntimeError 的类，例如 `av.error.ExternalError`，并覆盖条图路径；条图路径也要有 KeyError 用例。
+   - 搬迁测试覆盖 W、经 `_run` 的非空 `indices`、三个 CLI 的 `--inventory` 接线、`checked_source`。
+   - `gazelle_runs\claude-review-r9\reviewers\task150\results\mutation-classified.json` 中 `classification` 为 `test-gap` 的 40 个变异要失败，定义在同目录上一级的 `scripts\`，代码移动时按原义改写，第 1、2 条改写的代码按新行为对应。主要是：索引缺记录的原因、隐私校验、旧录制的覆盖来源、`timemap.run` 第一层分支、负的 `c0`。其中 `n_sp_keep_old_mtime`、`n_sp_checked_mtime_always` 的结果就是第 1 条要求的新代码，不计入；它们的反向变异（恢复内存副本、对解析路径不比 mtime）要失败。
+   - 补一个用例：重跑清单时已消失文件的旧行怎样处理。
+4. **文档**：
+   - `tools/workdata/README_CN.md` 写明 `--inventory`、`webcam_unavailable`、`review-only`、切点的闭区间规则，并加进文档测试。
+   - `docs/usage/USAGE.md`、`USAGE_CN.md` 关于修改时间的一句按第 1 条核对，已成立就不改。
+5. **小项**：
+   - `inventory.py` 换 `--root` 时同时比较 `mtime_ns`，补 `n_inv_wrong_root_size`、`n_rem_failed_any_status`、`n_rem_failed_invalid_kept` 三个用例。
+   - 写入正式作业者文件时必须带全部文件头；`span_id` 限定为 `<录制>_worker_<n>`。
+   - `timemap.run` 一次录制只有一行 W 且失败时不得报 UnboundLocalError。第 310 行把 KeyError、FFmpegError 用于 A、B、E 的做法保留，写入报告。
+   - `sync_check.py` 打开记录路径、要求全部行有效。它是可选的旧诊断，不改，在报告中写明。
+6. **验证文件的目录**：新录制的验证写入 `sync_validation_r5\`，这是正式目录。修订 r2 第 3 条的 `sync_validation_v3\` 作废，r6 第 9 条的“目录与 `20261016` 相同”就是这个目录。
+7. **作业者表**：候选片段 `20261016_worker_2` 超出最终重叠段 0.167 秒，写入前按最终映射裁剪，同 r5 第 6 条。
+8. **`20261016`**：第 9 轮审查已通过它的代理与验证，r6 第 8 条的索引更新可以执行，`acceptance_status` 写 `Claude round-9 review accepted; user acceptance pending`。
+
 ## 2. 实施报告（Codex 追加，勿改上文）
 
 ### 第 8 轮实施记录（Codex，2026-10-31；实现待审，真实数据受 B 级问题阻塞）
@@ -458,3 +522,25 @@ git status --short
 - **未报告的决定**：W 的文件名规则写在代码里而不在 `camera_roles.json`；不带 `--session` 的重封装从重写变为合并；服务端夹具改成全部带 W。前两项按修订 r5 第 8 条处理，第三项按第 7 条。
 - **A 级决定**：同意 W 接口单列、复用 A/E 算法；同意参考图必须绑定通过的验证，但失败时的行为按修订 r5 第 4 条改；同意逐原生帧核实交接并保留失败证据。
 - **B 级问题**：Q-029、Q-030、Q-031 已处理，见审查记录 §5.4 至 §5.6；需要用户决定的部分是 Q-032。
+
+### 2026-10-31 第 9 轮审查（Claude）
+
+- **审查目标**：`c1b8416`（实现）、`27d5301`（报告）、`5690745`（交接），r5 第 1 至 9 条。完整记录见[第 9 轮审查记录](../evidence/2026-10-31-round9-review.md) §3。第 10 条与 r6 没有实施，不在范围内。
+- **结论**：**changes-requested**。行为成立，没有 must-fix，修正写入契约修订 r7。`20261016` 的代理与验证通过审查。
+- **Claude 实际运行的检查**：
+  - 16,891 个受保护文件重算，只有 3 个获准的文件变化，旧 7 行索引逐字段相同；
+  - 新代码重放 9 次录制的 18 组拟合，0 处不同，旧 4 个切点不变；
+  - 从保存的代理缩略图复算 `20261016` 的四对，240 个窗口全部一致；
+  - 实测与预演逐窗比较，差别的典型大小约 0.02 秒（P90 约 0.045，E–B 最大 0.192），没有系统偏移；
+  - 重读 9 个时钟读数，全部与验证文件相同；
+  - 真实 Edge 实测 W 面板 19/19，旧页面回归 23/23、28/28、37/37、3/3、3/3。
+- **注意**：`20261016` 的通过是合规的，但余量在噪声范围内：E–B 占比的自助法区间 [85.7%, 100%]、W–B 占比的区间 [84.0%, 98.0%]、A–E 漂移的区间 [−0.007, 0.197] 秒/小时都包含门槛。W–B 只影响 W 是否可用。
+- **发现**（只读子代理报告，发现 1 Claude 读代码确认）：
+  1. **应修：路径解析少一环。** 只比大小，并用磁盘 mtime 覆盖内存副本，同大小的错文件能通过。这是 r5 第 3 条的缺口，不是实现错误。
+  2. **应修：FFmpegError 的测试是假的。** 用例用的 `InvalidDataError` 继承 ValueError。代码本身正确。
+  3. **应修：契约点名或新增的行为没有测试**。66 个变异存活，其中 40 个是测试缺口。
+  4. **应修：搬迁测试只覆盖一部分入口。**
+  5. **应修：`tools/workdata/README_CN.md` 没有更新。**
+  6. **小项**：W 分支只列了具体异常类；AVI 可能顶替丢失的重封装文件；错 `--root` 只比大小；作业者文件的校验偏松；`timemap.run` 两处；`sync_check.py` 没有上报。
+- **A 级决定**：内存中的 mtime 副本不同意，其余同意，见审查记录 §3.5。
+- **没有检查**：没有重新生成代理，4 张事件条图没有看，W 面板只测了合成夹具。

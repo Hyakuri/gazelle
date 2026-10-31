@@ -1,11 +1,11 @@
 ---
 doc_id: VALSET
 title: 作业数据验证集设计
-version: 4.5.0
-status: 已确认（协调者）
+version: 5.0.0
+status: 已确认
 updated: 2026-10-31
 owner: Claude
-confirm_ref: 用户 2026-10-29（Q-017、Q-018、Q-020、Q-021、Q-022、Q-024）；§10.8 的补充说明由协调者确认（2026-10-29），用户已确认 Q-025；用户 2026-10-30 决定纳入 `20261030`（Q-026 第 1 项），接入方式由协调者安排；§11.4 的实测由协调者更新，方案用户 2026-10-30 已确认（Q-028）；§11.3 的精度说明由协调者确认（2026-10-31）
+confirm_ref: 用户 2026-10-29（Q-017、Q-018、Q-020、Q-021、Q-022、Q-024）；§10.8 的补充说明由协调者确认（2026-10-29），用户已确认 Q-025；用户 2026-10-30 决定纳入 `20261030`（Q-026 第 1 项），接入方式由协调者安排；§11.4 的实测由协调者更新，方案用户 2026-10-30 已确认（Q-028）；§11.3 的精度说明由协调者确认（2026-10-31）；用户 2026-10-31 确认 §11.7（D30，Q-032），其中两处更严的说明由协调者补充；§11.3 的评估停止规则与 §11.2 的细节待定项见 Q-023，§11.3 的精度说明用户可以推翻
 ---
 # Work-Data Validation Set Design (D12)
 
@@ -198,6 +198,7 @@ regions with TASK-123.
 | r3.1 | 2026-10-18 | §10.8, the out-of-view mark. Approved by the user on 2026-10-29 (Q-018). |
 | Addendum | 2026-10-29 | §11: the two new recordings as a separate cohort, leave-one-worker-out, per-recording regions. Approved by the user on 2026-10-29 (D26, D27). |
 | Addendum 2 | 2026-10-30 | §11: the recording `20261030` (burned-in clock 2026-10-29) joins cohort `2026-10`, which now has 12 segments in one dataset. The user decided to include it on 2026-10-30 (Q-026); how it joins is a coordinator refinement. |
+| Addendum 3 | 2026-10-31 | §11.7: the synchronization grade of the new recordings. The user chose Q-032 option 1 (D30). §11.3: the precision of the handover boundaries, which version 4.5.0 had written only in the Chinese summary. |
 
 ## 10. Revision 3 (2026-10-18)
 
@@ -318,6 +319,7 @@ On 2026-10-30 a third new recording arrived: folder `20261030`, burned-in clock 
 ### 11.3 Worker-level splits
 
 - **Worker spans**: a span is the part of one recording in which one worker is at the station. Spans are cut only where the worker changes; a worker who leaves and returns stays in the same span. At a change, the handover period runs from the earlier worker's last confirmed face to the later worker's first confirmed face (A or B, at least 200 px wide at 4K and a detection score of at least 0.5); it belongs to no span. The worker-identity analysis of 2026-10-29 gives 11 spans over the nine recordings, with handovers inside 20260903 and 20261016 (`docs/collab/analysis/2026-10-29-worker-identity-analysis.md` §3). TASK-150 writes the span file for the first nine recordings and TASK-152 appends the spans of `20261030`; later tasks use the file as is (coordinator refinement).
+- **Precision of the handover boundaries** (coordinator, 2026-10-31, Q-030; the user may overrule): the confirmed boundaries come from sampling about every 5 s, so the definition above holds only to within a few seconds. A native-frame check found qualifying faces before the confirmed end of both handover periods, on B's clock: the earliest was 8.3 s before the end in `20260903` and 2.4 s in `20261016`. The `20261016` boundaries are draft times taken as B's clock (Q-030); the base clocks of A and E differ from B by at most about 0.40 s there. These hits are faces; whose faces they are was not checked. The boundaries do not move, and those seconds stay in the handover period, in no span. The check is therefore that A and B show no confirmed face in the period, except in its last 10 s. The 10 s was chosen after seeing the 8.3 s.
 - **Anonymous worker IDs**: the user gave them on 2026-10-29 after viewing face crops: four workers, P1 to P4. Spans of the same person share an ID. IDs carry no names or personal attributes. The worker in `20261030` is identified the same way: TASK-152 appends its spans with `worker_id` null, and the ID is filled in after the user has judged the face crops. Segment assignment uses spans, not IDs, so the dataset does not wait for the identification.
 - **Assignment**: a segment belongs to the span with which it overlaps most in time. A segment that lies entirely in an empty period belongs to the nearest span in time. Segments are never redrawn because of their span. With the gap observed in 20261016 (about 3 minutes), no 60-second segment can contain both workers.
 - **Evaluation**: leave-one-worker-out over the IDs, with the bootstrap of §7. Each report gives the number of distinct IDs and, per fold, the train and test segment counts and their cohorts. If a fold's training set holds less than half of all segments, or only one cohort, the evaluation stops and the user decides; there is no silent fallback to another split (coordinator refinement, pending the user's confirmation, Q-023). With four workers the folds are unbalanced: of the 34 segments of the first nine recordings P1 holds about 15 and P4 4 (estimated from the strata); `20261030` adds 4 segments whose worker is still to be identified. Results are given per worker, and conclusions extend only to these workers.
@@ -333,6 +335,26 @@ On 2026-10-30 a third new recording arrived: folder `20261030`, burned-in clock 
 
 About 6 to 7 minutes per segment, so about 1.5 hours for the 12 new segments.
 
+### 11.7 Synchronization grade (D30, Q-032)
+
+The user decided on 2026-10-31 (Q-032, option 1). The rule applies to `20261016`, `20261023`, `20261030` and later recordings. The first seven recordings and their records do not change.
+
+The original gates run first and keep their numbers. A second look uses the same signals with 120 s windows at a 60 s step, and the same window checks. It runs only in these three cases:
+
+| Step | Runs when | Passes when |
+| --- | --- | --- |
+| Fit of A or E against B | The result is `residual_tail_exceeds_0_2`: the window counts and the MAD passed, but more than 10% of the windows lie beyond 0.2 s | Residuals from the same fit meet the four proxy conditions: at least 90% within ±0.2 s, median absolute value at most 0.1 s, midpoint bias at most 0.1 s and drift at most 0.1 s/h, both in absolute value. With cuts, each window uses the segment it falls in, and windows across a cut are kept. The fit coefficients do not change |
+| Proxy pair A–B or E–B | The ±0.2 s share is the only failed condition | The same four conditions, on the proxy signals |
+| Proxy pair A–E | The pair failed. Too little evidence at 60 s stays allowed, as before, and needs no second look | Median absolute value at most 0.15 s; midpoint bias at most 0.15 s and drift at most 0.15 s/h, both in absolute value. The ±0.2 s share is not required |
+
+- **Everything else fails.** A failure outside these cases, or a second look that does not pass, fails the recording, and the result is reported. Too little evidence at 120 s (fewer than 10 valid windows, or coverage under 0.3) counts as not passed.
+- **W has no second look.** W–B keeps its gate. A W failure only makes W unavailable for that recording and does not affect the grade.
+- **Grade.** `sync_grade` is `null` when synchronization does not pass. Otherwise it is `official` when every gate passed as it stands, and `second_look` when any of the three cases was used. The grade is written to the proxy-index record and, for validations run under this rule, to the validation file. The records of the first seven recordings do not change, and a missing field there means `official`. On any other recording a missing field in the proxy-index record is an error, not `official`. How the grade is recorded is a coordinator addition and does not change which recordings pass: the `null`, that error, and `20261016`, whose validation file was written before this rule and stays unchanged, so its grade is only in its index record. The second-look numbers are written next to the original results.
+- **Reporting.** Stage 3 lists `second_look` recordings separately ([stage-3 design](STAGE3_GAZE_ATTENTION_CN.md) §8.3).
+- **Fixed as written.** The rule does not change after this text: a failure on any recording is reported and does not change it. Its core (TASK-150 r5 item 10) was written after offline previews of `20261016` and `20261023`. Its final wording, the clarifications here and the implementation in TASK-150 r6 came later, after Codex's real round-9 results for those recordings (the proxy validation of `20261016`, the refit of `20261023`) and after an in-memory run of the fit step on `20261023`. Among the three recordings only `20261030`, whose synchronization has not been measured, is a first use on unseen data. The fit case comes from TASK-150 r5 item 10, which the Q-032 row points to; the option's own wording did not list it. The coordinator added two stricter clarifications when fixing the text, and neither widens the rule: W has no second look, and too little evidence at 120 s counts as not passed.
+- **Separate from this rule.** The cut rule of TASK-150 r5 item 1 changed the frozen fit function after the failure of `20261016` E was seen, and it also moves the two cuts of `20261023` E. `20261016` E reaches the original gate with it, at exactly 5/50 = 10.0%. The cut rule is a coordinator decision that the user may overrule (Q-029, Q-032). So `official` means that the gate numbers are unchanged, not that the fit function stayed as it was.
+- **Accepted costs.** The A camera of `20261023` may keep a systematic offset of about 0.05 to 0.14 s, below one 5 Hz step. Most of the excess in that fit looks like measurement noise, but not all of it: a consensus signal gave 8/58, short-term motion A against B 7/33 and the closure A against E 10/47, none better than the 7/53 of the fit. The 0.15 limits were also set after the previews: they sit just above the previewed 0.144 s/h of `20261016` A–E, and the ±0.2 s share is dropped for A–E although `20261023` reached only 85.5% in the preview at 120 s. 120 s windows see small or short shifts less well than 60 s windows, and a shift of 2 minutes is almost invisible to both. Evidence: [round-8 review](../collab/evidence/2026-10-31-round8-review.md) §5.4.
+
 ### 11.6 中文摘要
 
 - **新录制**：`20261016`、`20261023`，以及 2026-10-30 你决定纳入的 `20261030`，作为单独分层（`2026-10`），各抽 4 段，共 12 段，规则与种子 20261015 不变。每次录制有自己的随机数生成器，所以原 26 段不受影响。
@@ -340,13 +362,22 @@ About 6 to 7 minutes per segment, so about 1.5 hours for the 12 new segments.
   - 20261023 的 A、B 同时中断约 6 秒，按代理缺口处理。
   - 新录制的片段可以另外显示 webcam 作参考，标签与注视点仍标在全局画面上。
 - **按作业者留一**：
-  - 作业者片段是同一录制中一名作业者在岗的时段，只在换人处切分。交接时段从前一人最后一次确认的人脸，到后一人第一次确认的人脸，不属于任何片段。用户确认的边界来自约 5 秒一次的采样，所以这个定义只精确到几秒：2026-10-31 逐原生帧核实时，下一张确认的人脸最多比边界早 8.3 秒。边界不因此移动，这几秒留在交接时段内，也不属于任何片段（协调者 2026-10-31，Q-030，用户可以推翻）。
+  - 作业者片段是同一录制中一名作业者在岗的时段，只在换人处切分。交接时段从前一人最后一次确认的人脸，到后一人第一次确认的人脸，不属于任何片段。用户确认的边界来自约 5 秒一次的采样，所以这个定义只精确到几秒：2026-10-31 逐原生帧核实时，按 B 的时钟，最早的命中比确认的交接终点早：`20260903` 8.3 秒，`20261016` 2.4 秒（1016 的边界是初稿时间，直接按 B 的时钟使用，Q-030）。边界不因此移动，这几秒留在交接时段内，也不属于任何片段。核实条件相应改为：除区间最后 10 秒以外，A、B 上没有确认的人脸。这个 10 秒是看到 8.3 秒之后定的；命中的是人脸，是谁的脸没有核对（协调者 2026-10-31，Q-030，用户可以推翻）。
   - 你 2026-10-29 判定共 4 名作业者（P1 至 P4）。0903 与 1016 各有一次换班，9 次录制共 11 个片段（见作业者分析）。`20261030` 的作业者片段由 TASK-152 追加，编号先为空，你看截图判定后再填入；片段归属按作业者片段，不等编号。
   - 片段按时间重叠最多的作业者片段归属，不因归属重抽。
   - 同一人用同一编号。折很不均衡（前 9 次录制的 34 段中 P1 约 15 段，P4 4 段；`20261030` 的 4 段待判定作业者），结果按作业者分别报告。
   - 每次评估报告编号个数，以及每折的训练、测试片段数；某一折的训练集不到全部片段的一半或只剩一个分层时，停下来请你决定（待你确认，Q-023）。
   - 按录制留一会让同一人同时出现在训练与测试中，不作为正式结果。
 - **区域按录制**：你在 0821 画面上画的区域，先逐区域自动配准到每次录制的全局画面，再由你复核，另存为新文件，原文件不改。标注用类别名称，不必等这一步。2026-10-30 实测：固定结构的区域包括 `20261030` 预计都能自动配准，以你的确认为准；料箱推车通常靠特征找不回来，由你调整（D29，Q-028）。
+- **同步等级（D30，Q-032）**：你 2026-10-31 选了选项 1。规则只用于 `20261016`、`20261023`、`20261030` 及以后的录制，旧 7 次不动。原门槛先判定，数字不变；只有三种情况用同样的信号、120 秒窗口（步长 60 秒）复核：
+  - A、E 的拟合只因超过 0.2 秒的窗口多于 10% 而失败：对同一个拟合算残差，有切点时每个窗口用它所在的段，跨切点的窗口保留；四个数字沿用代理门槛（±0.2 秒内不少于 90%，中位绝对值不超过 0.1 秒，中点偏差不超过 0.1 秒、漂移不超过 0.1 秒/小时，后两项都按绝对值），拟合系数不变。
+  - 代理验证的 A–B 或 E–B 只因 ±0.2 秒占比不足而失败：四个数字相同。
+  - 代理验证的 A–E 失败：中位绝对值不超过 0.15 秒，中点偏差不超过 0.15 秒、漂移不超过 0.15 秒/小时（后两项都按绝对值），就不挡住录制，±0.2 秒占比不再要求。60 秒窗口证据不足沿用原规则，不复核。
+  - 其他失败，或复核没有通过，这次录制不通过，如实报告。120 秒窗口证据不足（有效窗少于 10 个，或覆盖率低于 0.3）算没通过。W 不复核，W 失败时只把这次录制的 W 标为不可用。这两条是协调者写定时补的，都比原来更严，不放宽规则。
+  - 同步没有通过记 `sync_grade: null`。同步通过时，用过任何一种复核记 `second_look`，其余记 `official`。等级写入索引记录，以及按这条规则运行的验证文件。旧 7 次的记录不动，缺这个字段视为 `official`；其他录制的索引记录缺这个字段按错误处理，不算 `official`。等级怎样记录是协调者补充的，不影响录制是否通过：`null`、这个报错，以及 `20261016`（它的验证文件写于规则之前，不改，等级只记在索引行）。阶段 3 的报告单列。
+  - 规则到此写定，之后不再改动：任何一次录制失败都如实报告，不改规则。它的主体（TASK-150 修订 r5 第 10 条）是看过 `20261016`、`20261023` 的离线预演才写的；最终文字、协调者的说明与修订 r6 写得更晚，当时已经看过这两次录制在第 9 轮的真实结果（`20261016` 的代理验证、`20261023` 的重新拟合），也在内存中对 `20261023` 算过拟合复核。这三次录制中只有 `20261030` 的同步还没有人测过，是规则写定之后才看数据。拟合这一种情况写在问题表“位置”一栏所指的修订 r5 第 10 条，选项的文字没有单列。
+  - 另外，切点规则（TASK-150 修订 r5 第 1 条）不属于这条规则。它是看过 `20261016` E 的失败之后定的，改了原来冻结的拟合函数，也移动了 `20261023` E 的两个切点。`20261016` 的 E 靠它恰好以 5/50=10.0% 达到原门槛。它是协调者的决定，你可以推翻（Q-029、Q-032）。所以 `official` 表示门槛数字没有变，不表示拟合函数没有变过。
+  - 已接受的代价：`20261023` 的 A 可能有约 0.05 至 0.14 秒的系统差，小于一个 5 Hz 步长；这次超限大部分来自测量噪声，但不是全部（共识信号 8/58，短时运动 A 对 B 7/33，闭合 A 对 E 10/47，都不比拟合的 7/53 好）；0.15 的上限也是看过预演才定的，贴着 1016 的 A–E 预演值 0.144；A–E 的 ±0.2 秒占比不再要求，预演中 1023 在 120 秒窗口下只有 85.5%；120 秒窗口对较小较短的偏移比 60 秒窗口弱，2 分钟的偏移两者都几乎看不到。
 - **工作量**：新增 12 段约 1.5 小时。
 
 ## 版本记录
@@ -354,7 +385,8 @@ About 6 to 7 minutes per segment, so about 1.5 hours for the 12 new segments.
 <!-- portal:versions -->
 | 版本 | 日期 | 状态 | 变更摘要 | 确认 | 归档 |
 | --- | --- | --- | --- | --- | --- |
-| 4.5.0 | 2026-10-31 | 已确认（协调者） | §11.3 改正 4.4.2 的说法：交接时段的定义只精确到几秒，用户确认的边界不动，逐帧确认的人脸最多早 8.3 秒，这几秒留在交接时段内（Q-030） | 用户 2026-10-29（Q-017、Q-018、Q-020、Q-021、Q-022、Q-024）；§10.8 的补充说明由协调者确认（2026-10-29），用户已确认 Q-025；用户 2026-10-30 决定纳入 `20261030`（Q-026 第 1 项），接入方式由协调者安排；§11.4 的实测由协调者更新，方案用户 2026-10-30 已确认（Q-028）；§11.3 的精度说明由协调者确认（2026-10-31） | [v4.5.0](../archive/VALSET/VALSET_v4.5.0.md) |
+| 5.0.0 | 2026-10-31 | 已确认 | 按 §5.1 为主版本：你 2026-10-31 选了 Q-032 选项 1（D30），新录制的同步判定属于评估协议的变化。新增 §11.7：原门槛先判定，写定的三种情况用 120 秒窗口复核，记 `sync_grade`，只用于三次新录制及以后的录制；写定时协调者补了两处更严的说明（W 不复核，120 秒窗口证据不足算没通过），并写明切点规则不属于这条规则，等级的记录方式（`null`、缺字段报错、`20261016` 只记在索引行）也由协调者补充。另补 4.5.0 的缺口：精度说明当时只写进 §11.6 的中文摘要，§11.3 英文正文漏写，这里补上，并写明“除区间最后 10 秒”的核实条件与所用时钟（Codex 第 9 轮指出）。§9 加一行，中文摘要同步 | 用户 2026-10-29（Q-017、Q-018、Q-020、Q-021、Q-022、Q-024）；§10.8 的补充说明由协调者确认（2026-10-29），用户已确认 Q-025；用户 2026-10-30 决定纳入 `20261030`（Q-026 第 1 项），接入方式由协调者安排；§11.4 的实测由协调者更新，方案用户 2026-10-30 已确认（Q-028）；§11.3 的精度说明由协调者确认（2026-10-31）；用户 2026-10-31 确认 §11.7（D30，Q-032），其中两处更严的说明由协调者补充；§11.3 的评估停止规则与 §11.2 的细节待定项见 Q-023，§11.3 的精度说明用户可以推翻 | [v5.0.0](../archive/VALSET/VALSET_v5.0.0.md) |
+| 4.5.0 | 2026-10-31 | 已取代 | §11.3 改正 4.4.2 的说法：交接时段的定义只精确到几秒，用户确认的边界不动，逐帧确认的人脸最多早 8.3 秒，这几秒留在交接时段内（Q-030） | 用户 2026-10-29（Q-017、Q-018、Q-020、Q-021、Q-022、Q-024）；§10.8 的补充说明由协调者确认（2026-10-29），用户已确认 Q-025；用户 2026-10-30 决定纳入 `20261030`（Q-026 第 1 项），接入方式由协调者安排；§11.4 的实测由协调者更新，方案用户 2026-10-30 已确认（Q-028）；§11.3 的精度说明由协调者确认（2026-10-31） | [v4.5.0](../archive/VALSET/VALSET_v4.5.0.md) |
 | 4.4.2 | 2026-10-31 | 已取代 | §11.3 写明交接边界的精度（Q-030）；内容不变 | 用户 2026-10-29（Q-017、Q-018、Q-020、Q-021、Q-022、Q-024）；§10.8 的补充说明由协调者确认（2026-10-29），用户已确认 Q-025；用户 2026-10-30 决定纳入 `20261030`（Q-026 第 1 项），接入方式由协调者安排；§11.4 的实测由协调者更新，方案用户 2026-10-30 已确认（Q-028）；§11.3 的精度说明由协调者确认（2026-10-31） | [v4.4.2](../archive/VALSET/VALSET_v4.4.2.md) |
 | 4.4.1 | 2026-10-30 | 已取代 | 你确认 Q-028，去掉方案待确认的标记；内容不变 | 用户 2026-10-29（Q-017、Q-018、Q-020、Q-021、Q-022、Q-024）；§10.8 的补充说明由协调者确认（2026-10-29），用户已确认 Q-025；用户 2026-10-30 决定纳入 `20261030`（Q-026 第 1 项），接入方式由协调者安排；§11.4 的实测由协调者更新，方案用户 2026-10-30 已确认（Q-028） | [v4.4.1](../archive/VALSET/VALSET_v4.4.1.md) |
 | 4.4.0 | 2026-10-30 | 已取代 | §11.4 与中文摘要按 2026-10-30 的逐区域实测更正：`20261030` 的固定区域预计可以自动配准，料箱推车由你调整；标注方案与数据集不变 | 用户 2026-10-29（Q-017、Q-018、Q-020、Q-021、Q-022、Q-024）；§10.8 的补充说明由协调者确认（2026-10-29），用户已确认 Q-025；用户 2026-10-30 决定纳入 `20261030`（Q-026 第 1 项），接入方式由协调者安排；§11.4 的实测由协调者更新，方案待 Q-028 | [v4.4.0](../archive/VALSET/VALSET_v4.4.0.md) |
