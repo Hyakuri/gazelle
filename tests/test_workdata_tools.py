@@ -11,6 +11,40 @@ from tools.workdata import common
 
 
 class WorkdataToolsTest(unittest.TestCase):
+    def test_inventory_rerun_keeps_order_and_rejects_wrong_relocated_root(self):
+        with TemporaryDirectory() as tmp:
+            root=Path(tmp)/'raw';root.mkdir();out=Path(tmp)/'inventory.json'
+            for session in ('20261016','20261023'):
+                (root/session).mkdir();(root/session/'WIN_20261014_12_05_36_Pro.mp4').write_bytes(b'video')
+            with patch.object(inventory,'probe_metadata',return_value={}), \
+                 patch.object(inventory,'probe_packets',return_value=dict(count=1,small_count=0)):
+                first=inventory.create_inventory(root,out)
+                for _ in range(2):
+                    again=inventory.create_inventory(root,out,sessions=['20261016'])
+                    self.assertEqual(again['files'],first['files'])
+                before=out.read_bytes();wrong=Path(tmp)/'wrong';(wrong/'20261016').mkdir(parents=True)
+                with self.assertRaisesRegex(ValueError,'existing inventory'):
+                    inventory.create_inventory(wrong,out,sessions=['20261016'])
+                self.assertEqual(out.read_bytes(),before)
+
+    def test_remux_rerun_merges_in_place_and_failed_refresh_preserves_valid_record(self):
+        with TemporaryDirectory() as tmp:
+            root=Path(tmp)/'raw';root.mkdir();out=Path(tmp)/'out';out.mkdir()
+            source=root/'e.avi';source.write_bytes(b'fake');target=out/'e.mp4';target.write_bytes(b'valid')
+            old=dict(output=str(target.resolve()),status='completed',validation=dict(valid=True),marker='old')
+            tail=dict(output=str(out/'other.mp4'),status='completed',marker='tail')
+            common.atomic_json(out/'remux_report.json',dict(files=[old,tail]))
+            inv=Path(tmp)/'inv.json';common.atomic_json(inv,dict(root=str(root),files=[
+                dict(session='20261016',relative_path='e.avi',needs_remux=True)]))
+            with patch.object(remux,'remux_one',return_value=dict(old,status='skipped')):
+                for _ in range(2):remux.run_inventory(inv,out)
+            records=json.loads((out/'remux_report.json').read_text())['files']
+            self.assertEqual(records,[dict(old,status='skipped'),tail])
+            with patch.object(remux,'remux_one',return_value=dict(old,status='failed',validation=dict(valid=False))):
+                result=remux.run_inventory(inv,out)
+            self.assertEqual(result[0]['status'],'failed')
+            self.assertEqual(json.loads((out/'remux_report.json').read_text())['files'],records)
+
     def test_webcam_names_are_strict_and_do_not_accept_unknown_variants(self):
         roles=inventory.load_roles()
         self.assertEqual(inventory.identify('20261016','WIN_20261014_12_05_36_Pro.mp4',roles),
@@ -27,7 +61,8 @@ class WorkdataToolsTest(unittest.TestCase):
             (root/'20261016/WIN_20261014_12_05_36_Pro.mp4').write_bytes(b'webcam')
             (root/'20261030/unknown.mp4').write_bytes(b'not selected')
             output=Path(tmp)/'inventory.json'
-            old=dict(session='20260821',relative_path='20260821/old.avi',private_marker='unchanged')
+            (root/'20260821').mkdir();(root/'20260821/old.avi').write_bytes(b'old')
+            old=dict(session='20260821',relative_path='20260821/old.avi',size_bytes=3,private_marker='unchanged')
             output.write_text(json.dumps(dict(root=str(Path(tmp)/'old'),files=[old])))
             with patch.object(inventory,'probe_metadata',return_value=dict(duration=100,has_audio=True)),patch.object(
                     inventory,'probe_packets',return_value=dict(count=10,small_count=0)):

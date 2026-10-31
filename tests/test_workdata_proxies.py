@@ -8,6 +8,24 @@ from tools.workdata.proxies import make_grid, encoder_command, validate_sidecar,
 
 
 class ProxyTest(unittest.TestCase):
+    def test_generated_webcam_sidecar_has_webcam_role(self):
+        from tools.workdata.proxies import generate_camera
+        from io import BytesIO
+        from types import SimpleNamespace
+        import numpy as np
+        frame=Mock();frame.reformat.return_value.to_ndarray.return_value=np.zeros((2,2,3),np.uint8)
+        def frames(*args):
+            yield dict(source='w',pts=0.,wall_time=100.,frame=frame)
+        process=Mock(stdin=BytesIO());process.wait.return_value=0
+        with tempfile.TemporaryDirectory() as directory, \
+             patch('tools.workdata.proxies.full_mapped_frames',side_effect=frames), \
+             patch('tools.workdata.proxies.subprocess.Popen',return_value=process), \
+             patch('tools.workdata.proxies.publish_proxy',side_effect=lambda tmp,target,sidecar,payload,*args:payload):
+            root=Path(directory)
+            result=generate_camera([{}],dict(t0=100.,N=1,step=.2,step_hz=5.),(2,2),
+                                   root/'w.mp4',root/'w.json',{},'cam_w','fake-ffmpeg','fake-ffprobe')
+        self.assertEqual(result['camera'],'cam_w');self.assertEqual(result['role'],'webcam')
+
     def test_optional_webcam_uses_same_grid_720p_and_does_not_change_roles(self):
         from tools.workdata.proxies import ROLES
         with tempfile.TemporaryDirectory() as directory:
@@ -32,6 +50,9 @@ class ProxyTest(unittest.TestCase):
                 self.assertEqual(calls[-1].args[1],calls[0].args[1])
                 self.assertEqual(calls[-1].args[3].name,'proxy_webcam.mp4')
                 self.assertEqual(result['auxiliary_cameras']['cam_w']['video'],'proxy_webcam.mp4')
+                self.assertEqual(result['auxiliary_cameras']['cam_w']['role'],'webcam')
+                self.assertEqual(result['overlap'],mapping['overlap'])
+                self.assertFalse(result['allow_internal_gaps'])
                 def failure(*args):
                     if args[6]=='cam_w':raise ValueError('W decode failed')
                     return payload
@@ -40,6 +61,15 @@ class ProxyTest(unittest.TestCase):
                 self.assertEqual(set(failed['cameras']),set(ROLES))
                 self.assertFalse(failed['auxiliary_cameras']['cam_w']['available'])
                 self.assertEqual(failed['auxiliary_cameras']['cam_w']['reason'],'W decode failed')
+                from av.error import InvalidDataError
+                for error in (InvalidDataError(1,'W packet'),KeyError('W field')):
+                    def failure(*args):
+                        if args[6]=='cam_w':raise error
+                        return payload
+                    generate.side_effect=failure
+                    failed=run(path,root/'errors')
+                    self.assertEqual(failed['auxiliary_cameras']['cam_w']['error_type'],type(error).__name__)
+                    self.assertEqual(set(failed['cameras']),set(ROLES))
                 generate.side_effect=None
                 mapping['auxiliary_cameras']['cam_w']=dict(available=False,reason='insufficient evidence')
                 files[-1]['status']='failed'

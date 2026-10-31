@@ -573,6 +573,15 @@ class UsageDocumentationTest(unittest.TestCase):
                 self.assertIn(token,text,str(path))
             self.assertNotIn('Gazelle_Workdata\\秋田大学様解析用動画',text,str(path))
 
+    def test_relocation_optional_webcam_and_worker_guards_are_documented(self):
+        for path in (ENGLISH_README,CHINESE_README,ENGLISH_GUIDE,CHINESE_GUIDE):
+            text=self._read(path)
+            for token in ('--inventory <inventory.json>','sync_calibrate','sync_validate',
+                          'adjacent_window_centers','refined=false','webcam_unavailable',
+                          'review-only','allow_internal_gaps','precision_seconds',
+                          'handover_face_grace_seconds','source_draft_sha256','camera_roles.json'):
+                self.assertIn(token,text,str(path))
+
     def test_annotation_point_exclusivity_and_shortcuts_are_in_all_six_guides(self):
         for path in (ENGLISH_README,ENGLISH_GUIDE):
             text=self._read(path)

@@ -48,7 +48,7 @@ class AnnotationServerTest(unittest.TestCase):
                 reference=root/'webcam/s1'/(str(step).zfill(4)+'.jpg')
                 reference.parent.mkdir(parents=True,exist_ok=True);reference.write_bytes(b'webcam image')
                 row['frames'][-1]['webcam']=dict(path=reference.relative_to(root).as_posix(),sha256=hash_file(reference),
-                                               gap=False,sync_uncertain=step==2)
+                                               gap=step==3,sync_uncertain=step==2)
             row['auxiliary_proxies']={'cam_w':dict(path='w.mp4',sha256='a'*64)}
             (root/'manifest.json').write_text(json.dumps(manifest))
             path=root/'trial.json'
@@ -59,7 +59,7 @@ class AnnotationServerTest(unittest.TestCase):
             self.assertEqual(state['resume'],['s1',0])
             self.assertFalse(path.exists())
             self.assertTrue(state['segments'][0]['has_webcam'])
-            self.assertEqual(state['segments'][0]['webcam_uncertain_steps'],[2])
+            self.assertEqual(state['segments'][0]['webcam_uncertain_steps'],[2,3])
             self.assertEqual(app.dispatch('GET','/webcam/s1/2')[1],b'webcam image')
             self.assertEqual(app.dispatch('GET','/frame/s1/0')[1],b'fake image')
             payload=dict(segment_id='s1',revision=0,labels=[dict(start_step=0,end_step_exclusive=5,label='unknown')],
@@ -72,6 +72,14 @@ class AnnotationServerTest(unittest.TestCase):
             (root/'frames/s1/0000.jpg').write_bytes(b'changed')
             with self.assertRaises(ValueError):app.dispatch('GET','/frame/s1/0')
             self.assertEqual(app.dispatch('GET','/unknown')[0],404)
+            row.pop('auxiliary_proxies')
+            for frame in row['frames']: frame.pop('webcam')
+            (root/'frames/s1/0000.jpg').write_bytes(b'fake image')
+            (root/'manifest.json').write_text(json.dumps(manifest))
+            plain=AnnotationApplication(root,root/'no-w-trial.json','reviewer')
+            no_w=json.loads(plain.dispatch('GET','/api/state')[1])['segments'][0]
+            self.assertNotIn('has_webcam',no_w)
+            self.assertNotIn('webcam_uncertain_steps',no_w)
 
     def test_page_contains_inline_controls_without_remote_resources(self):
         text=Path('tools/validation/annotation_page.html').read_text(encoding='utf-8')

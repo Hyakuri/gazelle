@@ -26,6 +26,7 @@ class SamplingTest(unittest.TestCase):
                          frames=[dict(k=k,t_k=10+k*.2,pts=k*.2,source='w',delta_seconds=0.,gap=False) for k in range(3)])
             (session_root/'w.json').write_text(json.dumps(sidecar))
             self.assertIsNone(read_webcam_reference(path,session,webcam))
+            self.assertIn('index is missing',session['webcam_unavailable'])
             validation=dict(auxiliary_cameras={'cam_w':dict(available=True)},pairs={'W-B':dict(passed=True)},
                 calibration_map_sha256='m'*64,proxy_session_sha256=hash_file(path),audit={'cam_w':dict(sha256=hash_file(video))})
             checked=root/'validation.json'
@@ -39,11 +40,23 @@ class SamplingTest(unittest.TestCase):
             self.assertIsNone(read_webcam_reference(path,session,webcam))
             validation['auxiliary_cameras']['cam_w']['available']=True
             validation['calibration_map_sha256']='changed';save()
-            with self.assertRaisesRegex(ValueError,'provenance'):read_webcam_reference(path,session,webcam)
+            self.assertIsNone(read_webcam_reference(path,session,webcam))
+            self.assertIn('provenance',session['webcam_unavailable'])
+            validation['calibration_map_sha256']='m'*64
+            validation['pairs']['W-B']['passed']=False;save()
+            self.assertIsNone(read_webcam_reference(path,session,webcam))
+            self.assertIn('provenance',session['webcam_unavailable'])
+            validation['pairs']['W-B']['passed']=True;save()
+            checked.write_text(checked.read_text()+' ')
+            self.assertIsNone(read_webcam_reference(path,session,webcam))
+            self.assertIn('hash differs',session['webcam_unavailable'])
+            checked.unlink()
+            self.assertIsNone(read_webcam_reference(path,session,webcam))
+            self.assertTrue(session['webcam_unavailable'])
 
     def test_no_pilot_cohort_keeps_session_rng_and_assigns_spans_without_redraw(self):
         def read(path):
-            return dict(session=path.parent.name,grid=dict(t0=100.,N=18000,step_hz=5.,step=.2),
+            return dict(session=path.parent.name,grid=dict(t0=100.,N=18000,step_hz=5.,step=.2),overlap=[[100.,3700.]],
                         cameras={c:dict(path='fake',sha256='a'*64) for c in ('cam_a','cam_b','cam_e')},
                         time_map_version=3,time_map_sha256='b'*64),[False]*18000
         with tempfile.TemporaryDirectory() as directory, patch('tools.validation.sample_segments.read_session',side_effect=read):
@@ -61,6 +74,14 @@ class SamplingTest(unittest.TestCase):
             self.assertTrue(all(not r['pilot'] for r in result['segments']))
             self.assertEqual([r['start_frame'] for r in result['segments'][:4]],[r['start_frame'] for r in plain['segments']])
             self.assertTrue(all(r['span_id']==r['session']+'_01' for r in result['segments']))
+            for change in (dict(status='review-only'),dict(private_name='forbidden')):
+                path.write_text(json.dumps({**spans,**change}))
+                with self.assertRaises(ValueError):
+                    plan(root,sessions=['20261016','20261023'],include_pilot=False,worker_spans=path)
+            for field,value in (('start_wall',99.),('end_wall',3701.)):
+                invalid=deepcopy(spans);invalid['spans'][0][field]=value;path.write_text(json.dumps(invalid))
+                with self.assertRaisesRegex(ValueError,'outside overlap'):
+                    plan(root,sessions=['20261016','20261023'],include_pilot=False,worker_spans=path)
 
     def test_worker_spans_exclude_handover_and_use_maximum_overlap_then_nearest(self):
         from tools.workdata.workers import validate_worker_spans,assign_span
@@ -72,9 +93,14 @@ class SamplingTest(unittest.TestCase):
         self.assertEqual(assign_span(rows,'20261016',210,220),'s1')
         self.assertEqual(assign_span(rows,'20261016',280,290),'s2')
         self.assertEqual(assign_span(rows,'20261016',240,260),'s1')
-        for change in (dict(start_wall=190.),dict(worker_id='person-name'),dict(end_wall=501.)):
+        for change in (dict(start_wall=190.),dict(worker_id='person-name'),dict(end_wall=501.),dict(name='forbidden')):
             bad=deepcopy(document);bad['spans'][1].update(change)
             with self.assertRaises(ValueError):validate_worker_spans(bad,{'20261016':(100.,500.)})
+        for change in (dict(start_wall=199.),dict(name='forbidden'),dict(session='person-name')):
+            bad=deepcopy(document);bad['handover_intervals'][0].update(change)
+            with self.assertRaises(ValueError):validate_worker_spans(bad,{'20261016':(100.,500.)})
+        bad=deepcopy(document);bad['spans'][0]['start_wall']=99.
+        with self.assertRaisesRegex(ValueError,'outside overlap'):validate_worker_spans(bad,{'20261016':(100.,500.)})
         with self.assertRaisesRegex(ValueError,'No worker spans'):
             assign_span(rows,'20261023',100,150)
 

@@ -11,9 +11,15 @@ def load_roles():
     return json.loads(Path(__file__).with_name('camera_roles.json').read_text(encoding='utf-8'))
 
 
+def filename_clock(filename,roles):
+    for rule in roles['filename_clock_patterns']:
+        if re.fullmatch(rule['regex'],filename):
+            return datetime.strptime(filename,rule['format'])
+    return None
+
+
 def identify(session, filename, roles):
-    if re.fullmatch(r'WIN_\d{8}_\d{2}_\d{2}_\d{2}_Pro\.mp4', filename):
-        datetime.strptime(filename, 'WIN_%Y%m%d_%H_%M_%S_Pro.mp4')
+    if filename_clock(filename,roles) is not None:
         return 'cam_w', 'filename_clock', None
     matches = [key for key, pattern in roles['filename_patterns'].items() if pattern in filename]
     if len(matches) != 1:
@@ -49,6 +55,11 @@ def create_inventory(root, out, ffprobe='ffprobe', sessions=None):
     directories = [root] if selected is None else [source_path(root, s) for s in sorted(selected)]
     if any(not path.is_dir() for path in directories):
         raise ValueError('Selected session directory is missing')
+    if selected is not None and old.get('root') not in (None,str(root)):
+        for row in old.get('files',[]):
+            path=source_path(root,row['relative_path'])
+            if not path.is_file() or path.stat().st_size!=row['size_bytes']:
+                raise ValueError('Selected root does not contain the existing inventory: '+row['relative_path'])
     records = [] if selected is None else [row for row in old.get('files', []) if row['session'] not in selected]
     for path in sorted(p for directory in directories for p in directory.rglob('*')):
         if not path.is_file() or path.suffix.lower() not in ('.avi', '.mp4'):
@@ -65,6 +76,11 @@ def create_inventory(root, out, ffprobe='ffprobe', sessions=None):
                             role=roles['cameras'][camera]['role'], camera_source=source, part_index=part,
                             needs_remux=path.suffix.lower() == '.avi' and packets['small_count'] > 0))
         print('Inventoried {}'.format(relative), flush=True)
+    if selected is not None:
+        updated={row['relative_path']:row for row in records}
+        ordered=[updated.pop(row['relative_path']) for row in old.get('files',[])
+                 if row['relative_path'] in updated]
+        records=ordered+list(updated.values())
     result = dict(version=1, root=str(root), created_at=datetime.now(timezone.utc).isoformat(), files=records)
     atomic_json(out, result)
     return result

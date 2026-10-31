@@ -585,6 +585,26 @@ The editor shows a collapsible W reference with an uncertainty notice; gaze poin
 on E in the unchanged three-view montage. Preserve existing datasets and labels.
 The formal `roi_r2_2026_10` dataset is generated only after its complete approved cohort is ready.
 
+`sync_calibrate`, `proxies`, and `sync_validate` accept `--inventory <inventory.json>` for
+moved originals: valid recorded paths (including remux files) stay in use; missing paths
+are resolved in memory from inventory root/relative path after matching source SHA records
+and file sizes. They do not rehash entire source videos or rewrite old mapping paths.
+Refined cuts stay inside the closed `adjacent_window_centers` interval; without a candidate,
+the coarse cut is retained with `refined=false`. `--reuse-samples` refits verified saved
+samples into a fresh output map, without decoding; proxy generation records
+`allow_internal_gaps` and overlap bounds in `session.json`.
+Inventory reruns preserve row order and reject a selected root missing existing sources.
+Remux merges report rows even without `--session`; a failed refresh keeps an existing valid row.
+Webcam filename formats are shared through `tools/workdata/camera_roles.json`.
+W event-frame failures retry strips without W. Missing, moved or stale W validation evidence
+is recorded in `webcam_unavailable` in the new dataset manifest, while A/B/E sampling continues.
+The W panel follows the timeline and class buttons; loading reserves its space, hides stale
+images and does not mark a step viewed or block three-view labelling on W failure.
+Worker files marked `review-only` are rejected. Spans must fit the overlap bounds; header and
+handover fields are allowlisted. Optional header fields are `clock`, `rule`, `precision_seconds`
+(5), `handover_face_grace_seconds` (10), `status` (`approved`), and `source_draft_sha256`;
+`tools/workdata/workers.py` defines the exact anonymous rule/clock values.
+
 
 Run from the repository root in the existing Gazelle-next environment. Keep the source
 read-only and choose a data root outside both the repository and source root.

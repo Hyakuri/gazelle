@@ -7,9 +7,11 @@ from pathlib import Path
 import subprocess
 
 import numpy as np
+from av.error import FFmpegError
 
 from .common import atomic_json, hash_file
 from .sample_cache import read_sample_cache
+from .source_paths import checked_source, load_inventory
 
 
 def motion_cells(thumbs,gaps,keyframe_mask=None):
@@ -189,6 +191,8 @@ def refine_breakpoints(fit,reference,other,hz=5.):
         coarse=[r for r in fit['windows'] if r['valid'] and left['start']<=_window_time(r)<right['end']]
         for a,b in zip(good,good[1:]):
             cut=(_window_time(a)+_window_time(b))/2
+            if not point['adjacent_window_centers'][0]<=cut<=point['adjacent_window_centers'][1]:
+                continue
             if not left['start']<cut<right['end']:
                 continue
             if min(sum(_window_time(r)<cut for r in coarse),sum(_window_time(r)>=cut for r in coarse))<5:
@@ -322,7 +326,8 @@ def implementation_hash():
     root=Path(__file__).parent
     return hashlib.sha256(b''.join((root/name).read_bytes() for name in
         ('sync_calibrate.py','sample_cache.py','sampling_fingerprint.py','keyframes.py',
-         'sync_check.py','timemap.py','video_source.py','proxies.py','calibrated_frames.py','webcam.py'))).hexdigest()
+         'sync_check.py','timemap.py','video_source.py','proxies.py','calibrated_frames.py','webcam.py',
+         'source_paths.py','inventory.py','camera_roles.json'))).hexdigest()
 
 
 def sample_camera(mapping,camera,root,grid,fingerprint):
@@ -357,7 +362,7 @@ def sample_camera(mapping,camera,root,grid,fingerprint):
         frames.close()
 
 
-def run(path,out_root,samples_root,reuse_samples=False,keyframes_root=None,sampling_provenance=None):
+def run(path,out_root,samples_root,reuse_samples=False,keyframes_root=None,sampling_provenance=None,inventory=None):
     from .proxies import make_grid
     from .timemap import assemble_session
     from .keyframes import source_keyframes,step_mask
@@ -369,10 +374,9 @@ def run(path,out_root,samples_root,reuse_samples=False,keyframes_root=None,sampl
     target=Path(out_root)/(mapping['session']+'.json')
     if reuse_samples and target.exists():
         raise FileExistsError('Calibration refit requires a fresh output map: '+str(target))
-    for row in required:
-        stat=Path(row['media_path']).stat()
-        if (stat.st_size,stat.st_mtime_ns)!=(row['fingerprint']['media_size'],row['fingerprint']['media_mtime_ns']):
-            raise ValueError('Source changed since mapping: '+row['source'])
+    inventory=load_inventory(inventory)
+    required=[checked_source(row,inventory) for row in required]
+    resolved_mapping=dict(mapping,files=required)
     grid=make_grid(mapping['overlap'],allow_internal_gaps=True)
     root=Path(samples_root)/mapping['session']
     fingerprint=dict(mapping_sha256=hash_file(path),implementation_sha256=implementation_hash(),
@@ -387,7 +391,7 @@ def run(path,out_root,samples_root,reuse_samples=False,keyframes_root=None,sampl
                                      [r['source'] for r in mapping['files'] if r['camera']==camera],
                                      receipts.get(mapping['session'],{}).get(camera))
         else:
-            sidecar=sample_camera(mapping,camera,root,grid,camera_fingerprint)
+            sidecar=sample_camera(resolved_mapping,camera,root,grid,camera_fingerprint)
         evidence[camera]=dict(fingerprint=sidecar['fingerprint'],pixels_sha256=sidecar['sha256'],
                               sidecar_sha256=hash_file(root/(camera+'.json')),reused=bool(reuse_samples))
         mask=step_mask(sidecar['frames'],keys)
@@ -417,8 +421,8 @@ def run(path,out_root,samples_root,reuse_samples=False,keyframes_root=None,sampl
         try:
             webcam=calibrate_webcam(mapping,root,grid,fingerprint,cells['cam_b'],
                 keyframes_root or Path(out_root)/'keyframes',reuse_samples,
-                receipts.get(mapping['session'],{}).get('cam_w'))
-        except subprocess.SubprocessError as error:
+                receipts.get(mapping['session'],{}).get('cam_w'),inventory=inventory)
+        except (OSError,ValueError,RuntimeError,KeyError,FFmpegError,subprocess.SubprocessError) as error:
             webcam=dict(available=False,reason=str(error),error_type=type(error).__name__)
     result=assemble_session(mapping['session'],mapping['files'])
     if webcam is not None:
@@ -443,11 +447,12 @@ def main(argv=None):
     parser.add_argument('--keyframes-root',type=Path,help='Packet-only keyframe cache outside the repository.')
     parser.add_argument('--sampling-provenance',type=Path,
                         help='Verified legacy sampling receipts; never replaces the sampling-hash comparison.')
+    parser.add_argument('--inventory',type=Path,help='Resolve moved originals in memory using verified inventory records.')
     args=parser.parse_args(argv)
     import psutil
     psutil.Process().nice(psutil.BELOW_NORMAL_PRIORITY_CLASS if hasattr(psutil,'BELOW_NORMAL_PRIORITY_CLASS') else 10)
     result=run(args.timemaps/(args.session+'.json'),args.out_root,args.samples_root,args.reuse_samples,
-               args.keyframes_root,args.sampling_provenance)
+               args.keyframes_root,args.sampling_provenance,args.inventory)
     return int(not result['calibrated'])
 
 

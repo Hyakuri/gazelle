@@ -143,8 +143,12 @@ def run_inventory(inventory_path, out_root, ffmpeg='ffmpeg', ffprobe='ffprobe', 
         output = source_path(out_root, str(Path(row['relative_path']).with_suffix('.mp4')))
         result = remux_one(source, output, ffmpeg, ffprobe, force)
         results.append(result)
-        saved = [record for record in saved if Path(record['output']).resolve() != output.resolve()]
-        saved.append(result)
+        existing=next((i for i,record in enumerate(saved) if Path(record['output']).resolve()==output.resolve()),None)
+        if existing is None:
+            saved.append(result)
+        elif not (result['status']=='failed' and saved[existing].get('status') in ('completed','skipped')
+                  and saved[existing].get('validation',{}).get('valid')):
+            saved[existing]=result
         atomic_json(report_path, dict(version=1, files=saved))
         print('{}: {}'.format(result['status'], row['relative_path']), flush=True)
     return results

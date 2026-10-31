@@ -1,4 +1,5 @@
 {
+  "filename_clock_patterns": [{"regex": "WIN_\\d{8}_\\d{2}_\\d{2}_\\d{2}_Pro\\.mp4", "format": "WIN_%Y%m%d_%H_%M_%S_Pro.mp4"}],
   "filename_patterns": {"1": "カメラ1", "2": "カメラ2", "overview": "設備カメラ"},
   "default": {"1": "cam_a", "2": "cam_b", "overview": "cam_e"},
   "overrides": {"20260903": {"1": "cam_b", "2": "cam_a"}},

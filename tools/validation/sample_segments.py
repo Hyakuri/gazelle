@@ -136,21 +136,34 @@ def read_session(path):
     if webcam and webcam.get('available'):
         reference=read_webcam_reference(path,session,webcam)
         if reference is not None: session['webcam_reference']=reference
+    elif webcam is not None:
+        session['webcam_unavailable']=webcam.get('reason','W proxy unavailable')
     return session,gaps
 
 
 def read_webcam_reference(path,session,webcam):
+    try:
+        reference=_read_webcam_reference(path,session,webcam)
+    except (OSError,ValueError,KeyError) as error:
+        session['webcam_unavailable']=str(error)
+        return None
+    session.pop('webcam_unavailable',None)
+    return reference
+
+
+def _read_webcam_reference(path,session,webcam):
     # Only validated optional evidence becomes an annotation reference. The
     # shared index binds the validation without rewriting the proxy session.
     index_path=path.parent.parent/'manifest.json'
-    if not index_path.exists(): return None
+    if not index_path.exists(): raise ValueError('W validation index is missing')
     record=json.loads(index_path.read_text(encoding='utf-8')).get('sessions',{}).get(session['session'],{})
-    if not record.get('validation_path'): return None
+    if not record.get('validation_path'): raise ValueError('W validation index record is missing')
     validation_path=Path(record['validation_path'])
     if hash_file(validation_path)!=record['validation_sha256']:
         raise ValueError('Webcam synchronization validation hash differs')
     validation=json.loads(validation_path.read_text(encoding='utf-8'))
-    if not validation.get('auxiliary_cameras',{}).get('cam_w',{}).get('available'): return None
+    if not validation.get('auxiliary_cameras',{}).get('cam_w',{}).get('available'):
+        raise ValueError('W validation unavailable: '+validation.get('auxiliary_cameras',{}).get('cam_w',{}).get('reason','not available'))
     if (validation.get('calibration_map_sha256')!=session['time_map_sha256']
             or validation.get('proxy_session_sha256')!=hash_file(path)
             or validation.get('audit',{}).get('cam_w',{}).get('sha256')!=webcam['sha256']
@@ -167,6 +180,29 @@ def read_webcam_reference(path,session,webcam):
                 sidecar_sha256=hash_file(sidecar),validation_sha256=record['validation_sha256'])
 
 
+def worker_coverages(proxies_root,workers,loaded):
+    root=Path(proxies_root);index_path=root/'manifest.json'
+    index=json.loads(index_path.read_text(encoding='utf-8')) if index_path.exists() else {}
+    coverages={}
+    for name in sorted({r['session'] for r in workers['spans']}):
+        session=loaded.get(name)
+        if session is None:
+            session=json.loads((root/name/'session.json').read_text(encoding='utf-8'))
+        intervals=session.get('overlap')
+        record=index.get('sessions',{}).get(name,{})
+        if intervals is None and record.get('accepted_mapping_path'):
+            path=Path(record['accepted_mapping_path'])
+            if hash_file(path)!=record['accepted_mapping_sha256']:
+                raise ValueError('Worker coverage mapping hash differs')
+            intervals=json.loads(path.read_text(encoding='utf-8'))['overlap']
+        if intervals:
+            coverages[name]=(intervals[0][0],intervals[-1][1])
+        else:
+            grid=session['grid']
+            coverages[name]=(grid['t0'],grid['t0']+(grid['N']-1)*grid['step'])
+    return coverages
+
+
 def plan(proxies_root,seed=20261015,per_session=4,seconds=60,sessions=DEFAULT_SESSIONS,
          include_pilot=True,cohort=None,worker_spans=None):
     if not sessions or len(set(sessions))!=len(sessions) or any(not re.fullmatch(r'\d{8}',s) for s in sessions):
@@ -175,12 +211,15 @@ def plan(proxies_root,seed=20261015,per_session=4,seconds=60,sessions=DEFAULT_SE
     if not paths:raise ValueError('No completed proxy sessions')
     available={path.parent.name for path in paths}
     if set(sessions)-available:raise ValueError('Missing requested proxy sessions: '+', '.join(sorted(set(sessions)-available)))
-    segments=[];pilots=[]
+    segments=[];pilots=[];loaded={};unavailable={}
     for path in paths:
         if path.parent.name not in sessions:
             print('Ignoring unselected proxy session: '+path.parent.name)
             continue
         session,gaps=read_session(path)
+        loaded[session['session']]=session
+        if session.get('webcam_unavailable'):
+            unavailable[session['session']]=session['webcam_unavailable']
         if session['session']!=path.parent.name:raise ValueError('Proxy session differs from directory')
         grid=session['grid'];offset=(PILOT_TIME-grid['t0'])*grid['step_hz']
         first=round(offset);count=round(60*grid['step_hz'])
@@ -197,6 +236,7 @@ def plan(proxies_root,seed=20261015,per_session=4,seconds=60,sessions=DEFAULT_SE
                   segment_seconds=seconds,max_redraws=10,max_gap_seconds=2,max_sync_uncertain_steps=0,
                   segments=pilots+segments,created_at=datetime.now(timezone.utc).isoformat())
     if not include_pilot: manifest['pilot_policy']='none'
+    if unavailable: manifest['webcam_unavailable']=unavailable
     if cohort is not None:
         if not isinstance(cohort,str) or not re.fullmatch(r'[A-Za-z0-9_-]+',cohort):
             raise ValueError('Invalid cohort identifier')
@@ -204,6 +244,7 @@ def plan(proxies_root,seed=20261015,per_session=4,seconds=60,sessions=DEFAULT_SE
     if worker_spans is not None:
         from tools.workdata.workers import validate_worker_spans,assign_span
         workers=validate_worker_spans(json.loads(Path(worker_spans).read_text(encoding='utf-8')))
+        validate_worker_spans(workers,worker_coverages(proxies_root,workers,loaded))
         for row in manifest['segments']:
             row['span_id']=assign_span(workers['spans'],row['session'],row['start_wall_time'],
                                        row['start_wall_time']+row['step_count']/row['step_hz'])

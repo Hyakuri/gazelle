@@ -24,9 +24,9 @@ class ExtractTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory);manifest,classes=fixture();row=manifest['segments'][0]
             video=root/'fake.mp4';video.write_bytes(b'fake')
-            sidecar=root/'w.json';sidecar.write_text(json.dumps(dict(frames=[dict(gap=False,sync_uncertain=i==2) for i in range(5)])))
+            sidecar=root/'w.json';sidecar.write_text(json.dumps(dict(frames=[dict(gap=i==3,sync_uncertain=i==4) for i in range(7)])))
             proxy=dict(path=str(video),sha256=hash_file(video),sidecar_path=str(sidecar),sidecar_sha256=hash_file(sidecar))
-            row.update(start_frame=0,end_frame_exclusive=5,proxy_t0=100.,pilot=False,
+            row.update(start_frame=2,end_frame_exclusive=7,proxy_t0=99.6,pilot=False,
                 proxies={c:proxy for c in ('cam_a','cam_b','cam_e')},auxiliary_proxies={'cam_w':proxy})
             manifest.update(seed=20261015,method='stratified-uniform-grid')
             (root/'classes.json').write_text(json.dumps(classes));manifest['classes_sha256']=hash_file(root/'classes.json')
@@ -37,8 +37,30 @@ class ExtractTest(unittest.TestCase):
             saved=json.loads((root/'manifest.json').read_text())['segments'][0]['frames']
             self.assertEqual(saved[2]['webcam']['path'],'webcam/s1/0002.jpg')
             self.assertTrue(saved[2]['webcam']['sync_uncertain'])
+            self.assertFalse(saved[0]['webcam']['sync_uncertain'])
+            self.assertTrue(saved[1]['webcam']['gap'])
             self.assertFalse((root/'labels.json').exists())
+            sidecar.write_text(sidecar.read_text()+' ')
+            with self.assertRaisesRegex(ValueError,'sidecar changed'):validate_dataset(root)
+            sidecar.write_text(sidecar.read_text()[:-1])
+            from tools.validation.extract_frames import write_jpeg
+            saved_manifest=json.loads((root/'manifest.json').read_text())
+            reference=root/saved[0]['webcam']['path'];original=reference.read_bytes()
+            wrong=write_jpeg(reference,np.zeros((100,100,3),dtype=np.uint8))
+            saved_manifest['segments'][0]['frames'][0]['webcam']['sha256']=wrong
+            (root/'manifest.json').write_text(json.dumps(saved_manifest))
+            with self.assertRaisesRegex(ValueError,'webcam reference dimensions'):validate_dataset(root)
+            reference.write_bytes(original)
+            saved_manifest['segments'][0]['frames'][0]['webcam']['sha256']=hash_file(reference)
+            # An unfinished second segment forces the existing-frame resume branch.
+            from copy import deepcopy
+            other=deepcopy(saved_manifest['segments'][0]);other['segment_id']='s2';other.pop('frames')
+            saved_manifest['segments'].append(other)
+            (root/'manifest.json').write_text(json.dumps(saved_manifest))
             (root/saved[0]['webcam']['path']).write_bytes(b'changed')
+            with patch('tools.validation.extract_frames.cv2.VideoCapture',side_effect=AssertionError('must reject before decode')):
+                with self.assertRaisesRegex(ValueError,'Existing extracted frames changed'):extract(root)
+            saved_manifest['segments'].pop();(root/'manifest.json').write_text(json.dumps(saved_manifest))
             with self.assertRaisesRegex(ValueError,'Webcam JPEG changed'):validate_dataset(root)
 
     def test_montage_keeps_physical_roles_in_required_positions(self):

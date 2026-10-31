@@ -7,6 +7,7 @@ from pathlib import Path
 import time
 
 import numpy as np
+from av.error import FFmpegError
 
 from .common import atomic_json, hash_file, outside_source, source_path
 from .osd_clock import ClockReader, second_transitions
@@ -152,7 +153,7 @@ def overlap_intervals(groups):
 def implementation_hash():
     root=Path(__file__).parent
     return hashlib.sha256(b''.join((root/name).read_bytes() for name in (
-        'timemap.py','video_source.py','osd_clock.py','osd_layouts.json','osd_glyphs.json','webcam.py'))).hexdigest()
+        'timemap.py','video_source.py','osd_clock.py','osd_layouts.json','osd_glyphs.json','webcam.py','inventory.py','camera_roles.json'))).hexdigest()
 
 
 def sample_file(path,camera,step=10.,window=2.25,source_factory=VideoSource,reader=None):
@@ -255,16 +256,24 @@ def run(inventory_path,remux_root,out_root,session=None,step=10.,window=2.25,for
         files=[]
         for entry in (r for r in inventory['files'] if r['session']==name):
             started=time.monotonic()
-            original=source_path(inventory['root'],entry['relative_path'])
-            stat=original.stat()
-            if (stat.st_size,stat.st_mtime_ns)!=(entry['size_bytes'],entry['mtime_ns']):
-                raise ValueError('Original changed since inventory: '+entry['relative_path'])
-            path=media_path(entry,inventory,remux_root)
-            stat=path.stat()
-            fingerprint=dict(source_sha256=entry['sha256'],media_size=stat.st_size,media_mtime_ns=stat.st_mtime_ns,
-                             implementation_sha256=version,step=step,window=window)
-            cache=out_root/'anchors'/name/(Path(entry['relative_path']).stem+'.json')
-            row=dict(source=entry['relative_path'],media_path=str(path),camera=entry['physical_camera'],fingerprint=fingerprint)
+            row=dict(source=entry['relative_path'],camera=entry['physical_camera'])
+            try:
+                original=source_path(inventory['root'],entry['relative_path'])
+                stat=original.stat()
+                if (stat.st_size,stat.st_mtime_ns)!=(entry['size_bytes'],entry['mtime_ns']):
+                    raise ValueError('Original changed since inventory: '+entry['relative_path'])
+                path=media_path(entry,inventory,remux_root)
+                stat=path.stat()
+                fingerprint=dict(source_sha256=entry['sha256'],media_size=stat.st_size,media_mtime_ns=stat.st_mtime_ns,
+                                 implementation_sha256=version,step=step,window=window)
+                cache=out_root/'anchors'/name/(Path(entry['relative_path']).stem+'.json')
+                row.update(media_path=str(path),fingerprint=fingerprint)
+            except (ValueError,OSError,RuntimeError,KeyError,FFmpegError) as error:
+                if row['camera']!='cam_w': raise
+                row.update(status='failed',error=str(error),elapsed_seconds=time.monotonic()-started)
+                files.append(row)
+                atomic_json(out_root/(name+'.json'),assemble_session(name,files))
+                continue
             try:
                 old=json.loads(cache.read_text(encoding='utf-8')) if cache.exists() and not force else {}
                 if sample_cache is not None:
@@ -298,7 +307,7 @@ def run(inventory_path,remux_root,out_root,session=None,step=10.,window=2.25,for
                 if row['camera']=='cam_w':
                     row.update(clock_source=sampled['clock_source'],clock_description=sampled['clock_description'])
                 row['status']='valid' if all(s['valid'] for s in row['segments']) else 'review'
-            except (ValueError,OSError,RuntimeError) as error:
+            except (ValueError,OSError,RuntimeError,KeyError,FFmpegError) as error:
                 row.update(status='failed',error=str(error))
             row['elapsed_seconds']=time.monotonic()-started
             files.append(row)

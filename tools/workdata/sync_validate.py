@@ -8,6 +8,7 @@ import subprocess
 
 import cv2
 import numpy as np
+from av.error import FFmpegError
 from PIL import Image, ImageDraw
 
 from .common import atomic_json, hash_file
@@ -16,6 +17,7 @@ from .proxies import validate_sidecar
 from .keyframes import source_keyframes,scan_keyframes,step_mask,validation_thumbnail
 from .timemap import map_time
 from .video_source import VideoSource
+from .source_paths import resolve_source,load_inventory
 from .sync_calibrate import corrected_time
 from .sync_calibrate import (
     _line, clock_sample, clock_summary, implementation_hash, motion_cells,
@@ -40,6 +42,12 @@ def residual_summary(windows,duration):
                   maximum_endpoint_bias_seconds=max(abs(fit['c0']-fit['c1']*duration/2),abs(fit['c0']+fit['c1']*duration/2)),
                   passed=fraction>=.9 and median<=.1 and abs(fit['c0'])<=.1 and abs(fit['c1']*3600)<=.1)
     result['conclusion']='passed' if result['passed'] else 'failed'
+    failed=[]
+    if fraction<.9: failed.append('fraction_within_0_2 < 0.9')
+    if median>.1: failed.append('median_absolute_seconds > 0.1')
+    if abs(fit['c0'])>.1: failed.append('abs(c0_at_midpoint) > 0.1')
+    if abs(fit['c1']*3600)>.1: failed.append('abs(c1_seconds_per_hour) > 0.1')
+    result['reason']='; '.join(failed) if failed else 'passed'
     return result
 
 
@@ -55,15 +63,17 @@ def read_frame(capture,k):
 class ProxyClockReader:
     """Read a proxy and exactly its recorded source PTS, keeping one pair cached."""
 
-    def __init__(self,capture,rows,sources,camera,source_factory=VideoSource,reader=None):
+    def __init__(self,capture,rows,sources,camera,source_factory=VideoSource,reader=None,inventory=None):
         self.capture,self.rows,self.sources,self.camera=capture,rows,sources,camera
         self.source_factory,self.reader=source_factory,reader or ClockReader()
         self.cached_k=None
+        self.inventory=load_inventory(inventory)
 
     def _pair(self,k):
         if self.cached_k==k:
             return
         row=self.rows[k];source=self.sources[row['source']]
+        source=resolve_source(source,self.inventory)
         if source['camera']!=self.camera:
             raise ValueError('Sidecar source camera mismatch')
         proxy=read_frame(self.capture,k)
@@ -157,6 +167,10 @@ def checked_thumbnail(image,expected):
         raise ValueError('Event frame differs from validation thumbnail')
 
 
+class WebcamEventError(ValueError):
+    pass
+
+
 def export_events(session,root,out_root,signals,thumbnails,calibrations):
     preferred={c:signals[c] for c in ('cam_a','cam_e')}
     selected=[dict(k=k,kind='motion') for k in event_indices(preferred)]
@@ -174,10 +188,18 @@ def export_events(session,root,out_root,signals,thumbnails,calibrations):
     metadata=dict(session['cameras'])
     if 'cam_w' in thumbnails:
         cameras.append('cam_w')
-        metadata['cam_w']=session['auxiliary_cameras']['cam_w']
+        try:
+            metadata['cam_w']=session['auxiliary_cameras']['cam_w']
+        except KeyError as error:
+            raise WebcamEventError('W event metadata: '+str(error)) from error
     records=[]
     try:
-        captures={c:cv2.VideoCapture(str(root/metadata[c]['video'])) for c in cameras}
+        for camera in cameras:
+            try:
+                captures[camera]=cv2.VideoCapture(str(root/metadata[camera]['video']))
+            except (OSError,ValueError,RuntimeError,KeyError,FFmpegError) as error:
+                if camera!='cam_w': raise
+                raise WebcamEventError('W event capture: '+str(error)) from error
         for number,event in enumerate(selected):
             k=event['k']
             canvas=Image.new('RGB',(11*320,len(cameras)*180+36),'white')
@@ -186,9 +208,13 @@ def export_events(session,root,out_root,signals,thumbnails,calibrations):
                 '/'.join(c[-1].upper() for c in cameras)),fill='black')
             for column,index in enumerate(range(k-5,k+6)):
                 for row,camera in enumerate(cameras):
-                    image=read_frame(captures[camera],index)
-                    checked_thumbnail(image,thumbnails[camera][index])
-                    rgb=cv2.cvtColor(cv2.resize(image,(320,180)),cv2.COLOR_BGR2RGB)
+                    try:
+                        image=read_frame(captures[camera],index)
+                        checked_thumbnail(image,thumbnails[camera][index])
+                        rgb=cv2.cvtColor(cv2.resize(image,(320,180)),cv2.COLOR_BGR2RGB)
+                    except (OSError,ValueError,RuntimeError,KeyError,FFmpegError,cv2.error) as error:
+                        if camera!='cam_w': raise
+                        raise WebcamEventError('W event frame: '+str(error)) from error
                     canvas.paste(Image.fromarray(rgb),(column*320,36+row*180))
             target=out_root/('event-{}-k{}.png'.format(number,k));canvas.save(target)
             records.append(dict(event,t_k=session['grid']['t0']+k*.2,path=str(target),sha256=hash_file(target),
@@ -237,18 +263,20 @@ def webcam_evidence(session,root,output,mapping,keyframes_root,stack):
         sync_uncertain_steps=sum(r.get('sync_uncertain',False) for r in sidecar['frames']))
 
 
-def run(proxies,out_root,session_name,clock_samples,timemaps,keyframes_root):
+def run(proxies,out_root,session_name,clock_samples,timemaps,keyframes_root,inventory=None):
     with ExitStack() as stack:
-        return _run(proxies,out_root,session_name,clock_samples,timemaps,keyframes_root,stack)
+        return _run(proxies,out_root,session_name,clock_samples,timemaps,keyframes_root,stack,inventory)
 
 
-def _run(proxies,out_root,session_name,clock_samples,timemaps,keyframes_root,stack):
+def _run(proxies,out_root,session_name,clock_samples,timemaps,keyframes_root,stack,inventory=None):
     root=Path(proxies)/session_name
     session=json.loads((root/'session.json').read_text(encoding='utf-8'))
     mapping_path=Path(timemaps)/(session_name+'.json')
     mapping=json.loads(mapping_path.read_text(encoding='utf-8'))
     if mapping.get('version')!=3 or mapping.get('calibrated') is not True:
         raise ValueError('Validation requires successful v3 calibration')
+    inventory=load_inventory(inventory)
+    mapping['files']=[resolve_source(r,inventory) if r.get('camera')!='cam_w' else r for r in mapping['files']]
     sources={r['source']:r for r in mapping['files']}
     keys=source_keyframes([r for r in mapping['files'] if r.get('camera')!='cam_w'],keyframes_root)
     saved=json.loads(Path(clock_samples).read_text(encoding='utf-8'))
@@ -308,16 +336,24 @@ def _run(proxies,out_root,session_name,clock_samples,timemaps,keyframes_root,sta
         if webcam.get('available'):
             try:
                 from .webcam import select_webcam_signal
+                mapping['files']=[resolve_source(r,inventory) if r.get('camera')=='cam_w' else r for r in mapping['files']]
                 cells['cam_w'],thumbnails['cam_w'],audits['cam_w']=webcam_evidence(
                     session,root,output,mapping,keyframes_root,stack)
                 signals['cam_w'],selection['cam_w']=select_webcam_signal(cells['cam_b'],cells['cam_w'])
-            except (OSError,ValueError,RuntimeError,subprocess.SubprocessError) as error:
+            except (OSError,ValueError,RuntimeError,KeyError,FFmpegError,subprocess.SubprocessError) as error:
                 auxiliary['cam_w']=dict(available=False,reason=str(error),error_type=type(error).__name__)
+                thumbnails.pop('cam_w',None)
+                signals.pop('cam_w',None)
     duration=(session['N']-1)*.2
     pairs=residual_pairs(signals,duration)
     if 'W-B' in pairs:
-        auxiliary['cam_w']=dict(available=pairs['W-B']['passed'],reason=pairs['W-B']['conclusion'])
-    events=export_events(session,root,output,signals,thumbnails,mapping['calibration'])
+        auxiliary['cam_w']=dict(available=pairs['W-B']['passed'],reason=pairs['W-B'].get('reason',pairs['W-B']['conclusion']))
+    try:
+        events=export_events(session,root,output,signals,thumbnails,mapping['calibration'])
+    except WebcamEventError as error:
+        auxiliary['cam_w']=dict(available=False,reason=str(error),error_type=type(error).__name__)
+        thumbnails.pop('cam_w',None)
+        events=export_events(session,root,output,signals,thumbnails,mapping['calibration'])
     clock=dict(indices=indices,rows=clock_rows,**clock_summary(clock_rows))
     result=dict(session=session_name,version=3,implementation_sha256=implementation_hash(),
                 calibration_map_sha256=hash_file(mapping_path),proxy_time_map_version=session['time_map_version'],
@@ -341,10 +377,11 @@ def main(argv=None):
     parser.add_argument('--clock-samples',type=Path,required=True,help='TASK-134 saved fixed random indices JSON')
     parser.add_argument('--timemaps',type=Path,required=True,help='Successful v3 maps; original proxy provenance is retained.')
     parser.add_argument('--keyframes-root',type=Path,required=True)
+    parser.add_argument('--inventory',type=Path,help='Resolve moved originals in memory using verified inventory records.')
     args=parser.parse_args(argv)
     import psutil
     psutil.Process().nice(psutil.BELOW_NORMAL_PRIORITY_CLASS if hasattr(psutil,'BELOW_NORMAL_PRIORITY_CLASS') else 10)
-    result=run(args.proxies,args.out_root,args.session,args.clock_samples,args.timemaps,args.keyframes_root)
+    result=run(args.proxies,args.out_root,args.session,args.clock_samples,args.timemaps,args.keyframes_root,args.inventory)
     return int(not result['passed'])
 
 

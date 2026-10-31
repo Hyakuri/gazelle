@@ -568,6 +568,21 @@ W 参考须有通过 W–B 检查且由 `proxies/manifest.json` 哈希绑定的�
 页面显示可收起的 W 参考及同步不确定提示；注视点仍标在原三视角拼图的 E 上。
 保留已有数据集和标签；正式 `roi_r2_2026_10` 只在完整的已批准分层准备好后生成。
 
+`sync_calibrate`、`proxies`、`sync_validate` 可用 `--inventory <inventory.json>` 解析迁移源文件：
+有效的记录路径（包括重封装文件）继续使用；路径失效时，比对源 SHA 记录与文件大小，
+再按清单根目录和相对路径仅在内存中解析，不重算整段源视频哈希，不改写旧映射路径。
+细化切点须在 `adjacent_window_centers` 闭区间内；没有候选则保留粗切点并记 `refined=false`。
+`--reuse-samples` 核对保存的样本后拟合到全新输出映射，不重新解码；生成代理时在
+`session.json` 记录 `allow_internal_gaps` 与重叠范围。
+清单重跑保留行序，所选根目录缺少已有源文件时拒绝。重封装即使不带 `--session` 也合并报告行，
+刷新失败保留原有效行。W 文件名格式由 `tools/workdata/camera_roles.json` 统一定义。
+W 事件帧失败时重做不含 W 的条图。W 验证证据缺失、迁移或过期时，新数据集 manifest
+在 `webcam_unavailable` 中记录原因，A/B/E 抽样继续。
+W 面板位于时间轴和类别按钮之后；加载时保留占位、隐藏旧图，不计已看步，W 失败不阻塞三视角标注。
+拒绝 `review-only` 作业者文件，片段须在重叠范围内；文件头与交接行只接受许可字段。
+可选文件头字段为 `clock`、`rule`、`precision_seconds`（5）、`handover_face_grace_seconds`（10）、
+`status`（`approved`）与 `source_draft_sha256`；匿名规则和时钟的固定值见 `tools/workdata/workers.py`。
+
 
 在现有 Gazelle-next 环境、仓库根目录运行。源目录只读，数据根放在仓库与源目录之外。
 工具只使用 CPU 与磁盘，不构造模型、不使用 CUDA、不联网、不下载。

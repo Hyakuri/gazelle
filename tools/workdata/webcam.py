@@ -1,14 +1,19 @@
 """Optional webcam evidence; the required three-camera protocol is unchanged."""
 
-from datetime import datetime, timezone
+from datetime import timezone
 from pathlib import Path
+from av.error import FFmpegError
 
 from .video_source import VideoSource
+from .inventory import filename_clock, load_roles
+from .source_paths import checked_source
 
 
 def sample_filename_clock(path, source_factory=VideoSource):
     from .timemap import detect_pts_runs
-    origin=datetime.strptime(Path(path).name,'WIN_%Y%m%d_%H_%M_%S_Pro.mp4').replace(tzinfo=timezone.utc).timestamp()
+    clock=filename_clock(Path(path).name,load_roles())
+    if clock is None: raise ValueError('Unknown webcam filename clock: '+Path(path).name)
+    origin=clock.replace(tzinfo=timezone.utc).timestamp()
     with source_factory(path) as source:
         points=[pts for pts,_ in source.frames()]
         runs=detect_pts_runs(points)
@@ -30,7 +35,7 @@ def select_webcam_signal(reference_cells, webcam_cells):
 
 
 def calibrate_webcam(mapping, root, grid, fingerprint, reference_cells, keyframes_root,
-                     reuse_samples=False, receipt=None):
+                     reuse_samples=False, receipt=None, inventory=None):
     import numpy as np
     from .common import hash_file
     from .keyframes import source_keyframes, step_mask
@@ -40,16 +45,13 @@ def calibrate_webcam(mapping, root, grid, fingerprint, reference_cells, keyframe
     try:
         if not files or any(r['status']!='valid' or 'calibration' in r for r in files):
             raise ValueError('W requires a valid base map')
-        for row in files:
-            stat=Path(row['media_path']).stat()
-            if (stat.st_size,stat.st_mtime_ns)!=(row['fingerprint']['media_size'],row['fingerprint']['media_mtime_ns']):
-                raise ValueError('W source changed since mapping: '+row['source'])
+        resolved=[checked_source(row,inventory) for row in files]
         camera_fingerprint=dict(fingerprint,camera='cam_w')
         if reuse_samples:
             sidecar=read_sample_cache(root,'cam_w',camera_fingerprint,[r['source'] for r in files],receipt)
         else:
-            sidecar=sample_camera(mapping,'cam_w',root,grid,camera_fingerprint)
-        keys=source_keyframes(files,keyframes_root)
+            sidecar=sample_camera(dict(mapping,files=resolved),'cam_w',root,grid,camera_fingerprint)
+        keys=source_keyframes(resolved,keyframes_root)
         mask=step_mask(sidecar['frames'],keys)
         cells=motion_cells(np.load(root/'cam_w.npy',mmap_mode='r'),
                            np.array([r['gap'] for r in sidecar['frames']]),mask)
@@ -71,5 +73,5 @@ def calibrate_webcam(mapping, root, grid, fingerprint, reference_cells, keyframe
                         sidecar_sha256=hash_file(root/'cam_w.json'),reused=bool(reuse_samples)),
                     keyframe_mask=dict(masked_steps=int(mask.sum()),total_steps=len(mask)-1,
                                        masked_fraction=float(mask[1:].mean())))
-    except (OSError,ValueError,RuntimeError) as error:
+    except (OSError,ValueError,RuntimeError,KeyError,FFmpegError) as error:
         return dict(available=False,reason=str(error),error_type=type(error).__name__)

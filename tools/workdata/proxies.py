@@ -13,11 +13,13 @@ import tempfile
 import time
 
 import cv2
+from av.error import FFmpegError
 
 from .common import atomic_json, hash_file
 from .sync_check import has_sampling_gap, nearest_frames
 from .timemap import map_file_time
 from .video_source import VideoSource
+from .source_paths import checked_source,load_inventory
 
 
 ROLES = {'cam_b': 'front', 'cam_a': 'right', 'cam_e': 'overview'}
@@ -214,14 +216,11 @@ def resume_camera(target,sidecar,fingerprint,grid,size,ffprobe):
         return None
 
 
-def prepare_camera(files,root,grid,size,version,camera,role,force,ffmpeg,ffprobe):
+def prepare_camera(files,root,grid,size,version,camera,role,force,ffmpeg,ffprobe,inventory=None):
     if not files:
         raise ValueError('Missing physical camera '+camera)
     # Check input provenance even when an output can be resumed.
-    for row in files:
-        stat=Path(row['media_path']).stat()
-        if (stat.st_size,stat.st_mtime_ns)!=(row['fingerprint']['media_size'],row['fingerprint']['media_mtime_ns']):
-            raise ValueError('Source changed since mapping: '+row['source'])
+    files=[checked_source(row,inventory) for row in files]
     target=root/('proxy_'+role+'.mp4'); sidecar=root/('proxy_'+role+'.frames.json')
     fingerprint=dict(version,camera=camera,size=list(size))
     payload=None if force else resume_camera(target,sidecar,fingerprint,grid,size,ffprobe)
@@ -237,10 +236,11 @@ def prepare_camera(files,root,grid,size,version,camera,role,force,ffmpeg,ffprobe
                 status='skipped-valid' if skipped else 'completed')
 
 
-def run(path,out_root,hz=5.,size=(1920,1080),force=False,ffmpeg='ffmpeg',ffprobe='ffprobe',allow_internal_gaps=False):
+def run(path,out_root,hz=5.,size=(1920,1080),force=False,ffmpeg='ffmpeg',ffprobe='ffprobe',allow_internal_gaps=False,inventory=None):
     if len(size)!=2 or any(type(v) is not int or v<=0 or v%2 for v in size):
         raise ValueError('Positive even output dimensions are required')
     mapping=json.loads(Path(path).read_text(encoding='utf-8'))
+    inventory=load_inventory(inventory)
     if mapping['version']>=2 and mapping.get('calibrated') is not True:
         raise ValueError('v2 proxies require successful content calibration for both cameras')
     if any(row['status']!='valid' for row in mapping['files'] if row['camera']!='cam_w'):
@@ -255,7 +255,7 @@ def run(path,out_root,hz=5.,size=(1920,1080),force=False,ffmpeg='ffmpeg',ffprobe
     dirty=bool(subprocess.run(git+['status','--porcelain','--','tools/workdata'],cwd=repository,
                               capture_output=True,text=True,check=True).stdout.strip())
     implementation=hashlib.sha256(b''.join((Path(__file__).parent/name).read_bytes() for name in
-                                 ('proxies.py','calibrated_frames.py','sync_check.py','sync_calibrate.py','video_source.py','timemap.py'))).hexdigest()
+                                 ('proxies.py','calibrated_frames.py','sync_check.py','sync_calibrate.py','video_source.py','timemap.py','source_paths.py'))).hexdigest()
     version=dict(timemap_sha256=hash_file(path),implementation_sha256=implementation,grid=grid,size=list(size))
     cameras={}; auxiliary={}; started=time.monotonic()
     roles=list(ROLES.items())
@@ -270,8 +270,8 @@ def run(path,out_root,hz=5.,size=(1920,1080),force=False,ffmpeg='ffmpeg',ffprobe
         files=[row for row in mapping['files'] if row['camera']==camera]
         records=auxiliary if camera=='cam_w' else cameras
         try:
-            records[camera]=prepare_camera(files,root,grid,camera_size,version,camera,role,force,ffmpeg,ffprobe)
-        except (OSError,ValueError,RuntimeError,subprocess.SubprocessError) as error:
+            records[camera]=prepare_camera(files,root,grid,camera_size,version,camera,role,force,ffmpeg,ffprobe,inventory)
+        except (OSError,ValueError,RuntimeError,KeyError,FFmpegError,subprocess.SubprocessError) as error:
             if camera!='cam_w': raise
             auxiliary[camera]=dict(available=False,reason=str(error),error_type=type(error).__name__)
             print('{} cam_w: unavailable: {}'.format(mapping['session'],error),flush=True)
@@ -281,7 +281,7 @@ def run(path,out_root,hz=5.,size=(1920,1080),force=False,ffmpeg='ffmpeg',ffprobe
     result=dict(version=1,session=mapping['session'],grid=grid,t0=grid['t0'],N=grid['N'],
                 cameras=cameras,time_map_version=mapping['version'],time_map_sha256=version['timemap_sha256'],
                 code_commit_sha=commit,code_worktree_dirty=dirty,implementation_sha256=version['implementation_sha256'],
-                elapsed_seconds=time.monotonic()-started)
+                elapsed_seconds=time.monotonic()-started,allow_internal_gaps=bool(allow_internal_gaps),overlap=mapping['overlap'])
     if auxiliary: result['auxiliary_cameras']=auxiliary
     atomic_json(root/'session.json',result)
     return result
@@ -297,6 +297,7 @@ def main(argv=None):
     parser.add_argument('--ffmpeg',default='ffmpeg')
     parser.add_argument('--ffprobe',default='ffprobe')
     parser.add_argument('--force',action='store_true')
+    parser.add_argument('--inventory',type=Path,help='Resolve moved originals in memory using verified inventory records.')
     parser.add_argument('--allow-internal-gaps',action='store_true',
                         help='Provisional policy: retain one regular grid across documented internal coverage gaps.')
     args=parser.parse_args(argv)
@@ -306,7 +307,7 @@ def main(argv=None):
     if not paths:
         parser.error('No time maps found')
     for path in paths:
-        run(path,args.out_root,args.step_hz,tuple(args.size),args.force,args.ffmpeg,args.ffprobe,args.allow_internal_gaps)
+        run(path,args.out_root,args.step_hz,tuple(args.size),args.force,args.ffmpeg,args.ffprobe,args.allow_internal_gaps,args.inventory)
     return 0
 
 
