@@ -150,6 +150,31 @@ git status --short
 - 脚本失败项：首次统计在视频尚未完成写盘时发现 JSONL 行数不齐，未采用部分统计；等待完成后再统计。目视脚本按帧号随机定位第二段末帧失败，改用顺序解码，完整读取 376 帧并只保留抽查图；未改数据或运行时标准。首次失败剪辑与其日志保留，关键帧修正的新剪辑和新输出使用独立文件名。
 - 实现提交 **`569394b30fdbe2e586332e89c02e27483b9c59a9` — `Match face and pose anchors and preserve selected subject continuity`** 已推送；报告另行提交。状态 **ready-for-review / Codex verified**。完整命令、资源活动和统计见仓库外 `task101-before-commands.json`、`task101-after-commands.json`、`task101-workdata-keyframe-commands.json`、`task101-gate.json` 与 `task101-summary.json`。测试进程均已结束，无后台推理遗留。
 
+### 第 9 轮实施记录（Codex，2026-10-31；契约 r3）
+
+- 实现提交 **`d31b41d3f7cae7a1fa387286161a9dc1aa3d6cdd` — `Preserve selected identities across occlusion and provisional heads`** 已推送。状态为 **ready-for-review / Codex verified**，尚待 Claude 独立审查与用户独立 checkout 验收。沿用原分支与 draft PR #6，主线程 Inline Execution，无子代理。
+- 选择先保留所有仍被观测的同身份，再做空间连续；曾同时被观测的轨迹不能互相接替。provider 记录包括 provisional 在内的共存对，在任一 ID 离开感知列表时清除，两次裁决均传入；记忆使用已确认的选择，只在其为空时回退正式输出。桥接保留规则未改，CLI 与 run_config 键未改。四份用户文档和文档检查同步。
+- 回归先失败：10 failures 复现缺陷；修复后覆盖可见旁人、胜出的一帧 spawn、主体回来、多人顺序、共存删除、空帧、启动时全部 provisional，以及距离闭边界和 y 分量。带种子的真实 ByteTrack 测试核实 200 个实际 provisional spawn，从下一帧起输出与保留集合中立，并断言执行少于 5 秒。补齐耳部、单肩、y 锚点与几何门覆盖。
+- 离线命令（解释器均为既有 `Gazelle-next`，pycache 在仓库外）：`python -m compileall main.py gazelle tests tools`；`python -m unittest discover -s tests -v`：**757 tests / 66.647s / 0 skip**；`python main.py --help`；`python main.py --list-models`；`node tests/annotation_page_test.cjs`；`node tests/roi_page_test.cjs`；`python -m tools.docs build`、`check`；`git diff --check`，全部 exit 0。外部包装 `gazelle_runs/codex-round9/run-gate.ps1 -Tag task101-final` 保存逐条命令、退出码与日志。无效临时 MP4 的 `moov atom not found` 与 Git 行尾提示为非致命输出。
+- 反证：外部 `task101-mutations.py` 在隔离进程内替换函数，**25/25 变异被检测**，正常对照 66 tests 通过；其中 A12 缺失单肩保护导致 2 个 AttributeError，其余 24 个由断言检测，不能称为全部断言失败。旧变异结果与失败日志保留；仓库源码未被变异改写。
+- 真实命令：`python ../gazelle_runs/codex-round9/task101-smoke.py` 依次调用既有 `task-136/smoke.py cli <repo> ...`。Sunny A/B、office 和两段关键帧剪辑沿用第 8 轮指定输入与参数，完整 argv、输入 SHA、耗时、代码 SHA 在 `task101-smoke-commands.json`。均 exit 0；Sunny 各 30 帧，office 1 帧，作业剪辑各 376 帧且读取/输出一致。没有再次裁剪源视频。
+
+| 本轮输入 | face_pose 分母 / 错误鼻点 | eligible 帧 | 推理调用 / 头数 | valid / out_of_frame | ID 集合变化 | in/out min / median / max |
+| --- | --- | --- | --- | --- | --- | --- |
+| Sunny A | 19 / 0 | 1 | 1 / 1 | 0 / 1 | 0 | 0.3984 / 0.3984 / 0.3984 |
+| Sunny B | 19 / 0 | 17 | 30 / 59 | 38 / 21 | 1 | 0.0160 / 0.9162 / 0.9894 |
+| office | 1 / 0 | 0 | 1 / 2 | 2 / 0 | 0 | 0.8517 / 0.8995 / 0.9473 |
+| 03:57 | 261 / 0 | 223 | 223 / 223 | 1 / 222 | 6 | 0.0047 / 0.0310 / 0.5316 |
+| 04:10 | 298 / 0 | 198 | 198 / 198 | 28 / 170 | 14 | 0.0001 / 0.0652 / 0.9860 |
+
+- Sunny A 30 帧全为 ID 0，f2 至 f4 为 tracked_only，符合 r3 预期；eligible 从第 8 轮的 17 降为 1，是保留原主体后的实际结果，没有调整阈值。B 与第 8 轮统计相同。所有真实 face_pose 都走鼻点分支，其余锚点仅有合成覆盖。第 8 轮 A 的 0 错误实际分母为 0；B 为 19、两段作业合计 627；本轮各分母见表，不能将零分母作为融合正确证据。完整历史/本轮重算见 `task101-summary.json`。
+- 目视抽查：顺序解码，抽每秒帧及全部 ID 变化相邻帧，03:57 为 **24 张**，04:10 为 **38 张**。选中的均为工位作业者，第一段右侧旁人未被选中；遮挡阶段有窄框/滞留框，ID 仍有变化，不承诺长期身份或逐帧检测精度。这是 62 张抽查，不是 752 帧逐帧人工验收。office 既有误检未解决。图像仅在本机 `codex-round9/task101-*-review-*.jpg`，不上传。
+- 实际活动：缓存 Gazelle/DINOv2、MediaPipe、CUDA 与真实 FFmpeg（A 的 H.264 finalization）。每个推理子进程先检查显存；启动前 RTX 4080 SUPER 为 5239/16376 MiB、2% 利用率。前后缓存文件大小/mtime 清单相同。包装阻止每次 Torch Hub 的 Python urllib 探测，无下载；接受既有 MediaPipe native 遥测授权，未抓包，不能称为完全无网络。未安装依赖、修改 Conda/全局配置或读取用户正式标签。测试/推理进程已结束。
+- 自主决定（A 级）：新共存测试先确认 A 再引入 provisional B，纠正“首帧临时 A 已进入桥接”的错误夹具假设；修正变异包装以把明确的生产异常计为检测，并补上此前存活的启动记忆变异用例。生产契约与研究门槛不变。
+- 范围外改动：无；外部脚本与真实产物留在指定运行目录。
+- 待 Claude 判断（B 级）：算法、抽查与真实统计待独立审查；没有未解决的 r3 预期差异。
+- 待用户决定（C 级）：TASK-101 无新增事项。
+
 ## 3. 审查结论（Claude 追加）
 
 ### 2026-10-31 第 8 轮审查（Claude）

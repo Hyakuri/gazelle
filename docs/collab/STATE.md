@@ -12,10 +12,10 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 | pr | [#6](https://github.com/Hyakuri/gazelle/pull/6)（draft）；正文来源 `docs/collab/STAGE2_PR_BODY.md` |
 | writer | codex |
 | next_actor | codex |
-| current_task | 第 9 轮：TASK-101 契约修订 r3；TASK-150 契约修订 r5 的第 1 至 9 条。第 10 条与 `20261023` 的代理等用户回答 Q-032 |
+| current_task | 第 9 轮：TASK-101 契约修订 r3 已完成实现与验证，待审查；继续 TASK-150 契约修订 r5 的第 1 至 9 条。第 10 条与 `20261023` 的代理等用户回答 Q-032 |
 | after_current | 做完，或做到 Q-032 阻塞处，就把 `next_actor` 设为 `claude`。TASK-152、TASK-151、TASK-153 与阶段 3 本轮都不做，轮次调整见 Q-033 |
 | environment | `Gazelle-next`：`C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe`（用户 2026-10-17 决定 D16）。现有 `Gazelle` 作为回退保留，不改动 |
-| last_pushed | `299bf0f3509abd3656e4d14713d93704d96fb6a9` |
+| last_pushed | `d31b41d3f7cae7a1fa387286161a9dc1aa3d6cdd` |
 | last_accepted | `476ebdf`。2026-10-31 第 8 轮审查：`acae8a1`（协调文档）核对无误；`980d8ee`（TASK-125 第 4 轮）accepted，`476ebdf` 只含报告。其后 `569394b`（TASK-101）与 `397c5d1`、`9684f1f`（TASK-150）changes-requested，所以基准停在 `476ebdf`；`6270380`（TASK-140 第 3 轮）accepted，它只改测试与说明。第 7 轮审查：`806068c`（TASK-125 第 3 轮）accepted |
 | 更新 | 2026-10-31，Claude 完成第 8 轮审查：TASK-125 第 4 轮、TASK-140 第 3 轮通过，TASK-101、TASK-150 退回。Q-029 至 Q-031 已处理，新增 Q-032、Q-033 给用户。标注用 `476ebdf`。未读写 `roi_r2\labels.json` |
 
@@ -73,7 +73,7 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 | Codex 第 8 轮 | [TASK-101](tasks/TASK-101-face-pose-association.md) 人脸与姿态关联修正（D1，契约 r2） | changes-requested | 跨人融合已修好；选择规则有两处缺陷，见 §3 |
 | Codex 第 8 轮 | [TASK-150](tasks/TASK-150-new-sessions-and-webcam-intake.md) 新录制与 webcam 接入（D26） | changes-requested | 主体实现正确；W 的隔离、页面与测试要补；1016 E、1023 A 校准失败，代理未生成 |
 | Codex 第 8 轮 | TASK-140 第 3 轮：只补测试与正式字段说明 | accepted | Claude 2026-10-31 审查通过 |
-| Codex 第 9 轮 | TASK-101 契约修订 r3：同身份优先、共存过的轨迹不能接替主体、中立性，重跑真实 smoke | ready | 见 TASK-101 §3 末尾 |
+| Codex 第 9 轮 | TASK-101 契约修订 r3：同身份优先、共存过的轨迹不能接替主体、中立性，重跑真实 smoke | ready-for-review | 实现 d31b41d；757 tests / 0 skip，25/25 变异；Sunny A 0 切换；62 张作业画面抽查，详见 TASK-101 §2 |
 | Codex 第 9 轮 | TASK-150 契约修订 r5：切点规则、路径解析、W 的隔离、页面、测试、作业者表、代理与验证 | ready | 第 10 条与 `20261023` 的代理等 Q-032 |
 | Codex 第 10 轮 | [TASK-152](tasks/TASK-152-recording-20261030-intake.md) 新录制 `20261030` 接入与 2026-10 分层数据集（12 段） | proposed | 等 TASK-150 通过审查；契约 r2 已按实际实现修订；轮次待 Q-033 |
 | Codex 第 10 轮 | TASK-151 工作区域自动重配准：背景图、区域指纹、逐区域配准、检查提示、录制内监测 | proposed | 方案已确认（Q-028）；等 TASK-150、TASK-152 的代理；契约在第 9 轮审查时编写；轮次待 Q-033 |
