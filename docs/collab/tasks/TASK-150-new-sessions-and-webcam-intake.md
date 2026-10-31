@@ -505,6 +505,59 @@ git status --short
 
 - Q-032 仍待回答，1023 代理、正式 worker 表和第 10 条继续等待。没有重复请求已有授权，没有将等待解释为同意。Q-033 的后续轮次调整仍由 STATE 协调，本轮不做后续任务。
 
+### 第 9 轮继续实施记录（Codex，2026-10-31 至 2026-11-01；契约 r7/r6）
+
+- 实现 `2530c08df2c5bd0289cbb242e6abb1903ffe18fc`（Add opt-in synchronization rechecks and close source provenance）已推送；以下为 Codex 检查，独立审查与用户独立 checkout 验收仍待进行。主线程 Inline Execution，无子代理、新分支或额外 checkout。
+- 路径解析同时核对磁盘/清单/映射的修改时间，保留原 fingerprint；失效重封装路径不回退到 AVI。`checked_source` 对解析后路径照常核对大小/mtime。W 的纯异常边界使用 `Exception` 并记录类型；A/B/E 仍按既有行为失败。一次录制只有 W 且前置失败也会写出并返回结果。
+- 按 VALSET 5.0.0 §11.7 实现默认关闭的 `--second-look`：拟合复核仅在指定尾部失败之后，120 秒窗口按 base 时间归入原分段，不删跨切点窗；代理三类复核保留原判定，W 不复核；同步失败等级为 null，新录制抽样拒绝缺失/失败等级。拟合复核另记 `sync_validate.py` SHA，不改实现哈希的文件集合。正式作业者 ID 限定为 `<录制>_worker_<n>`，approved 文件要求完整头。
+
+#### 命令与离线证据
+
+- Gazelle-next Python 3.14.8，字节码均在仓库外。最终 `python -m compileall main.py gazelle tests tools`；`python -m unittest discover -s tests -v`：**806 tests / 34.494s / 0 skip / 0 failure**；`python main.py --help`、`python main.py --list-models`、`node tests/annotation_page_test.cjs`、`node tests/roi_page_test.cjs`、`python -m tools.docs build`、`python -m tools.docs check`、`git diff --check` 均 exit 0。日志/命令数组在仓库外 `gazelle_runs/codex-round9-continued/task150-final2-*`。
+- RED：second-look 新接口未实现，10 tests 中 40 个错误子情况；r7 的 6 tests 为 3 failures / 6 errors。首轮集成夹具补充 mtime、符合新规则的 span_id；补测时修正了测试替身的参数重名、关键帧表缺键与空分段。首轮全量 806 项中一个旧夹具的两个子情况缺少新等级，补齐夹具后完整重跑通过。未放宽生产规则。OpenCV 的既有坏媒体夹具 `moov atom not found` 为非致命提示。Git 的 LF/CRLF 提示非差异检查失败。
+- Claude 列出的 40 个 test-gap 变异全部捕获；r7 指定的两个 mtime 变异换为反向变异。每个子进程只在内存中修改模块后跑测试，控制组 74 项通过；未创建代码副本或改动正式源。页面占位变异通过本地 HTML 副本与原 Node harness 检测。证据 `task150-mutations.py/json` 与逐项日志。外部驱动首次读取/输出编码不匹配，改为明确 UTF-8 后执行；与生产逻辑无关。
+- 50 个受保护 AST 与 `c1b8416` 全部一致（48 个原组件加 `residual_summary`、`session_passed`）；采样 SHA 保持 `7c6c32f413379ddb023dcfc07295376aec727bf12bffb13af2f6e3461ac6d77d`；OSD 两份 JSON 字节不变。`implementation_hash` 函数不改。证据 `task150-ast-check.json`。默认测试均为合成/mocked，无真实模型、CUDA、网络、下载、FFmpeg 或环境改动。
+- 四份用户文档、workdata 中文指南与标注中文指南同步；文档门增加规则、等级与路径闭合条款。页面本身未改，仅补占位比例回归；未重复真实浏览器验收。
+
+#### 已执行真实步骤
+
+- 全部代码提交且工作树干净后，先保留 `proxies/manifest.before-second-look.json`，仅在 1016 索引行补 `sync_grade=official`，`acceptance_status=Claude round-9 review accepted; user acceptance pending`。旧七行逐字段不变；验证文件 SHA `f0295652…`、映射与代理均不改，不重跑 1016。
+- 1023 原失败映射 SHA `255a798a…` 改名保留为 `20261023.json.before-second-look`，原 `before-task150-r5` 备份保留。运行 `python -m tools.workdata.sync_calibrate --timemaps <data>/timemaps_v2_base --out-root <data>/timemaps_v3 --samples-root <data>/sync_samples_v2 --session 20261023 --reuse-samples --second-look --keyframes-root <data>/keyframes_v3 --inventory <data>/inventory/inventory.json`，**exit 0 / 21.894s**，新映射 SHA `eb999190…`。
+- A 的原尾部仍为 7/53，复核 54/59 有效窗，占比 **0.9629629629629629**、中位绝对残差 **0.036028483432652s**、中点偏差 **0.001962617731381339s**、漂移 **0.03367916791642427s/h**，通过。数值与预演一致。剔除契约明确允许变化的字段后，新旧映射深比较 **0 差异**；A 原窗口/系数与 E/W 窗口、系数、切点、有效性、尾部均保留，缓存像素与旁注 SHA 不变。证据 `task150-refit-result.json`。
+- `<data>` 为仓库外 `C:\Users\yun\Documents\Claude_Code\gazelle_data\workdata`，`<run>` 为 `C:\Users\yun\Documents\Claude_Code\gazelle_runs\codex-round9-continued`。运行 `python -m tools.workdata.proxies --timemaps <data>/timemaps_v3 --out-root <data>/proxies --session 20261023 --allow-internal-gaps --inventory <data>/inventory/inventory.json`：**exit 0 / 4308.715s**；`python -m tools.workdata.sync_validate --proxies <data>/proxies --out-root <data>/sync_validation_r5 --session 20261023 --clock-samples <run>/clock-samples-20261023.json --timemaps <data>/timemaps_v3 --keyframes-root <data>/keyframes_v3 --inventory <data>/inventory/inventory.json --second-look`：**exit 0 / 516.416s**。完整命令数组、日志与 BelowNormal 优先级记录在 `task150-pipeline.json`；两步共 4825.172s。
+- 四路均 **18,100 帧 / 5 Hz / 3620s / H.264 yuv420p / 无音轨**，A/B/E 为 1920×1080，W 为 1280×720。来源全部读到 EOF，容器帧数与解码帧数完全一致，无 review-required；A/B/E/W 源解码总数为 **137755/93002/54296/161707**。实际缺口步数 **29/28/1/0**，联合读取为 30 步；E 两个切点的不确定范围各 **151/253 步**，联合 **404 步**，其余摄像机为 0。视频、旁注、映射、session、验证与条图 SHA 全部读回闭合。
+- 原 60 秒窗 A–B、E–B、W–B 通过；有效窗分别 **51/60、56/60、56/60**，±0.2 秒内占比 **92.1569%、96.4286%、94.6429%**，中位绝对残差 **0.048493/0.042012/0.071641s**。A–E 原判定仍为 failed：53/60 有效窗、占比 88.6792%、中位 0.112496s、中点偏差 −0.095476s、漂移 −0.098812s/h；未覆盖原失败字段。
+- A–E 的 120 秒复核为 **52/59** 有效窗、覆盖 96.1379%、占比 92.3077%、中位 **0.125374s**、偏差 **−0.114061s**、漂移 **−0.067624s/h**，按已批准的 0.15 门槛通过。录制最终 `passed=true`、`sync_grade=second_look`，拟合 A 与代理 A–E 均用到复核；W 保持原门槛且可用。验证 SHA **`ecbe704436931f885bbf3ac84ae8b0cb3cf40d370e1726fa64d60c84e66cdd40`**。
+- 固定种子 `20261015 + 20261023` 抽取索引 **10887/15708/16501**，A/B/E 共 **9/9** 时钟检查通过，全部直接读代理，无替换索引或补读来源；保留并核对原抽样脚本 SHA。三个运动事件 k=4564/5660/16825 与两个 E 切点事件 k=5911/7959 的 5 张条图逐张查看，四路动作顺序无明显错配；其中 k=5660 动作较小，目视不提供细粒度时差测量。条图原尺寸 3520×756，查看尺寸 2048×440；这不代替独立同步验收。证据 `task150-data-check.json`、`task150-visual-check.json`。
+- A/B 中断来自文件边界：A 的 14:22:59.329311→14:23:05.314992 为 **5.985681s**，B 的 14:22:59.305980→14:23:05.258091 为 **5.952111s**，联合覆盖间隙 6.009012s。保留 gap，不插值。W 电脑时钟减 B 时钟在 14:05/14:35 为 **−0.575497/−0.745525s**，按契约仅报告。
+- `task150-data-check.py append` 在上述条件通过后保留 `proxies/manifest.before-20261023.json`（SHA `18676e18…`），追加唯一 1023 行；先前八行逐字段不变，最终索引 **9 行**、SHA **`1bca0bc519c8f6ff860e087ce93d9764d0ae320697c700b1af3660af0a7eccef`**。新增行明确写明 Codex 检查通过、Claude 与用户验收待进行。真实 `read_session` 读回 second_look、W 参考可用、30 gaps、404 uncertain steps；没有生成新数据集。
+
+#### 正式作业者表与数据保护
+
+- `task150-workers.py publish` 写入 `<data>/workers/worker_spans.json`：**9 次录制、11 段、2 个交接区间**，P1–P4，全部文件头齐全、5 秒精度、10 秒末端例外；源初稿 SHA `34ba423c…`，正式文件 SHA **`20075521557f2bc44e50190374fcda051d7e205d79d94cc4efb3bdbb1b30a3bb`**。格式、非重叠、重叠范围与交接排除校验通过；旧七次与原候选逐字段一致。
+- 按最终映射裁剪外端点，未改原始人工时钟或内部交接边界。相对旧候选：1016 worker_1 start 为 **1791982795.8367264**（−0.393234s），worker_2 end 为 **1791986399.73127**（−0.166656s）；1023 start/end 为 **1792418380.1240337/1792422000.0974**（+0.001312/+0.004084s）。转换逐项记录在 `task150-workers.json`。
+- 交接核实复用 `gazelle_runs/task-150/handover-20260903.json` 与 `handover-20261016.json`，本轮没有重跑人脸检测；已核对原记录 SHA、检测宽度 200/score 0.5、交接边界及 A/B 时间几何未变。0903 A/B 各测试 6700 帧、命中 81/65；1016 各 4250 帧、命中 20/43。所有命中均在交接末端 10 秒内，最早距结束 **8.2743/3.9179s** 与 **1.9924/2.3983s**，满足修订后的例外。
+- `task150-audit-after.py` 对 **16,916 文件 / 96,329,027,951 bytes** 重算 SHA，**310.863s、exit 0**，受保护内容全不变；1023 原映射与原索引在获准备份位置核对。inventory 56 行、remux 13 行及旧七次索引不变。最后 `task150-final-check.py` exit 0：这 16,916 文件大小/mtime 没有后续变化，无须再次哈希；56 个原始文件的大小/mtime 与清单相同；1016 映射、验证 SHA 不变；正式表与九行索引再次读回。未读写正式标签及 .bak，两个既有数据集的限定元数据/帧保持不变。
+- TASK-150 真实活动为 CPU/PyAV/OpenCV/FFmpeg/ffprobe、现有采样与来源 keyframe 缓存复用、新代理和验证缓存写入；没有模型/CUDA 推理、下载、环境修改或主动网络请求。没有做网络抓包，不把未请求网络当成全部原生组件无网络的实测证明。所有处理进程已正常退出；媒体、缓存、派生 JSON、工人表都在仓库外。旧七次与 1016 未重跑，真实浏览器未重测，20261030 与后续任务未执行。
+
+#### 自主决定（A 级）
+
+- 在入口限制 `--second-look` 只用于 20261016 起的录制，符合适用范围；抽样读取器拒绝 null/非法等级，避免失败同步进入数据集。沿用旧七次缺字段为 official。
+- W 事件错误保留底层异常类型；抽样的原 `webcam_unavailable` 原因字符串不变，新增并行 `webcam_error_type`。正式 approved 头完整性与匿名 span_id 校验均有覆盖。
+- 本轮仅必要 Git/GitHub 命令使用既有 yun 授权；普通会话 gh 认证与 Git 索引写入未通过，不把提权成功说成普通权限通过。其余编辑、测试、数据写入在普通会话执行。
+
+#### 范围外改动
+
+- 无。没有处理 20261030、TASK-152/151/153、阶段 3 或新数据集，没有读写 `roi_r2/labels.json` 及其备份；正式区域/类别/原始媒体只读，派生物、缓存与凭据未上传。
+
+#### 待 Claude 判断（B 级）
+
+- 实测 A–E 复核中位/偏差/漂移为 **0.125374/−0.114061/−0.067624**，与契约中的缩略图预演 **0.112/−0.103/−0.089** 不同，但全部满足已批准规则；没有调整方法迎合预演。请 Claude 独立复算真实代理及窗口，确认差异，当前不臆测原因。独立复算、实现/变异审查与真实结果验收待进行。`sync_check.py` 仍是打开旧记录路径、要求全部行有效的可选旧诊断，本轮不改。`timemap.run` 第二层对 A/B/E 的 KeyError、FFmpegError 行级失败处理按 r7 保留。
+
+#### 待用户决定（C 级）
+
+- 无新增决定；独立 checkout 验收待进行。
+
 ## 3. 审查结论（Claude 追加）
 
 ### 2026-10-31 第 8 轮审查（Claude）
