@@ -175,6 +175,46 @@ git status --short
 - 待 Claude 判断（B 级）：算法、抽查与真实统计待独立审查；没有未解决的 r3 预期差异。
 - 待用户决定（C 级）：TASK-101 无新增事项。
 
+### 第 9 轮继续实施记录（Codex，2026-10-31；契约 r4）
+
+- **已实施、已实际运行；待 Claude 独立审查及用户独立 checkout 验收**。实现提交 `ea30bea6f8c142ec8956b2a707b307ca09a5fd6e`（`Retain separated-head coexistence through short gaps`）。主线程 Inline Execution，无子代理、新分支或额外 checkout。协调文档先以 `c59b5bd` 提交、推送并同步 PR #6 正文。
+- `provider.py` 复用 fusion IoU，以命名常量 `COEXIST_MAX_IOU=0.05` 记录明显分离的观测头框；按感知最后出现的毫秒时间保留共存对，使用实际 bridge 的只读公开属性 `max_gap_ms`，超窗清理 ID 与配对。空间接替按全局距离、原优先级、ID、索引配对；观测不重复使用，返回顺序不变。四份用户文档与文档测试同步收窄一帧 spawn 中立性的条件，并说明重叠候选可接替及真实身份限制。CLI、配置与输出模块未改，五组 run_config 键集合与上一轮一致。
+- **离线与反证**：使用 `C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe`，字节码在 `%TEMP%\gazelle-validation-pycache` 或仓库外日志目录。新增回归先在原实现运行：14 tests / 6 assertion failures；修改后聚焦 127 tests / 0 skip。最终 `python -m compileall main.py gazelle tests tools`、`python -m unittest discover -s tests -v`（**782 tests / 35.197s / 0 skip**）、`python main.py --help`、`python main.py --list-models`、两个 Node harness、`python -m tools.docs build` / `check`、`git diff --check` 全部 exit 0。日志尾部 OpenCV 的 `moov atom not found` 来自既有临时媒体夹具，非失败。
+- **变异**：N8、N11、N14、N16、N20、N24 全部由断言捕获；N8 按新契约改为不排序全局配对，N14 改为只过滤第一个未满足项。另有 IoU 等号、禁用过期、写死 500ms 三项，合计 **9/9**，无用测试错误冒充捕获。增加真实 fusion 排序/候选池截断用例；200 个满足条件的真实 ByteTrack 场景通过。后端实际加载后才计时，20 秒仅防失控；三个真实 tracker 测试有可选包保护，本环境未跳过。
+
+真实运行使用同一 Sunny 转码（SHA `1521746f…`）、`assets/the_office.png` 与上一轮保留的两段关键帧对齐作业片段（各 376 帧）。完整参数数组和输入哈希见仓库外 `gazelle_runs/codex-round9-continued/task101-smoke-commands.json`；入口为 `task101-smoke.py` 调用 `task-136/smoke.py cli <repo> ...`。全部 exit 0，耗时 A/B/office/03:57/04:10 分别 41.85/16.66/11.52/157.56/165.20 秒。
+
+| 输入 | eligible 帧：第8轮 / 第9轮 / 本次 | 推理调用：第9轮 → 本次 | `face_pose` / `face_only` / `pose_only` / `tracked_only`：第9轮 → 本次 | ID 集合切换：第9轮 → 本次 | valid / out_of_frame：第9轮 → 本次 |
+| --- | --- | --- | --- | --- | --- |
+| Sunny A，30 帧 | 17 / 1 / 1 | 1 → 1 | 19/8/0/3 → 19/8/0/3 | 0 → 0 | 0/1 → 0/1 |
+| Sunny B，30 帧 | 17 / 17 / 17 | 30 → 30 | 19/37/0/3 → 19/37/0/3 | 1 → 1 | 38/21 → 38/21 |
+| office，1 帧 | 0 / 0 / 0 | 1 → 1 | 1/1/0/0 → 1/1/0/0 | 0 → 0 | 2/0 → 2/0 |
+| 03:57，376 帧 | 274 / 223 / 274 | 223 → 274 | 261/27/28/60 → 330/20/26/0 | 6 → 2 | 1/222 → 2/272 |
+| 04:10，376 帧 | 197 / 198 / 199 | 198 → 199 | 298/2/73/3 → 305/2/69/0 | 14 → 14 | 28/170 → 28/171 |
+
+- 表中状态计数按人、eligible 按帧；例如 Sunny B 推理头数仍为 59。下降项包括两段的 pose_only、03:57 的 face_only、tracked_only 与切换次数，未省略。Sunny A 相对第 8 轮 eligible 从 17 降到 1 的变化仍保留，这是选择原主体的结果。2026-10-14 基线只复用原始输出作对比：A/B/office eligible 为 14/17/0，调用 14/29/1，ID 切换 7/1/0，valid/out 为 3/11、36/21、2/0；鼻点越框为 14/2/0。本次五组所有锚点分支违反数均为 0，未将基线重算表述为重跑旧模型。
+- **预期核对与目视**：03:57 eligible=274、tracked_only=0；Sunny A 全 30 帧 ID 0，f2–f4 tracked_only；04:10 的 f46/f55/f56 分别 pose_only/face_pose/face_pose，符合 r4。03:57 抽查 20 帧、04:10 抽查 39 帧，覆盖所有 ID 切换前后；均选中工位作业者，窄框与重复 ID 切换仍存在。图片仅留本机。这是已见片段的 smoke 与主线程目视，不是留出检验或物理身份准确率。
+- **真实活动**：`gazelle_dinov2_vitb14_inout`，CUDA RTX 4080 SUPER；MediaPipe CPU，真实视频读写及 Sunny A 的 FFmpeg H.264 最终化。每次入口检查显存与利用率；Gazelle-next 未修改。版本 torch 2.14.1+cu130、torchvision 0.29.1+cu130、NumPy 2.5.4、MediaPipe 1.1.1、trackers 2.6.1、supervision 0.30.9、PyAV 19.0.1、OpenCV 5.0.0.93。使用已有模型/Hub 缓存，缓存路径、大小、mtime 比较无变化；每个进程的 Python 审计均记录并阻断一次 `urllib.Request`，不声称没有请求尝试；未抓取 native 库网络流量。没有下载、安装或环境修改。非致命日志包括 xFormers fallback、MediaPipe feedback/NORM_RECT 和内存对齐提示。
+- **证据**：`gazelle_runs/codex-round9-continued/` 的 `progress.md`、`task101-{red,green1,green2}.log`、`task101-final-gate.json`、`task101-mutations.{py,json}`、`task101-smoke-commands.json`、`task101-summary.json`、`task101-checks.json` 与 `task101-visual-sampling.json`。模型、媒体、缓存与 JSONL 不提交、不上传。
+
+#### 自主决定（A 级）
+
+- 精确 IoU 测试最初把 union 面积算成 21/128；改为 20/128 后 IoU 恰为 0.05，并验证包含等号的变异失败。没有改变生产阈值。
+- 限定中立性条件后，随机序列进入新的 trial 334：t7 临时 ID 2 在 t9 吸收了另一检测并变为已确认轨迹，原断言把它误算作一帧轨迹。保留诊断 `spawn-diagnostic.log`，按审查记录中同样的前提，只对后来没有观测的实际一帧轨迹断言中立性；不删失败证据、不修改选择规则。
+- 普通文件权限预检通过；普通 `gh` 认证无效，普通 Git 暂存因 `.git/index.lock` 权限失败。沿用已有批准，仅相关 Git/GitHub 操作在 yun 上下文执行；不以此声称普通权限通过。
+
+#### 范围外改动
+
+无。bridge 的公开窗口属性是 r4 第 2 条要求的相邻接口，未改跟踪或桥接算法。
+
+#### 待 Claude 判断（B 级）
+
+本次没有未解释的 r4 预期差异。仍需独立审查；IoU 0.05 是看过这些片段后定的规则，两个真人重叠时可能互相接替，长期身份稳定性没有保证。
+
+#### 待用户决定（C 级）
+
+无新增。
+
 ## 3. 审查结论（Claude 追加）
 
 ### 2026-10-31 第 8 轮审查（Claude）
