@@ -2,7 +2,7 @@
 
 > 本文件由 `python -m tools.docs build` 自动生成，与 [总览网页](portal/index.html) 内容相同，不要手改。规则见 [文档记录体系与版本规则](rules/DOCS_SYSTEM_CN.md)。
 
-当前基线：**B026**（2026-10-31）；其后有更新的来源：`docs/collab/STATE.md`。
+当前基线：**B027**（2026-11-01）；其后有更新的来源：`docs/collab/STATE.md`。
 
 ## 1. 总览
 
@@ -10,7 +10,7 @@
 | --- | --- |
 | 当前阶段 | 阶段 2：作业数据可用、多机同步、正确性修复，建立区域标注 |
 | 当前任务 | 第 9 轮继续（Codex）：TASK-101 契约修订 r4；TASK-150 契约修订 r7 与 r6（含 Q-032 的第 10 条）、`20261023` 的代理与验证、正式作业者表 |
-| 轮到 | Codex |
+| 轮到 | Claude |
 | 最近更新 | 2026-10-31，Claude 完成第 9 轮审查：TASK-101、TASK-150 退回，修订 r4、r7 已写；TASK-151、TASK-153 的契约 r1 已写；PERCEPTION 1.3.0，SYSTEM 1.8.1，基线 B026。此前同日：用户确认 Q-032 选项 1（D30）与 Q-033。标注用 `476ebdf`。未读写 `roi_r2\labels.json` |
 
 ### 需要你处理
@@ -280,8 +280,8 @@ flowchart LR
 | Codex 第 8 轮 | TASK-140 第 3 轮：只补测试与正式字段说明 | accepted | Claude 2026-10-31 审查通过 |
 | Codex 第 9 轮 | TASK-101 契约修订 r3：同身份优先、共存过的轨迹不能接替主体、中立性，重跑真实 smoke | changes-requested | 实现符合契约；r3 的规则本身有缺陷，03:57 回退，见 TASK-101 §3 |
 | Codex 第 9 轮 | TASK-150 契约修订 r5 第 1 至 9 条：切点规则、路径解析、W 的隔离、页面、测试、`20261016` 的代理与验证 | changes-requested | 行为成立，`20261016` 通过审查；路径解析缺口、测试与指南要补，见 TASK-150 §3 |
-| Codex 第 9 轮（续） | TASK-101 契约修订 r4：两框重叠不算两个人、共存保留到桥接窗口结束、全局配对、中立性的条件，重跑真实 smoke | ready | 见 TASK-101 §3 末尾 |
-| Codex 第 9 轮（续） | TASK-150 契约修订 r7 与 r6：路径解析、测试与指南；同步复核规则；`20261016` 索引行；`20261023` 的代理与验证；正式作业者表 | ready | 见 TASK-150 §1 末尾；D30 已决定 |
+| Codex 第 9 轮（续） | TASK-101 契约修订 r4：两框重叠不算两个人、共存保留到桥接窗口结束、全局配对、中立性的条件，重跑真实 smoke | ready-for-review | 见 TASK-101 §3 末尾 |
+| Codex 第 9 轮（续） | TASK-150 契约修订 r7 与 r6：路径解析、测试与指南；同步复核规则；`20261016` 索引行；`20261023` 的代理与验证；正式作业者表 | ready-for-review | 见 TASK-150 §1 末尾；D30 已决定 |
 | Codex 第 10 轮 | [TASK-152](collab/tasks/TASK-152-recording-20261030-intake.md) 新录制 `20261030` 接入与 2026-10 分层数据集（12 段） | proposed | 等 TASK-150 含第 10 条通过审查；契约 r3；轮次已确认（Q-033） |
 | Codex 第 10 轮 | [TASK-151](collab/tasks/TASK-151-region-registration.md) 工作区域自动重配准：背景图、区域指纹、逐区域配准、检查提示、录制内监测 | proposed | 契约 r1；方案已确认（Q-028）；轮次已确认（Q-033）；等 TASK-150、TASK-152 的代理 |
 | Codex 第 11 轮 | [TASK-153](collab/tasks/TASK-153-region-review-and-blind-test.md) 区域复核模式与盲测 | proposed | 契约 r1；等 TASK-151；轮次已确认（Q-033） |
@@ -723,6 +723,7 @@ flowchart TB
 
 | 基线 | 日期 | 说明 | 文档版本 | 快照 |
 | --- | --- | --- | --- | --- |
+| B027 | 2026-11-01 | 第 9 轮续结束 | COLLAB v0.10.0、DOCS v1.2.0、GOALS v3.6.0、PERCEPTION v1.3.0、ROIREG v1.1.0、STAGE3 v3.8.0、SYSTEM v1.8.1、VALSET v5.0.0 | [网页](archive/baselines/B027/index.html) |
 | B026 | 2026-10-31 | 第 9 轮审查：PERCEPTION 1.3.0，SYSTEM 1.8.1 | COLLAB v0.10.0、DOCS v1.2.0、GOALS v3.6.0、PERCEPTION v1.3.0、ROIREG v1.1.0、STAGE3 v3.8.0、SYSTEM v1.8.1、VALSET v5.0.0 | [网页](archive/baselines/B026/index.html) |
 | B025 | 2026-10-31 | Q-032 选项 1（D30）与 Q-033 写入记录 | COLLAB v0.10.0、DOCS v1.2.0、GOALS v3.6.0、PERCEPTION v1.2.0、ROIREG v1.1.0、STAGE3 v3.8.0、SYSTEM v1.8.0、VALSET v5.0.0 | [网页](archive/baselines/B025/index.html) |
 | B024 | 2026-10-31 | 第 9 轮结束 | COLLAB v0.10.0、DOCS v1.2.0、GOALS v3.5.1、PERCEPTION v1.2.0、ROIREG v1.0.2、STAGE3 v3.7.0、SYSTEM v1.7.1、VALSET v4.5.0 | [网页](archive/baselines/B024/index.html) |
