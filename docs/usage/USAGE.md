@@ -382,8 +382,11 @@ Thus a one-frame spawn is neutral to bridge pruning, whether or not it wins outp
 Face/pose matching uses at least 3 candidates before output selection. The anchor rule requires
 the pose nose inside the face-derived head box; without a nose, at least two available head
 keypoints must be inside, or, if fewer than two exist, the head center must be between and above
-both shoulders. Video selection prefers spatial continuity with fresh observations, then identity
-continuity (including active bridges), then existing priority. Image IDs are renumbered from 0;
+both shoulders. Video selection prefers the same observed identity, then spatial continuity
+with fresh observations, then identity continuity (including active bridges), then existing priority.
+Tracks observed together cannot replace each other through spatial continuity. Selection memory
+uses confirmed heads, falling back to the output only when no confirmed head is selected.
+Bridge pruning applies to every `--max-heads` value. Image IDs are renumbered from 0;
 video IDs need not start at 0 or be contiguous. Eligibility thresholds and CLI options are unchanged.
 Provisional heads can enter Gazelle: `--gazelle-head-mode all` selects pose-only heads,
 and conservative mode selects heads with a valid face ray. An unconfirmed one-frame spawn

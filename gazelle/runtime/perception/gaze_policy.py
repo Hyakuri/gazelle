@@ -78,20 +78,32 @@ def _perception_priority(perception: HeadPerception):
     )
 
 
-def arbitrate_perceptions(perceptions, *, max_heads: int, previous_selection=()) -> Tuple[HeadPerception, ...]:
+def arbitrate_perceptions(
+    perceptions, *, max_heads: int, previous_selection=(), coexisted=frozenset(),
+) -> Tuple[HeadPerception, ...]:
     if not isinstance(max_heads, int) or isinstance(max_heads, bool) or not 1 <= max_heads <= 10:
         raise ValueError("max_heads must be an int from 1 through 10")
     perceptions = tuple(perceptions)
     if len(perceptions) <= max_heads:
         return perceptions
     selected = set()
-    unmatched = []
+    missing = []
     for person_id, bbox in previous_selection:
+        same = next((i for i, item in enumerate(perceptions)
+                     if item.person_id == person_id and item.observed), None)
+        if same is not None and len(selected) < max_heads:
+            selected.add(same)
+        else:
+            missing.append((person_id, bbox))
+    unmatched = []
+    for person_id, bbox in missing:
         center_x, center_y = (bbox[0] + bbox[2]) / 2.0, (bbox[1] + bbox[3]) / 2.0
         diagonal = math.hypot(bbox[2] - bbox[0], bbox[3] - bbox[1])
         nearby = []
         for index, item in enumerate(perceptions):
             if index in selected or not item.observed:
+                continue
+            if tuple(sorted((person_id, item.person_id))) in coexisted:
                 continue
             current = item.head_bbox
             distance = math.hypot((current[0] + current[2]) / 2.0 - center_x,

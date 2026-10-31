@@ -87,6 +87,12 @@ class HeadFusionTest(unittest.TestCase):
             (PoseHeadKeypoints(nose=landmark(face.head_bbox[0],face.head_bbox[1])), True),
             (PoseHeadKeypoints(nose=outside,left_eye=inside,right_eye=inside,**shoulders), False),
             (PoseHeadKeypoints(left_eye=inside,right_eye=inside), True),
+            (PoseHeadKeypoints(left_ear=inside,right_ear=inside), True),
+            (PoseHeadKeypoints(left_ear=inside,right_eye=inside), True),
+            (PoseHeadKeypoints(right_ear=inside,left_eye=inside), True),
+            (PoseHeadKeypoints(nose=landmark(.4,face.head_bbox[1]-.001)), False),
+            (PoseHeadKeypoints(nose=landmark(.4,face.head_bbox[3]+.001)), False),
+            (PoseHeadKeypoints(nose=landmark(face.head_bbox[2],face.head_bbox[3])), True),
             (PoseHeadKeypoints(left_eye=inside,right_eye=outside,**shoulders), False),
             (PoseHeadKeypoints(mouth_left=inside,mouth_right=inside,left_ear=outside), True),
             (PoseHeadKeypoints(**shoulders), True),
@@ -95,6 +101,8 @@ class HeadFusionTest(unittest.TestCase):
             (PoseHeadKeypoints(left_shoulder=landmark(.5,.7),right_shoulder=landmark(.7,.7)), False),
             (PoseHeadKeypoints(left_shoulder=landmark(.2,.1),right_shoulder=landmark(.6,.1)), False),
             (PoseHeadKeypoints(left_eye=inside), False),
+            (PoseHeadKeypoints(left_shoulder=landmark(.2,.7)), False),
+            (PoseHeadKeypoints(right_shoulder=landmark(.6,.7)), False),
             (PoseHeadKeypoints(), False),
         ):
             with self.subTest(points=points):
@@ -338,6 +346,7 @@ class HeadFusionTest(unittest.TestCase):
             max_heads=1,
         )
         pose = build_pose_head_candidate(make_pose_head_at(0.8, 0.8))
+        pose = replace(pose, pose_head_keypoints=PoseHeadKeypoints(nose=landmark(.1,.1)))
 
         self.assertFalse(associate_face_pose(faces[0], pose))
 

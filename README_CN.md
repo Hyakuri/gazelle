@@ -234,7 +234,7 @@ pose 选项会分别准备 `pose_landmarker_lite.task`、`pose_landmarker_full.t
 
 默认单元测试使用 fake downloader，不访问网络。注册表中的固定摘要只在建立时进行过一次真实校验：将恰好五个官方版本化资源下载到仓库外的 OS 临时目录，计算 SHA-256，然后删除该临时目录。
 
-`--head-source mediapipe` 现已接入 runtime head provider 工厂。provider 会组合已准备的资源、MediaPipe backend、head/pose fusion；视频还会使用 ByteTrack 跟踪和 500 ms 的短时遮挡桥接。图片 ID 确定且从零开始，视频 ID 来自 ByteTrack。单人模式会在 bridge 后再次裁决，最多保留一个 identity，并清除被当前 observation 替换的 stale identity。默认情况下，只有通过保守 gaze eligibility 的当前 MediaPipe head bbox 才会送入 Gazelle，其中 perception confidence 与 face-ray confidence 均不得低于 `0.50`。
+`--head-source mediapipe` 现已接入 runtime head provider 工厂。provider 会组合已准备的资源、MediaPipe backend、head/pose fusion；视频还会使用 ByteTrack 跟踪和 500 ms 的短时遮挡桥接。图片 ID 确定且从零开始，视频 ID 来自 ByteTrack。每个 `--max-heads` 值都会在 bridge 后裁决输出，并按已确认的选择修剪桥接。默认情况下，只有通过保守 gaze eligibility 的当前 MediaPipe head bbox 才会送入 Gazelle，其中 perception confidence 与 face-ray confidence 均不得低于 `0.50`。
 
 该集成刻意保持较小的模型边界：fusion/tracking 会生成有序 `HeadObservation` 和对齐的 `HeadPerception`。默认 `--gazelle-head-mode eligible` 只传入保守 eligible head。诊断 selector 可以改为一个或多个 state（`face_pose`、`face_only`、`pose_only`、`tracked_only`）或 view（`frontal`、`profile`、`back_or_occluded`、`unknown`）；`observed` 选择当前 observation，`all` 选择全部 active perception，多个 selector 采用 OR 语义。即使处于诊断模式，也不能恢复已经过期的 track，并且仍然要求通过 normalized non-`None` bbox 校验。face bbox、face mesh、face/pose keypoint、两条 head-pose reference ray、head pose 和 tracking state 永远不会加入 Gazelle tensor input。Gazelle 按选中的 person 顺序返回结果。
 
@@ -256,7 +256,9 @@ MediaPipe 视频第 0 帧及每条新轨迹首帧立即输出观测头部，`tra
 所以一帧 spawn 无论是否胜出，都不影响桥接修剪。
 人脸与姿态匹配先取至少 3 个候选。锚点规则要求姿态鼻点在面部派生头框内；无鼻点时，
 至少两个可用头部关键点须在框内；不足两个时，头框中心须在双肩之间且高于肩部中点。
-视频选择先保留有新观测的空间连续主体，再保留身份连续主体（含有效桥接），最后按原优先级补足。
+视频选择先保留仍被观测的同一身份，再保留有新观测的空间连续主体，再保留身份连续主体（含有效桥接），最后按原优先级补足。
+同时被观测过的轨迹不能通过空间连续互相接替。选择记忆使用已确认的头部，仅在已确认的选择为空时使用正式输出。
+桥接修剪适用于每个 `--max-heads` 值。
 图像 ID 在选择后从 0 重新编号；视频 ID 不保证从 0 开始或连续。资格阈值与 CLI 选项不变。
 临时头部可以进入 Gazelle：`--gazelle-head-mode all` 会选中只有姿态的头部，
 保守模式也会选中具有有效面部射线的头部。仅出现一帧且未确认的 spawn 会增加不同

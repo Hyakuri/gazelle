@@ -170,7 +170,7 @@ class MediaPipeHeadProviderTest(unittest.TestCase):
             results,retained=self._sequence(prefix+[((b,spawn),(20,-1))]+[((),())]*3)
             self.assertEqual(retained[5:],base_retained[5:])
             self.assertEqual([r.perceptions for r in results[6:]],[r.perceptions for r in baseline[6:]])
-        self.assertEqual([r.perceptions[0].person_id for r in baseline[5:]],[1]*4)
+        self.assertEqual([r.perceptions[0].person_id for r in baseline[5:]],[0]*4)
 
     def test_multiple_heads_also_prune_replaced_bridge_ids(self):
         a,b=self._small_candidate(.1),self._small_candidate(.7)

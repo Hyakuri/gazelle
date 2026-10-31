@@ -228,7 +228,7 @@ The pose selection prepares `pose_landmarker_lite.task`, `pose_landmarker_full.t
 
 Default unit tests use fake downloaders and do not access the network. The pinned registry hashes were established once by downloading exactly the five official versioned assets to an OS temporary directory outside the repository, calculating SHA-256, and deleting that temporary directory.
 
-`--head-source mediapipe` is now wired into the runtime head-provider factory. The provider composes prepared resources, the MediaPipe backend, head/pose fusion, video ByteTrack tracking, and the 500 ms short-occlusion bridge. Image IDs are deterministic and start at zero; video IDs come from ByteTrack. In single-person mode, a post-bridge arbitration step keeps at most one identity and prunes stale identities replaced by a current observation. By default, Gazelle receives normalized, non-`None` MediaPipe head bboxes only when the current perception passes the conservative gaze-eligibility policy, including minimum perception and face-ray confidence values of `0.50`.
+`--head-source mediapipe` is now wired into the runtime head-provider factory. The provider composes prepared resources, the MediaPipe backend, head/pose fusion, video ByteTrack tracking, and the 500 ms short-occlusion bridge. Image IDs are deterministic and start at zero; video IDs come from ByteTrack. For every `--max-heads` value, post-bridge arbitration limits the output and prunes bridges according to the confirmed selection. By default, Gazelle receives normalized, non-`None` MediaPipe head bboxes only when the current perception passes the conservative gaze-eligibility policy, including minimum perception and face-ray confidence values of `0.50`.
 
 The integration keeps the model boundary deliberately small: fusion/tracking produces an ordered `HeadObservation(person_id, bbox, confidence)` tuple and an aligned `HeadPerception` tuple for observation sidecars and rendering. The default `--gazelle-head-mode eligible` passes only conservative eligible heads. Diagnostic selectors may instead opt in one or more states (`face_pose`, `face_only`, `pose_only`, `tracked_only`) or views (`frontal`, `profile`, `back_or_occluded`, `unknown`); `observed` selects current observations, and `all` selects every active perception. Multiple selectors use OR semantics. Even in diagnostic mode, expired tracks cannot be revived and normalized non-`None` bbox validation remains mandatory. Face bbox, face mesh, face/pose keypoints, both head-pose reference rays, head pose, and tracking state are never added to the Gazelle tensor input. Gazelle returns results in the selected-person order.
 
@@ -253,8 +253,11 @@ Thus a one-frame spawn is neutral to bridge pruning, whether or not it wins outp
 Face/pose matching uses at least 3 candidates before output selection. The anchor rule requires
 the pose nose inside the face-derived head box; without a nose, at least two available head
 keypoints must be inside, or, if fewer than two exist, the head center must be between and above
-both shoulders. Video selection prefers spatial continuity with fresh observations, then identity
-continuity (including active bridges), then existing priority. Image IDs are renumbered from 0;
+both shoulders. Video selection prefers the same observed identity, then spatial continuity
+with fresh observations, then identity continuity (including active bridges), then existing priority.
+Tracks observed together cannot replace each other through spatial continuity. Selection memory
+uses confirmed heads, falling back to the output only when no confirmed head is selected.
+Bridge pruning applies to every `--max-heads` value. Image IDs are renumbered from 0;
 video IDs need not start at 0 or be contiguous. Eligibility thresholds and CLI options are unchanged.
 Provisional heads can enter Gazelle: `--gazelle-head-mode all` selects pose-only heads,
 and conservative mode selects heads with a valid face ray. An unconfirmed one-frame spawn

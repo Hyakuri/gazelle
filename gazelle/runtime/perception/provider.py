@@ -1,4 +1,5 @@
 from dataclasses import replace
+from itertools import combinations
 from time import perf_counter
 from typing import Optional, Tuple
 
@@ -103,6 +104,7 @@ class MediaPipeHeadProvider(HeadProvider):
         self._reference_ray_length = reference_ray_length
         self._closed = False
         self._previous_selection = ()
+        self._coexisted = set()
 
     @classmethod
     def create(
@@ -177,16 +179,21 @@ class MediaPipeHeadProvider(HeadProvider):
             image_height=image_height,
         )
         perceptions = self._bridge.update(tracked, timestamp_ms=timestamp_ms)
+        present_ids = {item.person_id for item in perceptions}
+        self._coexisted = {pair for pair in self._coexisted if all(pid in present_ids for pid in pair)}
+        self._coexisted.update(combinations(sorted(item.person_id for item in perceptions if item.observed), 2))
         # Provisional heads may win output selection but must not affect bridge pruning.
         confirmed = arbitrate_perceptions(
             (item for item in perceptions if not item.provisional),
             max_heads=self._max_heads, previous_selection=self._previous_selection,
+            coexisted=self._coexisted,
         )
         perceptions = arbitrate_perceptions(
             perceptions, max_heads=self._max_heads, previous_selection=self._previous_selection,
+            coexisted=self._coexisted,
         )
         self._bridge.retain_person_ids(tuple(item.person_id for item in confirmed))
-        self._previous_selection = tuple((item.person_id, item.head_bbox) for item in perceptions)
+        self._previous_selection = tuple((item.person_id, item.head_bbox) for item in (confirmed or perceptions))
         return annotate_gaze_eligibility(perceptions)
 
     def get_frame_result(self, frame, frame_index, timestamp_ms, image_width, image_height):
