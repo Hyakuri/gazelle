@@ -385,6 +385,62 @@ git status --short
 - 无。尚待 Claude 独立审查与用户独立 checkout 验收。
 - 图片加载补修与完整报告提交 `9684f1f4e9c9acdf3b5f14ed687d1c2f28ff0c77` — `Hide pending webcam images and report recording intake blockers` 已推送；[最终英中报告](https://github.com/Hyakuri/gazelle/pull/6#issuecomment-6528779201)。交付状态为实现待审、真实数据目标未达成，后续按 §3.5 继续不受影响的 TASK-140。
 
+### 2026-10-31 第 9 轮（Codex，契约 r5 第 1 至 9 条）
+
+- 实现提交 `c1b8416eda76aa1dbf61d37bcfb32e133352c4f4` — `Constrain synchronization cuts and isolate optional webcam failures`，已在原分支推送；[代码检查点](https://github.com/Hyakuri/gazelle/pull/6#issuecomment-6540063021)。主线程 Inline Execution，没有子代理、额外 checkout 或新分支。Q-032 未答，第 10 条、1023 代理与正式 worker 文件没有实施。以下是 Codex 检查记录，不代替 Claude 独立审查或用户独立 checkout 验收。
+
+#### 实现与离线检查
+
+- `refine_breakpoints` 只在相邻长窗中心的闭区间内选细化切点，没有候选时保留粗切点；端点与 1016 E 实际数字夹具覆盖。对 48 个受保护 AST 的核对只有这个获准函数改变，另外 47 个不变；采样 SHA 仍为 `7c6c32f413379ddb023dcfc07295376aec727bf12bffb13af2f6e3461ac6d77d`，OSD 版式与 glyph 字节不变。没有修改门槛、采样或其他拟合算法，没有重跑旧七次。
+- 三个 CLI 的可选 `--inventory` 只在记录路径失效时解析来源，匹配映射/清单 SHA 记录与大小并检查磁盘大小；保留有效 remux 路径。为维持受保护读取器的严格 stat 校验，核验后只在临时内存副本使用迁移文件的 mtime；不改写旧记录，不重算完整源视频 SHA。临时搬迁测试经过校准、代理和时钟读取入口。
+- W 的 PyAV/KeyError 与事件读帧/缩略图错误均在可选分支隔离；事件失败重新导出 A/B/E 条图，W 原因写入报告。W 证据缺失、迁移或过期时不读 W 参考，在 manifest 记录 `webcam_unavailable`，三机抽样继续。W–B 的 reason 列出具体失败条件。面板移到时间轴与类别之后，加载和失败时保留 360px 占位并隐藏旧图。
+- `plan` 拒绝 review-only 文件；生产调用传入重叠范围，正式旧代理从索引绑定的映射取得真实边界，新代理使用 session 的 overlap。文件头与交接行只接受许可字段。W 文件名规则统一放到 camera_roles；清单重跑保留行序并拒绝缺少已有源的错误 root；重封装失败保留原有效行。**不带 `--session` 的重封装也从重写改为合并报告**。
+- 默认离线门：`python -m compileall main.py gazelle tests tools`；`python -m unittest discover -s tests -v`（**774 tests / 68.758s / 0 skip**）；`python main.py --help`；`python main.py --list-models`；`node tests/annotation_page_test.cjs`；`node tests/roi_page_test.cjs`；`python -m tools.docs build`；`python -m tools.docs check`；`git diff --check` 全部 exit 0。解释器为现有 `Gazelle-next`，字节码留在 TEMP。`task150-final-gate.json` 保存命令与退出码；合成坏 MP4 的 moov 消息和 Git 行尾消息非致命。
+- 必需变异 **34/34 检出**。初轮 33/34，补上直接验证 W 代理旁注 role 的测试后，`p_sidecar_role` 在 105 项聚焦测试中触发断言失败。其余已检出的变异沿用仍适用的结果；最后全套正常门 774 项通过。初始矩阵保留，合并证据为 `task150-mutations-final.json`。部分变异因代码位置改变作等价替换，矩阵标 `adapted`；两项通过错误而非断言检出，记录未改称断言。变异进程为默认 Normal；完整离线门与真实长 CPU 作业为 BelowNormal，未宣称全部进程都低优先级。
+- 内置浏览器以临时合成数据在 1500×950 实测：有 W、无 W、加载与失败状态的时间轴文档坐标均为 860.979187；图片占位 360px，加载/失败隐藏旧图；W 返回 404 后仍能标注并保存到临时文件。点击类别触发浏览器自动滚动时，viewport 坐标改变但文档坐标不变。`task150-browser-observed.json` 记录证据；服务停止、标签页关闭。Node 另覆盖 W 不计入已看步。Headless Edge 尝试因 GPU 子进程 exit -1073741790 而失败，日志保留；不将内置浏览器检查称为 Edge 独立验收，也未修改浏览器/安全设置去绕过。
+- 四份公共用户文档与文档测试同步。实施中数个新夹具的预期/形状问题、外部日志读取一次误用默认 cp932、状态查询的一次括号错误、Edge 启动失败均保留原记录；未为取得通过放宽生产门槛。外部交接检查最初把返回的 gap 数命名为 excluded_sampling_steps，读回接口后改为分别记录 1 个 gap 与 251 个 sync_uncertain 步；生产抽样规则没有改变。
+
+#### 真实重新拟合与数据验证
+
+- 全部代码提交、工作区干净后才开始。先核对旧失败映射 SHA，再在同目录改名为 `20261016.json.before-task150-r5`、`20261023.json.before-task150-r5`，旧 SHA 分别为 `d9a60b922b5f2f0a8dc63d9367f90fd2a04dc6303ba951f7d2a45f56a560ce5b`、`32251e2195c6dbd2a8c9dd629b1eee6a6b5c634aa0887a505a530c7c22954b2f`。
+- 两次命令：`python -m tools.workdata.sync_calibrate --timemaps ../gazelle_data/workdata/timemaps_v2_base --out-root ../gazelle_data/workdata/timemaps_v3 --samples-root ../gazelle_data/workdata/sync_samples_v2 --keyframes-root ../gazelle_data/workdata/keyframes_v3 --inventory ../gazelle_data/workdata/inventory/inventory.json --session <20261016|20261023> --reuse-samples`。分别 **exit 0 / 33.652s**、**exit 1 / 33.925s**，复用八组现有样本，不重新解码。样本像素、旁注 SHA 与 sampling SHA 全部核对，A/W 的窗口、参数、切点、有效状态与尾部值逐项不变。
+- 1016：A 51/60 有效窗、MAD 0.055943、尾部 2/51；E 50/60、MAD 0.041917、尾部 **5/50=10.0%**，切点 **1135.213989**、不确定区间 **[1110.270794,1160.157184]**；W 52/60、MAD 0.042401、尾部 4/52。W 电脑时钟减 B 在 13:25/13:50 为 **−2.384729 / −2.443956s**，符号和容差核对通过。新映射 SHA `9de009d075a35ef27e677fd04f1efac23d127e5eb4e3b0c43b0d1a6ece2e7335`，calibrated=true。
+- 1023：A 53/60、MAD 0.054952、尾部 **7/53=13.2075%**，仍为 `residual_tail_exceeds_0_2`；E 55/60、MAD 0.046268、尾部 **2/55=3.6364%**，切点 **1175.352834 / 1595.144727**；W 56/60、MAD 0.072269、尾部 3/56。W 两处偏移 **−0.575497 / −0.745526s** 仅报告。新映射 SHA `255a798ae93127ebb6f6904c186c191a6cc1b27879e309b42c06555a329cee47`，calibrated=false。实测均符合 r5 预演，不启用未授权 second-look。
+
+- `python -m tools.workdata.proxies --timemaps ../gazelle_data/workdata/timemaps_v3 --out-root ../gazelle_data/workdata/proxies --session 20261016 --allow-internal-gaps --inventory ../gazelle_data/workdata/inventory/inventory.json`：**exit 0 / 5139.823s**。四路各 **18,019 帧**，5 Hz、3603.8 秒、H.264/yuv420p、无音轨；A/B/E 为 1920×1080，W 为 1280×720。源解码帧数 A/B/E/W 为 **117253/90664/54058/161708**，全部到 EOF，帧数差异不需复核。缺口数 **0/0/1/0**，同步不确定步 **0/0/251/0**；E 的两段记录范围重叠，其并集仍为 251 步。没有删除缺口或不确定步。
+- 新 `session.json` 记 `allow_internal_gaps=true`、overlap、`code_commit_sha=c1b8416…`、`code_worktree_dirty=false`。原采样网格为 18,018 步，最终校准后的代理网格为 **t0=1791982796.0、N=18019、step=0.2**，不是重采样旧缓存。固定时钟抽查沿用原规则，seed **40522031**，索引 **[6172,15089,17317]**，A/B/E 共 9 项；保存的原脚本 SHA 与代理 session SHA 一并记录。
+- 验证命令：`python -m tools.workdata.sync_validate --proxies ../gazelle_data/workdata/proxies --out-root ../gazelle_data/workdata/sync_validation_r5 --session 20261016 --clock-samples ../gazelle_runs/codex-round9/clock-samples-20261016.json --timemaps ../gazelle_data/workdata/timemaps_v3 --keyframes-root ../gazelle_data/workdata/keyframes_v3 --inventory ../gazelle_data/workdata/inventory/inventory.json`。
+
+- 同步验证 **exit 0 / 516.801s**，四个同步对全部按原门槛通过，未启用第 10 条。A–B：50 有效窗、±0.2 秒占比 **96.0%**、中位绝对值 **0.042817s**、中点偏差 **0.007267s**、漂移 **0.008499s/h**；E–B：49 窗、**93.8776% / 0.048267s / −0.002444s / −0.028316s/h**；A–E：40 窗、**100% / 0.038592s / −0.000931s / 0.077786s/h**；W–B：50 窗、**92.0% / 0.034470s / −0.004904s / 0.014055s/h**。A–E 覆盖比例 0.782551，结果保留全部有效性类别。没有剔除失败窗或更改门槛。真实代理结果与 r5 的离线预演不同，不能把预演当成这次验证结果。
+- 时钟 **9/9 可评估且通过**，均直接从代理读出，无需补读替代索引；源 PTS/代理缩略图比较仍实际执行。保存的 `delta_seconds` 是 source base_X(pts) 减整数 OSD 读数，不能与 `reading_minus_grid_seconds` 混用。
+- 事件条图共 **4 张**（3 运动 + 1 切点附近），k=2545/15100/16459/5715；缩略图像素与文件 SHA 通过检查。已逐张目视 B/A/E/W 四行，转身、伸手、抬手、俯身动作大致对应，未见缺行或黑行；不据此声称亚帧精度。切点附近图按既有“±10 秒最大运动”规则选择，中心比切点晚 **7.685295s**，不是精确切点画面。图像只在本地查看，未上传 GitHub。验证文件 SHA `f02956527a597f853d1ca6ca7adebb8fdc57c292b92df06f136ddfef37093710`。
+- `append_proxy_manifest.py --session 20261016` 在四对、时钟、EOF、帧数、媒体/映射/session/验证 SHA 与 W 符号全部通过后追加唯一新行；先以独占新文件保存原索引，再原子替换索引并读回。旧 **7 条逐字段相同**，新索引共 **8 条**，新记录明确写 `Codex checks passed; Claude independent acceptance pending`。备份 `proxies/manifest.before-task150-r5.json` 的 SHA 为 `b516f63d86d2fe6bb55003f4288d5d2e1ce6821638ba1a1a322b6f6d3871e210`，新索引 SHA `3d2ac38ea1017dbde9d899e2e1c6a6fa7dd01e906204d7e0cd34c9e58d22a6f6`。没有写入待 Q-032 的 sync_grade/second_look 字段。
+
+- 追加索引之前，`task150-audit-after.py` 对预先登记的 **16,891 文件 / 90,097,391,320 bytes** 重算 SHA，**433.399s、exit 0**，全部相同；两份新录制旧失败映射核对改名后备份。当时共享 inventory 56 行、remux 13 行、代理索引 7 行均逐字段及整文件相同。两份正式数据集限定元数据与帧不变；`roi_r2/labels.json` 与 `.bak` 从清单构造起排除，未枚举或读写。原始源只作读取，旧录制无重处理。
+- 追加之后，`task150-handoff-check.py` 核对其余 **16,890** 个登记文件的大小/mtime 没有再变化，原索引备份 SHA 与前测相同，原 **7 条** 索引内容不变，仅新增 1016。`read_session` 实际读取新代理，W 参考通过绑定校验；返回 1 个 gap，另有 251 个同步不确定步。没有提取正式数据集，也没有写正式 worker 表；1023 代理目录不存在。两份失败映射与原索引的旧内容均可从备份核对。
+- 实际活动：现有 `Gazelle-next`、Python 3.14.8；真实 CPU 数值拟合、PyAV 原生解码、FFmpeg 编码/ffprobe 文件检查、OpenCV 时钟/代理检查、四张本地图片查看、临时浏览器与 GitHub。复用现有采样与来源 packet/keyframe 缓存，新代理生成自己的 keyframe 验证缓存；没有 Gazelle/MediaPipe 模型推理、CUDA、模型下载、训练或环境修改（TASK-101 的真实模型活动另记于该任务）。普通文件权限预检与获准 yun Git/GitHub 例外分开记录。全部真实处理链、前测/后测和临时服务已结束；失败浏览器的诊断配置留在仓库外。详细日志、完整命令和 JSON 均在 `gazelle_runs/codex-round9/`，媒体与派生数据没有上传。
+
+#### 自主决定（A 级）
+
+- 采用共享 source_paths 解析与 transient mtime 副本，保持三个受保护读取函数的 AST；证据哈希与源 SHA 记录不改。作业者文件头用固定匿名字符串、5 秒精度、10 秒末端例外与 SHA allowlist；具体字段在四份文档说明，不增加身份信息。正式文件仍等待两个最终映射。
+- 真实新验证放在现有 `sync_validation_r5` 的新 1016 路径；旧七次不改。时钟抽样沿用保存的原脚本规则 `Random(20261015 + int(session)).sample(range(N),3)`，只生成新录制的固定三个索引。新代理保留 `allow_internal_gaps=true` 与 overlap；不让 W 参与 A/B/E 同步判定。
+- r5 改过的交接条件直接依据第 8 轮已有逐帧证据复核：0903、1016 最早人脸均在区间最后 8.3 / 2.4 秒内，满足“除最后 10 秒”的新条件。没有重跑检测、识别人脸身份或挪动用户确认边界；明确该 10 秒是看到 8.3 秒后由协调者决定。
+
+#### 范围外改动
+
+- 无。未做 TASK-152/151/153、第 10 条、20261030 接入或正式数据集生成；未修改 Multi-Pose、Actions、Conda、全局配置、研究阈值、区域、参考图或正式标签。所有媒体与派生结果留在仓库外。
+
+#### 待 Claude 判断（B 级）
+
+- **1023 仍未通过原拟合门**：A 尾部 7/53，代理、验证、索引和正式 worker 表继续等待 Q-032。不是执行崩溃，也没有以 W/E 通过替代 A 的要求。1016 已完成原门槛下的代理与验证；请独立复算真实 E–B 93.8776%、A–E 漂移 0.077786s/h 与预演 E–B 90.0%、A–E 0.122s/h 的差别，当前不把差别归因于未经验证的原因。
+
+- 文档差异：VALSET 4.5.0 的 front matter/版本记录称已补 §11.3 精度，但当前 §11.3 正文仍按最后/最早人脸定义交接，未写 5 秒精度或最后 10 秒例外。本轮按更新的 TASK-150 r5 明文实现，不擅自修改受控研究文档；请 Claude 同步正文。
+- 浏览器独立验收仍待 Claude；内置浏览器与 Node 证据不替代独立 Edge 复测。
+
+#### 待用户决定（C 级）
+
+- Q-032 仍待回答，1023 代理、正式 worker 表和第 10 条继续等待。没有重复请求已有授权，没有将等待解释为同意。Q-033 的后续轮次调整仍由 STATE 协调，本轮不做后续任务。
+
 ## 3. 审查结论（Claude 追加）
 
 ### 2026-10-31 第 8 轮审查（Claude）
