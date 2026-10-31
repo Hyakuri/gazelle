@@ -11,8 +11,8 @@ from gazelle.runtime.media import SUPPORTED_VIDEO_SUFFIXES, detect_media_type
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-ENGLISH_GUIDE = REPOSITORY_ROOT / "docs" / "USAGE.md"
-CHINESE_GUIDE = REPOSITORY_ROOT / "docs" / "USAGE_CN.md"
+ENGLISH_GUIDE = REPOSITORY_ROOT / "docs" / "usage" / "USAGE.md"
+CHINESE_GUIDE = REPOSITORY_ROOT / "docs" / "usage" / "USAGE_CN.md"
 ENGLISH_README = REPOSITORY_ROOT / "README.md"
 CHINESE_README = REPOSITORY_ROOT / "README_CN.md"
 IMPLEMENTATION_PLAN = (
@@ -39,6 +39,27 @@ VIDEO_CODEC_PLAN = (
 
 
 class UsageDocumentationTest(unittest.TestCase):
+    def test_face_pose_anchor_pool_and_continuity_contract(self):
+        for path in (ENGLISH_README,ENGLISH_GUIDE):
+            text=self._read(path)
+            for token in ('at least 3 candidates','anchor rule','pose nose','both shoulders',
+                          'spatial continuity','identity','video IDs need not start at 0',
+                          'excluding all provisional','neutral to bridge pruning',
+                          'same observed identity', 'IoU below 0.05', 'at least one confirmed',
+                          'does not exceed the candidate pool size', 'global center-distance order',
+                          'memory\nuses confirmed heads', 'Bridge pruning applies to every'):
+                self.assertIn(token,text,str(path))
+            self.assertNotIn('provisional winner preserves existing confirmed bridge state',text)
+        for path in (CHINESE_README,CHINESE_GUIDE):
+            text=self._read(path)
+            for token in ('至少 3 个候选','锚点规则','姿态鼻点','双肩','空间连续','身份连续',
+                          '视频 ID 不保证从 0 开始','排除全部 provisional','不影响桥接修剪',
+                          '仍被观测的同一身份','IoU 小于 0.05','选择记忆使用已确认',
+                          '至少有一个已确认感知','候选数不超过候选池上限','全局中心距排序',
+                          '桥接修剪适用于每个'):
+                self.assertIn(token,text,str(path))
+            self.assertNotIn('临时头部胜出时保留已有的已确认轨迹桥接状态',text)
+
     def _read(self, path):
         return path.read_text(encoding="utf-8")
 
@@ -171,15 +192,15 @@ class UsageDocumentationTest(unittest.TestCase):
                 )
 
     def test_guides_have_matching_numbered_section_structure(self):
-        expected = list(range(1, 16))
+        expected = list(range(1, 17))
         self.assertEqual(expected, self._numbered_sections(ENGLISH_GUIDE))
         self.assertEqual(expected, self._numbered_sections(CHINESE_GUIDE))
 
     def test_readmes_link_to_the_matching_usage_guides(self):
         english_readme = self._read(REPOSITORY_ROOT / "README.md")
         chinese_readme = self._read(REPOSITORY_ROOT / "README_CN.md")
-        self.assertIn("(docs/USAGE.md)", english_readme)
-        self.assertIn("(docs/USAGE_CN.md)", chinese_readme)
+        self.assertIn("(docs/usage/USAGE.md)", english_readme)
+        self.assertIn("(docs/usage/USAGE_CN.md)", chinese_readme)
 
     def test_fenced_video_template_is_complete_and_parseable(self):
         required_options = {
@@ -369,6 +390,12 @@ class UsageDocumentationTest(unittest.TestCase):
             "observed",
             "tracking",
             "track_age_frames",
+            "tracking.provisional",
+            "tracking.provisional=true",
+            "--gazelle-head-mode all",
+            "yaw_right",
+            "pitch_down",
+            "roll_clockwise",
             "missed_frames",
             "missed_ms",
             "face_bbox_normalized",
@@ -469,6 +496,10 @@ class UsageDocumentationTest(unittest.TestCase):
                 "output_fps",
                 "frames_read",
                 "frames_written",
+                "container_frame_count",
+                "frames_required",
+                "decode_complete",
+                "timestamp_sources",
             ],
         }
         for guide_path in (ENGLISH_GUIDE, CHINESE_GUIDE):
@@ -478,6 +509,118 @@ class UsageDocumentationTest(unittest.TestCase):
                 for scope in ("image", "video")
             }
             self.assertEqual(expected, actual)
+
+    def test_video_decode_and_timestamp_contract_is_documented(self):
+        for path in (ENGLISH_README, CHINESE_README, ENGLISH_GUIDE, CHINESE_GUIDE):
+            text = self._read(path)
+            for token in ("container_frame_count", "frames_required", "decode_complete", "timestamp_sources", "noise=drop",
+                          "max(prev_out + 1000 / fps, p + 1)", "outside-repository", "rendered.mp4"):
+                self.assertIn(token, text, str(path))
+        for path in (ENGLISH_GUIDE, CHINESE_GUIDE):
+            rows = self._run_config_addition_rows(path)
+            for scope, name, kind, _ in rows:
+                if name in ('container_frame_count', 'frames_required', 'decode_complete'):
+                    self.assertIn('(nullable)', kind)
+
+    def test_workdata_tool_entry_points_are_documented(self):
+        for path in (ENGLISH_GUIDE, CHINESE_GUIDE):
+            text = self._section(path, 15)
+            for token in ('tools.workdata.inventory', 'tools.workdata.remux',
+                          'tools.workdata.osd_clock', 'tools.workdata.timemap',
+                          'tools.workdata.sync_check', 'tools.workdata.sync_calibrate',
+                          'tools.workdata.sync_validate', 'tools.workdata.proxies',
+                          '--sample-cache', '--reuse-samples', 'delta_distribution', 'abs(1+c1)',
+                          '--keyframes-root','--sampling-provenance','INTER_AREA','insufficient_evidence',
+                          'sync_uncertain','localized: false','96×54','k−1/k+1/k−2/k+2',
+                          'T(b) = b - L(b)','d = base_X(pts) - reading',
+                          '--allow-internal-gaps', '../../tools/workdata/README_CN.md'):
+                self.assertIn(token, text, str(path))
+
+    def test_region_tool_entry_points_are_documented(self):
+        for path in (ENGLISH_GUIDE, CHINESE_GUIDE):
+            text = self._read(path)
+            for token in ('tools.validation.extract_roi_candidates', 'tools.validation.roi_server',
+                          'tools.validation.roi_regions', 'tools.validation.render_roi_reference',
+                          '../../tools/validation/ROI_GUIDE_CN.md', '127.0.0.1'):
+                self.assertIn(token, text, str(path))
+
+    def test_annotation_tool_entry_points_are_documented(self):
+        for path in (ENGLISH_GUIDE, CHINESE_GUIDE):
+            text = self._section(path, 15)
+            for token in ('tools.validation.sample_segments', 'tools.validation.extract_frames',
+                          'tools.validation.annotate_server', 'tools.validation.labels validate',
+                          '--labels-path', '--allow-incomplete', 'roi_r2_trial',
+                          '../../tools/validation/ANNOTATION_GUIDE_CN.md'):
+                self.assertIn(token, text, str(path))
+
+        for path in (ENGLISH_README,ENGLISH_GUIDE):
+            self.assertIn('viewed only means displayed',self._read(path))
+        for path in (CHINESE_README,CHINESE_GUIDE):
+            self.assertIn('“已看”只表示显示过',self._read(path))
+        for path in (ENGLISH_README, CHINESE_README, ENGLISH_GUIDE, CHINESE_GUIDE):
+            text = self._read(path)
+            for token in ('roi_regions.complete.json', 'hands_object', 'cell_other', 'away', 'absent', 'unknown', '1–5', '1–9',
+                          'points', 'point_skips', 'out_of_view', 'unsure', '--backup-existing', 'annotation_schema_version: 3',
+                          'viewed_ranges', 'finished_at', 'keepalive', '--segment', '--sessions', 'export_root', '0.5%'):
+                self.assertIn(token, text, str(path))
+
+    def test_optional_webcam_and_cohort_contract_is_in_all_six_guides(self):
+        for path in (ENGLISH_README,CHINESE_README,ENGLISH_GUIDE,CHINESE_GUIDE,
+                     REPOSITORY_ROOT/'tools/workdata/README_CN.md',
+                     REPOSITORY_ROOT/'tools/validation/ANNOTATION_GUIDE_CN.md'):
+            text=self._read(path)
+            for token in ('cam_w','auxiliary_cameras','filename_clock','--session','--no-pilot',
+                          '--cohort 2026-10','--worker-spans','span_id','640×360','1280×720',
+                          'W–B','20261030','proxies/manifest.json','sync_uncertain'):
+                self.assertIn(token,text,str(path))
+            self.assertNotIn('Gazelle_Workdata\\秋田大学様解析用動画',text,str(path))
+
+    def test_relocation_optional_webcam_and_worker_guards_are_documented(self):
+        for path in (ENGLISH_README,CHINESE_README,ENGLISH_GUIDE,CHINESE_GUIDE,
+                     REPOSITORY_ROOT/'tools/workdata/README_CN.md'):
+            text=self._read(path)
+            for token in ('--inventory <inventory.json>','sync_calibrate','sync_validate',
+                          'adjacent_window_centers','refined=false','webcam_unavailable',
+                          'review-only','allow_internal_gaps','precision_seconds',
+                          'handover_face_grace_seconds','source_draft_sha256','camera_roles.json'):
+                self.assertIn(token,text,str(path))
+
+    def test_second_look_and_provenance_contract_is_in_all_six_guides(self):
+        for path in (ENGLISH_README,CHINESE_README,ENGLISH_GUIDE,CHINESE_GUIDE,
+                     REPOSITORY_ROOT/'tools/workdata/README_CN.md',
+                     REPOSITORY_ROOT/'tools/validation/ANNOTATION_GUIDE_CN.md'):
+            text=self._read(path)
+            for token in ('--second-look','sync_grade','official','second_look','null',
+                          '120','60','0.1','0.15','0.9','valid_second_look',
+                          'residual_tail_exceeds_0_2','fraction_within_0_2 < 0.9',
+                          'mtime_ns','media_mtime_ns','needs_remux=true','webcam_error_type'):
+                self.assertIn(token,text,str(path))
+
+    def test_annotation_point_exclusivity_and_shortcuts_are_in_all_six_guides(self):
+        for path in (ENGLISH_README,ENGLISH_GUIDE):
+            text=self._read(path)
+            for token in ('first step','clearest','mutually exclusive','entire run','partly visible',
+                          'tabletop','Ctrl/Meta/Alt','TASK-125 section 5',
+                          'no redo','without Shift or Alt','only once','#b6ff00',
+                          'shortcuts immediately','Tab/keyboard','notes field retain focus'):
+                self.assertIn(token,text,str(path))
+        for path in (CHINESE_README,CHINESE_GUIDE,
+                     REPOSITORY_ROOT/'tools/validation/ANNOTATION_GUIDE_CN.md',REPOSITORY_ROOT/'tools/validation/ROI_GUIDE_CN.md'):
+            text=self._read(path)
+            for token in ('片段的第一步','最清楚','互斥','整个片段','部分可见','桌面或物体',
+                          'Ctrl/Meta/Alt','TASK-125 第 5 条',
+                          '没有重做','不带 Shift 或 Alt','只执行一次','#b6ff00',
+                          '直接使用快捷键','Tab 等键盘操作保留控件焦点','备注文本框'):
+                self.assertIn(token,text,str(path))
+
+    def test_usage_guides_explain_old_label_reannotation_once(self):
+        import re
+        self.assertEqual(len(re.findall(r'\breannotat\w*\b',self._read(ENGLISH_GUIDE),re.I)),1)
+        self.assertEqual(self._read(CHINESE_GUIDE).count('重新标注'),1)
+
+    def test_argument_validation_precedes_overwrite_in_both_guides(self):
+        for path in (ENGLISH_GUIDE, CHINESE_GUIDE):
+            self.assertIn('before any `--overwrite` deletion', self._read(path))
 
     def test_facial_transformation_matrix_contract_is_precise(self):
         required = (
@@ -555,10 +698,27 @@ class UsageDocumentationTest(unittest.TestCase):
 
     def test_public_validation_commands_use_activated_python(self):
         for guide_path in (ENGLISH_GUIDE, CHINESE_GUIDE):
-            section = self._section(guide_path, 15)
-            self.assertIn("conda activate Gazelle", section)
+            section = self._section(guide_path, 16)
+            self.assertIn("conda activate Gazelle-next", section)
             self.assertIn("python -m unittest tests.test_usage_docs -v", section)
             self.assertNotRegex(section, re.compile(r"[A-Za-z]:\\Users\\"))
+
+    def test_current_environment_and_rollback_are_documented_consistently(self):
+        definition = self._read(REPOSITORY_ROOT / "environment.yml")
+        self.assertIn("name: Gazelle-next", definition)
+        self.assertIn("python=3.14", definition)
+        pins = re.findall(r"^\s+- ([\w-]+)==(\S+)$", definition, re.MULTILINE)
+        self.assertEqual(15, len(pins))
+        for path in (ENGLISH_README, CHINESE_README, ENGLISH_GUIDE, CHINESE_GUIDE):
+            document = self._read(path)
+            for token in ("conda activate Gazelle-next", "environment_py311.yml",
+                          "environment_1.0.yml", "conda activate Gazelle`",
+                          "scaled_dot_product_attention", "torchaudio", "xformers",
+                          "ultralytics", "pydeprecate", "defusedxml", "polars",
+                          "polars-runtime-32", "nvidia-ml-py"):
+                self.assertIn(token, document, str(path))
+            for package, version in pins:
+                self.assertIn(f"{package}=={version}", document, str(path))
 
 
 if __name__ == "__main__":

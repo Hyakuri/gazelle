@@ -320,16 +320,17 @@ class MediaPipeBackendTest(unittest.TestCase):
         self.assertEqual(face.landmarks[0].presence, 0.9)
         backend.close()
 
-    def test_faces_are_sorted_by_confidence_before_max_heads_limit(self):
+    def test_faces_are_sorted_by_confidence_before_candidate_pool_limit(self):
         detections = (
             _detection(10, 10, 10, 10, 0.2),
             _detection(30, 10, 10, 10, 0.9),
             _detection(50, 10, 10, 10, 0.7),
+            _detection(70, 10, 10, 10, 0.1),
         )
         backend, bundle, _ = self._backend(
-            max_heads=2,
+            max_heads=1,
             detections=detections,
-            face_results=(_face_result(), _face_result()),
+            face_results=(_face_result(), _face_result(), _face_result()),
         )
 
         result = backend.observe(
@@ -340,9 +341,9 @@ class MediaPipeBackendTest(unittest.TestCase):
             image_height=100,
         )
 
-        self.assertEqual([face.confidence for face in result.faces], [0.9, 0.7])
-        self.assertEqual([face.bbox[0] for face in result.faces], [0.3, 0.5])
-        self.assertEqual(len(bundle.face_landmarker.image_calls), 2)
+        self.assertEqual([face.confidence for face in result.faces], [0.9, 0.7, 0.2])
+        self.assertEqual([face.bbox[0] for face in result.faces], [0.3, 0.5, 0.1])
+        self.assertEqual(len(bundle.face_landmarker.image_calls), 3)
         backend.close()
 
     def test_crops_smaller_than_two_pixels_skip_face_landmarker(self):
@@ -423,7 +424,7 @@ class MediaPipeBackendTest(unittest.TestCase):
 
                 angles = result.faces[0].head_pose
                 self.assertIsNotNone(angles)
-                expected = {"yaw": (20.0, 0.0, 0.0), "pitch": (0.0, 20.0, 0.0), "roll": (0.0, 0.0, 20.0)}[axis]
+                expected = {"yaw": (20.0, 0.0, 0.0), "pitch": (0.0, 20.0, 0.0), "roll": (0.0, 0.0, -20.0)}[axis]
                 self.assertAlmostEqual(angles.yaw_deg, expected[0], delta=1e-5)
                 self.assertAlmostEqual(angles.pitch_deg, expected[1], delta=1e-5)
                 self.assertAlmostEqual(angles.roll_deg, expected[2], delta=1e-5)
@@ -538,6 +539,26 @@ class MediaPipeBackendTest(unittest.TestCase):
 
         self.assertEqual(detector.close_count, 1)
         self.assertEqual(face_landmarker.close_count, 1)
+
+    def test_native_options_use_pool_for_poses_and_keep_face_limit(self):
+        for limit in (1,2,3,5,10):
+            seen={}
+            def creator(name):
+                def create(options):
+                    seen[name]=options
+                    return FakeTask()
+                return SimpleNamespace(create_from_options=create)
+            vision=SimpleNamespace(
+                RunningMode=SimpleNamespace(IMAGE='IMAGE',VIDEO='VIDEO'),
+                FaceDetectorOptions=SimpleNamespace,FaceLandmarkerOptions=SimpleNamespace,
+                PoseLandmarkerOptions=SimpleNamespace,FaceDetector=creator('detector'),
+                FaceLandmarker=creator('face'),PoseLandmarker=creator('pose'))
+            fake_mp=SimpleNamespace(tasks=SimpleNamespace(BaseOptions=SimpleNamespace,vision=vision))
+            with patch('gazelle.runtime.perception.mediapipe_backend.import_mediapipe',return_value=fake_mp):
+                backend=MediaPipeBackend.create(self.resources,media_type='video',max_heads=limit)
+            self.assertEqual(seen['pose'].num_poses,max(3,limit))
+            self.assertEqual(seen['face'].num_faces,limit)
+            backend.close()
 
     def test_missing_mediapipe_fails_only_for_real_construction(self):
         real_import = builtins.__import__

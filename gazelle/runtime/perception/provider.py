@@ -1,16 +1,20 @@
 from dataclasses import replace
+from itertools import combinations
 from time import perf_counter
 from typing import Optional, Tuple
 
 from gazelle.runtime.contracts import HeadObservation
 from gazelle.runtime.geometry import sanitize_normalized_bbox
 from gazelle.runtime.heads import HeadProvider
-from gazelle.runtime.perception.contracts import HeadFrameResult, HeadPerception
-from gazelle.runtime.perception.fusion import build_head_candidates
+from gazelle.runtime.perception.contracts import HeadFrameResult, HeadPerception, candidate_pool_size
+from gazelle.runtime.perception.fusion import _bbox_iou, build_head_candidates
 from gazelle.runtime.perception.gaze_policy import (
     annotate_gaze_eligibility,
     arbitrate_perceptions,
 )
+
+
+COEXIST_MAX_IOU = 0.05
 
 
 def _create_default_backend(config, *, media_type: str):
@@ -102,6 +106,9 @@ class MediaPipeHeadProvider(HeadProvider):
         self._bridge = bridge
         self._reference_ray_length = reference_ray_length
         self._closed = False
+        self._previous_selection = ()
+        self._coexisted = set()
+        self._last_present = {}
 
     @classmethod
     def create(
@@ -164,7 +171,9 @@ class MediaPipeHeadProvider(HeadProvider):
                 for person_id, candidate in enumerate(candidates)
             )
             return annotate_gaze_eligibility(
-                arbitrate_perceptions(perceptions, max_heads=self._max_heads)
+                tuple(replace(item, person_id=index) for index, item in enumerate(
+                    arbitrate_perceptions(perceptions, max_heads=self._max_heads)
+                ))
             )
         tracked = self._tracker.update(
             candidates,
@@ -174,11 +183,29 @@ class MediaPipeHeadProvider(HeadProvider):
             image_height=image_height,
         )
         perceptions = self._bridge.update(tracked, timestamp_ms=timestamp_ms)
-        perceptions = arbitrate_perceptions(perceptions, max_heads=self._max_heads)
-        if self._max_heads == 1:
-            self._bridge.retain_person_ids(
-                tuple(perception.person_id for perception in perceptions)
-            )
+        self._last_present.update((item.person_id, timestamp_ms) for item in perceptions)
+        self._last_present = {
+            pid: seen for pid, seen in self._last_present.items()
+            if timestamp_ms - seen <= self._bridge.max_gap_ms
+        }
+        self._coexisted = {
+            pair for pair in self._coexisted if all(pid in self._last_present for pid in pair)
+        }
+        for left, right in combinations((item for item in perceptions if item.observed), 2):
+            if _bbox_iou(left.head_bbox, right.head_bbox) < COEXIST_MAX_IOU:
+                self._coexisted.add(tuple(sorted((left.person_id, right.person_id))))
+        # Provisional heads may win output selection but must not affect bridge pruning.
+        confirmed = arbitrate_perceptions(
+            (item for item in perceptions if not item.provisional),
+            max_heads=self._max_heads, previous_selection=self._previous_selection,
+            coexisted=self._coexisted,
+        )
+        perceptions = arbitrate_perceptions(
+            perceptions, max_heads=self._max_heads, previous_selection=self._previous_selection,
+            coexisted=self._coexisted,
+        )
+        self._bridge.retain_person_ids(tuple(item.person_id for item in confirmed))
+        self._previous_selection = tuple((item.person_id, item.head_bbox) for item in (confirmed or perceptions))
         return annotate_gaze_eligibility(perceptions)
 
     def get_frame_result(self, frame, frame_index, timestamp_ms, image_width, image_height):
@@ -198,7 +225,7 @@ class MediaPipeHeadProvider(HeadProvider):
             for candidate in build_head_candidates(
                 faces=observed.faces,
                 poses=observed.poses,
-                max_heads=self._max_heads,
+                max_heads=candidate_pool_size(self._max_heads),
                 reference_ray_length=self._reference_ray_length,
             )
         )

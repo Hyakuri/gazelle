@@ -5,11 +5,14 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 from gazelle.runtime.contracts import BBox
+from gazelle.runtime.geometry import sanitize_normalized_bbox
+from gazelle.runtime.heads import SUPPORTED_BBOX_FORMATS
 
 from gazelle.runtime.model_registry import get_model_spec
 
 
 SUPPORTED_RENDERED_SUFFIXES = (".png", ".jpg", ".jpeg")
+SUPPORTED_HEAD_SOURCES = ("none", "static", "json", "mediapipe")
 SUPPORTED_VIDEO_OUTPUT_SUFFIXES = (".mp4",)
 SUPPORTED_VIDEO_CODECS = ("mp4v", "avc1")
 SUPPORTED_POSE_MODELS = ("lite", "full", "heavy")
@@ -340,6 +343,43 @@ class RuntimeConfig:
             "video_codec",
             validate_video_codec(self.video_codec),
         )
+        if self.head_source not in SUPPORTED_HEAD_SOURCES:
+            raise ValueError("--head-source must be one of: {}".format(", ".join(SUPPORTED_HEAD_SOURCES)))
+        if self.bbox_format not in SUPPORTED_BBOX_FORMATS:
+            raise ValueError("--bbox-format must be one of: {}".format(", ".join(SUPPORTED_BBOX_FORMATS)))
+        if self.input_path and not self.list_models and not self.prepare_only:
+            if self.head_source == "static":
+                try:
+                    if not len(self.bboxes):
+                        raise ValueError("at least one box is required for static heads")
+                    for bbox in self.bboxes:
+                        if len(bbox) != 4 or not all(
+                            isinstance(value, Real) and not isinstance(value, bool) and math.isfinite(float(value))
+                            for value in bbox
+                        ):
+                            raise ValueError("each box must contain four finite real values")
+                        if self.bbox_format == "normalized":
+                            sanitize_normalized_bbox(bbox, clip=True)
+                        elif bbox[0] >= bbox[2] or bbox[1] >= bbox[3]:
+                            raise ValueError("pixel boxes require xmin < xmax and ymin < ymax")
+                except (TypeError, ValueError, OverflowError) as error:
+                    raise ValueError("--bbox: {}".format(error)) from error
+                if self.person_ids is not None:
+                    try:
+                        valid_ids = len(self.person_ids) == len(self.bboxes) and all(
+                            isinstance(value, int) and not isinstance(value, bool) for value in self.person_ids
+                        )
+                    except TypeError:
+                        valid_ids = False
+                    if not valid_ids:
+                        raise ValueError("--person-id must contain one integer (not bool) per --bbox")
+            elif self.head_source == "json":
+                try:
+                    valid_path = bool(self.head_data) and Path(self.head_data).is_file()
+                except (TypeError, ValueError, OSError):
+                    valid_path = False
+                if not valid_path:
+                    raise ValueError("--head-data must name an existing file for json heads")
         return self
 
     @classmethod

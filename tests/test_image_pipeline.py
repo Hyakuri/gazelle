@@ -368,11 +368,15 @@ class ImagePipelineTest(unittest.TestCase):
 
     def test_static_without_bbox_rejected(self):
         with self.assertRaisesRegex(ValueError, "--bbox"):
-            build_head_provider_from_config(make_config(head_source="static"))
+            make_config(head_source="static")
+        with self.assertRaisesRegex(ValueError, "--bbox"):
+            build_head_provider_from_config(RuntimeConfig(input_path="frame.png", head_source="static"))
 
     def test_json_without_head_data_rejected(self):
         with self.assertRaisesRegex(ValueError, "--head-data"):
-            build_head_provider_from_config(make_config(head_source="json"))
+            make_config(head_source="json")
+        with self.assertRaisesRegex(ValueError, "--head-data"):
+            build_head_provider_from_config(RuntimeConfig(input_path="frame.png", head_source="json"))
 
     def test_create_output_dir_rejects_existing_without_overwrite(self):
         with TemporaryDirectory() as tmpdir:
@@ -570,10 +574,13 @@ class ImagePipelineTest(unittest.TestCase):
         with TemporaryDirectory() as tmpdir:
             image_path = Path(tmpdir) / "frame.png"
             write_test_image(image_path)
+            head_data = Path(tmpdir) / "heads.json"
+            head_data.write_text("[]", encoding="utf-8")
             config = make_config(
                 input_path=str(image_path),
                 output_dir=str(Path(tmpdir) / "outputs"),
                 head_source="json",
+                head_data=str(head_data),
             )
             provider = FakeHeadProvider(HeadFrameResult(heads=(), timings_ms={"provider": 0.5}))
 

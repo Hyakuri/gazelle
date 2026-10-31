@@ -6,6 +6,10 @@ from typing import Optional, Tuple
 from gazelle.runtime.contracts import BBox, GazeStatus, HeadObservation
 
 
+def candidate_pool_size(max_heads: int) -> int:
+    return max(max_heads, 3)
+
+
 class HeadPerceptionState(str, Enum):
     FACE_POSE = "face_pose"
     FACE_ONLY = "face_only"
@@ -127,6 +131,7 @@ class HeadPerception:
     pose_head_reference_ray: Optional[ReferenceRay2D] = None
     gaze_eligible: bool = True
     gaze_status: Optional[GazeStatus] = None
+    provisional: bool = False
 
 
 @dataclass(frozen=True)

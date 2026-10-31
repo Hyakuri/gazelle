@@ -1,5 +1,7 @@
 # Project Usage Guide
 
+For machine migration and cross-agent development, see the [Handoff Guide](../handoff/HANDOFF.md) and [Shared Agent Workflow](../rules/AGENT_WORKFLOW.md).
+
 ## 1. Scope and current capabilities
 
 Gazelle performs local gaze-target inference on one supported image or an offline video file. Head input can come from the single-person fallback, repeated static boxes, JSON/JSONL records, or MediaPipe face/pose perception. The runtime writes independent head observations, Gazelle predictions, configuration metadata, and optional visual output. It is not a webcam or real-time pipeline.
@@ -8,15 +10,35 @@ PowerShell examples run from the repository root. A command containing the liter
 
 ## 2. Environment installation and activation
 
-`environment.yml` is the validated environment definition:
+`environment.yml` describes the current `Gazelle-next` environment: Python 3.14 (validated with 3.14.8), PyTorch 2.14.1 with CUDA 13.0 wheels, MediaPipe 1.1.1, and OpenCV 5.0. The explicit package versions are `torch==2.14.1+cu130`, `torchvision==0.29.1+cu130`, `timm==1.0.30`, `numpy==2.5.4`, `scipy==1.18.1`, `pandas==2.3.3`, `matplotlib==3.11.2`, `scikit-learn==1.9.1`, `pillow==12.3.0`, `opencv-python==5.0.0.93`, `opencv-contrib-python==5.0.0.93`, `mediapipe==1.1.1`, `trackers==2.6.1`, `supervision==0.30.9`, `av==19.0.1`. pandas stays on 2.3 because the data-preparation scripts have not been validated with pandas 3.0.
+
+`environment_py311.yml` preserves the previous Python 3.11 definition byte for byte and still declares `name: Gazelle`. Keep that existing environment unchanged for rollback. `environment_1.0.yml` is the older NumPy 1.26.4 reference, also named `Gazelle`; use a separate name if creating it alongside another environment.
+
+The explicit dependency list has changed as follows:
+
+- `torchaudio` is omitted: repository code does not use it, and the evaluated stack has no matching torch 2.14 audio package.
+- `xformers` is omitted: the evaluated Windows builds were incompatible with this torch version or lacked CUDA operators. DINOv2 uses PyTorch `scaled_dot_product_attention`.
+- `ultralytics` is omitted: repository code does not import it, and YOLO inference/export were not validated.
+- `polars`, `polars-runtime-32`, and `nvidia-ml-py` are omitted with the unused Ultralytics dependency group.
+- `pydeprecate` and `defusedxml` are no longer explicitly pinned. They remain installed as required transitive dependencies of trackers/supervision: `pydeprecate==0.13.0` and `defusedxml==0.7.1`. They must not be uninstalled to match an omission in this file.
+
+For an existing installation, activate it without reinstalling packages:
+
+```powershell
+conda activate Gazelle-next
+```
+
+On a new machine, after authorizing environment creation, run:
 
 ```powershell
 conda env create -f environment.yml
-conda activate Gazelle
+conda activate Gazelle-next
 pip install -e .
 ```
 
-For an existing environment, run only `conda activate Gazelle` and `pip install -e .`.
+Creation downloads packages and writes a new `Gazelle-next` environment; editable installation also modifies it. Neither command runs inference. From the repository root, `python main.py` can use the checkout directly. Do not recreate or prune an existing environment.
+
+For rollback, use `conda activate Gazelle` if it is retained locally. Only if it is absent and recreation is authorized, run `conda env create -f environment_py311.yml`. Keep `wandb` as a separately installed requirement for the upstream training scripts; this change does not validate training.
 
 ## 3. Quick start and resource preparation
 
@@ -285,6 +307,16 @@ A JSON list is also valid for video. Every JSON-list/JSONL record requires a non
 
 `assets\the_office.png` writes under `outputs\the_office_gazelle`. Without `--overwrite`, an existing per-input directory is an error. With it, cleanup has containment and `_gazelle` suffix guards but recursively deletes the existing directory before provider/model/resource setup. This is destructive, not an unconditional safety guarantee; inputs from different locations with the same-stem name share that directory and can collide.
 
+For inference, argument-only static/json errors are rejected with usage exit code 2
+before any `--overwrite` deletion. Static boxes must contain four finite real
+values (not bool), be ordered/nonempty after normalized clipping, and have matching
+integer IDs when provided. Pixel clipping still depends on image dimensions.
+Validation preserves the original bbox values in `run_config.json`. JSON paths
+must name an existing file, but their contents are checked later. JSON content,
+MediaPipe resource, checkpoint, and device-availability failures may still occur
+after deletion. `--list-models` and `--prepare-only` bypass these inference-only
+provider prerequisites; head-source/bbox-format enum checks always apply.
+
 The tables below use **Required** for an always-emitted key, **Conditional** for a key emitted only in the stated case, and **Nullable** for a Required key whose value may be JSON `null`.
 
 ### Observation frame records
@@ -319,13 +351,13 @@ MediaPipe rich people retain those fields and add:
 | `gaze_eligible` | Required | boolean | Conservative recommendation from the perception policy; current face state and perception/face-ray confidence values of at least `0.50` are required. Diagnostic selectors do not mutate it. |
 | `gazelle_selected` | Required | boolean | Actual per-frame decision made by `--gazelle-head-mode`. It is always `false` on `frame_step`-skipped video frames. |
 | `gaze_status` | Conditional | enum string | Pre-inference rejection reason: `unavailable_occluded`, `tracked_no_gaze`, or `rejected_low_quality`. |
-| `tracking` | Required | object | Contains Required integer `track_age_frames`, Required integer `missed_frames`, and Required finite-number `missed_ms`. |
+| `tracking` | Required | object | Contains Required boolean `provisional`, Required integer `track_age_frames`, Required integer `missed_frames`, and Required finite-number `missed_ms`. |
 | `face_bbox_normalized` | Conditional | number `[4]` | Current face bbox in `(xmin, ymin, xmax, ymax)` order, clipped to `[0, 1]`. |
 | `face_keypoints` | Conditional | landmark array | Face-detector keypoints when present. |
 | `pose_head_landmarks` | Conditional | landmark array | Pose-derived head/shoulder landmarks when present. |
 | `pose_head_keypoints` | Conditional | named landmark object | Reliable named `nose`, eye, ear, mouth, and shoulder points retained independently of filtered landmark order. |
 | `facial_transformation_matrix` | Conditional | nested finite-number arrays | The serializer preserves supplied row lengths. The MediaPipe adapter requires at least three rows and at least three values in each of the first three rows; it does not enforce rectangularity. |
-| `head_pose` | Conditional | object | Finite degree values `yaw_deg`, `pitch_deg`, and `roll_deg`. |
+| `head_pose` | Conditional | object | Finite degree values `yaw_deg`, `pitch_deg`, and `roll_deg`; positive yaw right, positive pitch down, positive roll clockwise in the displayed image. |
 | `face_pose_reference_ray` | Conditional | reference-ray object | Face-keypoint/Face Landmarker ray with `source`, normalized origin/direction/endpoint, confidence, and projection status. |
 | `pose_head_reference_ray` | Conditional | reference-ray object | Independent Pose Landmarker keypoint ray using the same object shape. |
 | `face_landmarks` | Conditional | landmark array | Full face mesh only when available and `--save-face-landmarks` is set. |
@@ -338,9 +370,41 @@ Landmark, matrix, and head-pose value shapes:
 | landmark `z` | Conditional | finite number | Relative depth with no guaranteed range. |
 | landmark `visibility`, `presence` | Conditional | finite number | Provider values emitted when present; no range is enforced. |
 | `facial_transformation_matrix` rows | Conditional | nested finite-number arrays | MediaPipe commonly supplies `4 x 4`, but the serializer preserves supplied row lengths; rows after the first three may have any supplied length. |
-| `head_pose.yaw_deg`, `pitch_deg`, `roll_deg` | Required inside Conditional `head_pose` | finite number | Euler-like head-pose angles in degrees. |
+| `head_pose.yaw_deg`, `pitch_deg`, `roll_deg` | Required inside Conditional `head_pose` | finite number | Display-oriented angles in degrees: `yaw_right`, `pitch_down`, `roll_clockwise`. |
 
-`track_age_frames` is the track age, while `missed_frames` and `missed_ms` count consecutive bridge reuse since the last current observation. `tracked_only` therefore represents a stale bridged box, not a fresh detection. It is excluded by the default `eligible` selector, but explicit `tracked_only` or `all` diagnostic selection may send it to Gazelle only while that bridge track is active. In single-person mode, post-bridge arbitration keeps at most one identity and prunes displaced stale bridge state.
+Video frame 0 and the first frame of each new track now emit the observed head immediately,
+with `tracking.provisional=true` and age 1. Confirmation within two frame indices links by IoU
+to the same `person_id`; age counts from the original spawn. Provisional observations do not
+create or refresh bridge state, so a one-frame detection cannot create a stale ghost.
+Image mode, confirmed observations and `tracked_only` always use `tracking.provisional=false`.
+Bridge retention uses a separate selection excluding all provisional heads, for every `--max-heads`.
+A one-frame spawn is neutral to bridge pruning when its frame has at least one confirmed
+perception and the candidate count, including the spawn, does not exceed the candidate pool size.
+Without these conditions, continuity is not guaranteed.
+Face/pose matching uses at least 3 candidates before output selection. The anchor rule requires
+the pose nose inside the face-derived head box; without a nose, at least two available head
+keypoints must be inside, or, if fewer than two exist, the head center must be between and above
+both shoulders. Video selection prefers the same observed identity, then spatial continuity
+with fresh observations, then identity continuity (including active bridges), then existing priority.
+Clearly separated observed head boxes (IoU below 0.05) record a pair that blocks spatial
+replacement until either ID has been absent longer than the bridge window. Overlapping
+candidates may replace each other; this is not a guarantee of physical identity. Spatial
+matches use global center-distance order, independent of previous-selection order. Selection memory
+uses confirmed heads, falling back to the output only when no confirmed head is selected.
+Bridge pruning applies to every `--max-heads` value. Image IDs are renumbered from 0;
+video IDs need not start at 0 or be contiguous. Eligibility thresholds and CLI options are unchanged.
+Provisional heads can enter Gazelle: `--gazelle-head-mode all` selects pose-only heads,
+and conservative mode selects heads with a valid face ray. An unconfirmed one-frame spawn
+increases the number of distinct `person_id` values; downstream identity counts should
+first exclude rows with `tracking.provisional=true`.
+
+The face reference ray projects the matrix forward vector as `(r02, -r12)` into image
+coordinates (x right, y down). Positive yaw points right, positive pitch down, and positive
+roll rotates clockwise. Serialized roll and the face ray's vertical direction follow these
+signs; consumers of earlier opposite signs must update. Both rays remain uncalibrated 2D
+head-pose references, not eye-gaze measurements or calibrated 3D rays.
+
+`track_age_frames` is the track age, while `missed_frames` and `missed_ms` count consecutive bridge reuse since the last current observation. `tracked_only` therefore represents a stale bridged box, not a fresh detection. It is excluded by the default `eligible` selector, but explicit `tracked_only` or `all` diagnostic selection may send it to Gazelle only while that bridge track is active. Post-bridge arbitration outputs at most `--max-heads` identities; the separate confirmed-only selection determines which bridge states are retained.
 
 ### Prediction records
 
@@ -448,6 +512,18 @@ Most CLI names become config names by replacing hyphens with underscores. The ex
 | video | `output_fps` | number (non-null) | Overrides the nullable base value with the resolved positive finite writer/tracker FPS. |
 | video | `frames_read` | integer (non-null) | Added nonnegative count of decoded frames read. |
 | video | `frames_written` | integer (non-null) | Added nonnegative count of observation/prediction records and output frames written. |
+| video | `container_frame_count` | integer or null (nullable) | Positive container estimate; null when unknown. |
+| video | `frames_required` | integer or null (nullable) | Minimum required decoded count; null when unknown. |
+| video | `decode_complete` | boolean or null (nullable) | Whether the required count was met; null when not checked. |
+| video | `timestamp_sources` | object (non-null) | Integer counts for `container`, `repaired`, and `fps_fallback`. |
+
+There are 49 unique image keys and 56 unique video keys. For container count N,
+T = max(2, ceil(0.005 * N)). `--max-frames` at or before N - T requires exactly
+the requested count; otherwise `frames_required` is max(0, N - T). Unknown
+counts disable the check. Truncation exits nonzero after preserving partial
+JSONL and `run_config.json` with `decode_complete: false`. With rendering enabled,
+`avc1` skips H.264 finalization and leaves only these files; `mp4v` also leaves an
+incomplete `rendered.mp4`.
 
 ## 13. Cache, downloads, device selection, and xFormers notes
 
@@ -464,24 +540,375 @@ Missing entries may trigger network access for a registered Gazelle checkpoint, 
 
 Supply-chain boundary: the first uncached DINOv2 construction calls `torch.hub.load` on unpinned `facebookresearch/dinov2` repository code. It may fetch and execute remote Python, not just weights. Use a trusted network/environment and, for controlled deployments, a pre-reviewed cache. The runtime does not claim an immutable repository pin or Gazelle checkpoint weight-integrity verification.
 
-CPU construction temporarily disables xFormers. CUDA construction requests xFormers only when the resolved device is CUDA and `XFORMERS_DISABLED` is absent; availability still depends on the installed DINOv2/xFormers environment. When optional Triton is absent and the user has not set an override, the runtime temporarily sets `XFORMERS_FORCE_DISABLE_TRITON=1` without disabling other xFormers operators. `--prepare-only` forces xFormers off for strict loading, so nonfatal disabled/not-available messages may appear. A long-lived process cannot switch between incompatible already-initialized DINOv2 xFormers states; start a fresh process.
+The current `Gazelle-next` environment does not install xFormers; DINOv2 uses PyTorch `scaled_dot_product_attention`. The runtime retains its compatibility policy for environments that do install xFormers: CPU construction and `--prepare-only` disable it; CUDA may request it unless `XFORMERS_DISABLED` is set. When optional Triton is absent and no override is set, `XFORMERS_FORCE_DISABLE_TRITON=1` skips that probe without disabling other xFormers operators or modifying the environment. Nonfatal xFormers-disabled/not-available messages may still appear during strict loading. DINOv2 caches its backend selection, so switching incompatible CPU/prepare-only and xFormers-enabled CUDA modes in a long-lived process requires a fresh process.
 
 ## 14. Common errors and operational limitations
 
 Unsupported suffixes, missing input/head-data/checkpoint files, malformed/duplicate JSON records, invalid boxes/devices, and provider prerequisites fail clearly. Static ID count must equal bbox count. Normalized/pixel boxes must be finite and remain nonempty after normalization/clipping. Output conflicts require another root or `--overwrite`; cache/network failures stop preparation or inference.
 
-**known runtime limitation:** OpenCV video timestamps are rounded to integer milliseconds for MediaPipe and must strictly increase after rounding. Repeated timestamps or a sub-millisecond collision may abort the run. If source FPS is invalid, the reader's timestamp fallback remains 30 FPS even when `--output-fps` controls a different writer/tracker FPS; the two clocks can diverge and affect bridge timing. This describes current behavior, not desired behavior.
+The reader preserves finite nonnegative container timestamps that strictly increase after rounding. Repeated, backward, or sub-millisecond collisions receive the smallest integer-millisecond repair. Missing timestamps are nonfinite, negative, or zero from frame index 2 onward. They use `max(prev_out + 1000 / fps, p + 1)`: the larger of the previous unrounded output plus one nominal frame interval and the previous rounded output plus 1 ms. An invalid first timestamp becomes zero; a zero at index 1 becomes 1 ms instead of a frame-index estimate. An unrepresentable finite increasing time fails explicitly. These repairs do not synchronize cameras.
+
+**known runtime limitation:** If source FPS is invalid, the reader's timestamp fallback remains 30 FPS even when `--output-fps` controls a different writer/tracker FPS; the two clocks can diverge and affect bridge timing.
+
+For AVI empty packets, run this lossless remux from the repository root, replacing paths:
+
+```powershell
+ffmpeg -n -fflags +genpts -i "C:\path\to\read-only-source\input.avi" -map 0:v:0 -c:v copy -bsf:v "noise=drop=lt(size\,64)" "C:\path\outside-repository\remuxed.mp4"
+```
+
+This runs local FFmpeg and writes a new video-only MP4 without audio, retaining the original input. `-n` protects existing output. No inference, CUDA, network access, or downloads occur.
 
 Perception quality depends on visible-face evidence. The `pose_only` path uses approximate pose-only geometry, and a stale bridge box can lag rapid motion for as long as `--head-track-max-gap-ms`. Detection/pose quality degrades with extreme profile views, occlusion, PPE such as masks/glasses/helmets, motion blur, and low resolution. Although `--max-heads` supports up to 10, the current system has limited real multi-person validation.
 
 There is no webcam/real-time mode, automatic ROI/process logic, Multi-Pose integration, audio remuxing, raw video heatmap export, or high-performance asynchronous inference. MediaPipe/tracking runs locally after assets are cached, and rendered video has no audio.
 
-## 15. Validation commands
+## 15. Research data tools
+
+The intake scope is the original seven recordings plus `20261016` and `20261023`;
+`20261030` has a separate intake contract. Use `E:\Gazelle_Workdata` as the read-only
+source root. Inventory and remux accept repeated `--session` arguments and preserve
+unselected rows; do not rescan the whole root when an unrecognized recording is present.
+Back up shared manifests before appending records. Historical paths in hashed outputs
+remain provenance records; relocated remux inputs are checked by relative path, size and SHA-256.
+
+The optional webcam `cam_w` uses `WIN_YYYYMMDD_HH_MM_SS_Pro.mp4` filename time plus native PTS
+(`filename_clock`, slope 1; naive computer time encoded as UTC epoch seconds).
+It is stored in `auxiliary_cameras`; required `cameras` remain A/B/E and only they determine overlap.
+W uses the same 5 Hz calibration method and uncertainty rules, with a 1280×720 video-only
+`proxy_webcam.mp4` and sidecar; A/B/E remain 1920×1080. W–B uses the A–B residual thresholds;
+W failure makes W unavailable without blocking A/B/E. OSD checks apply only to A/B/E.
+These tools decode/encode locally on CPU (FFmpeg for remux/proxies), with no model, CUDA or downloads.
+
+For an approved additional cohort, sampling accepts `--no-pilot --cohort 2026-10` and
+`--worker-spans <worker_spans.json>`. Defaults retain the original pilot protocol.
+Each segment gets `span_id` by maximum time overlap, or nearest worker interval if entirely
+inside a handover gap; ties use the earlier interval and never trigger resampling.
+Sampling only reads metadata/hashes and writes a new dataset; extraction uses CPU/OpenCV.
+A W reference requires passing W–B validation bound by `proxies/manifest.json` hashes.
+It is a separate 640×360 JPEG per step with SHA-256, gap and `sync_uncertain` flags.
+The editor shows a collapsible W reference with an uncertainty notice; gaze points remain
+on E in the unchanged three-view montage. Preserve existing datasets and labels.
+The formal `roi_r2_2026_10` dataset is generated only after its complete approved cohort is ready.
+
+`sync_calibrate`, `proxies`, and `sync_validate` accept `--inventory <inventory.json>` for
+moved originals: valid recorded paths (including remux files) stay in use; missing paths
+are resolved in memory from inventory root/relative path after matching source SHA records
+and file sizes. Disk mtime must equal inventory `mtime_ns` and mapped `media_mtime_ns`;
+resolved paths are checked again. A missing remux path (`needs_remux=true`) is rejected.
+They do not rehash entire source videos or rewrite old mapping paths.
+Refined cuts stay inside the closed `adjacent_window_centers` interval; without a candidate,
+the coarse cut is retained with `refined=false`. `--reuse-samples` refits verified saved
+samples into a fresh output map, without decoding; proxy generation records
+`allow_internal_gaps` and overlap bounds in `session.json`.
+Inventory reruns preserve row order and reject a selected root missing existing sources.
+Remux merges report rows even without `--session`; a failed refresh keeps an existing valid row.
+Webcam filename formats are shared through `tools/workdata/camera_roles.json`.
+W event-frame failures retry strips without W. Missing, moved or stale W validation evidence
+is recorded in `webcam_unavailable` in the new dataset manifest, while A/B/E sampling continues.
+The W panel follows the timeline and class buttons; loading reserves its space, hides stale
+images and does not mark a step viewed or block three-view labelling on W failure.
+Worker files marked `review-only` are rejected. Spans must fit the overlap bounds; header and
+handover fields are allowlisted. Header fields are `clock`, `rule`, `precision_seconds`
+(5), `handover_face_grace_seconds` (10), `status` (`approved`), and `source_draft_sha256`;
+`tools/workdata/workers.py` defines the exact anonymous rule/clock values.
+
+`sync_calibrate` and `sync_validate` offer `--second-look` (off by default) for recordings
+from 20261016 onward. It reuses the same signals in 120-second windows, 60-second steps,
+without changing fit coefficients or first-pass evidence. A/E fits recheck only
+`residual_tail_exceeds_0_2`; A–B/E–B recheck only `fraction_within_0_2 < 0.9`.
+Those rechecks require fraction ≥0.9, median absolute residual ≤0.1 s, absolute midpoint
+bias ≤0.1 s and absolute drift ≤0.1 s/hour. A failed A–E pair rechecks with median and
+absolute midpoint bias ≤0.15 s, absolute drift ≤0.15 s/hour, without a fraction gate.
+Every recheck needs ≥10 valid windows and ≥30% coverage. W–B is never rechecked and
+cannot change the session grade. Original A–E `insufficient_evidence` remains allowed.
+Validation writes `sync_grade`: `official` for original gates, `second_look` if any authorized
+recheck was used, or null if synchronization failed. New index records require a successful
+grade; missing grades in the old seven recordings mean `official`. A `valid_second_look`
+map requires `--second-look` validation. Existing recordings are not implicitly rerun.
+The accepted 20261016 validation remains unchanged; only its index grade is added.
+Rechecks use CPU and write maps/validation outside the repository, with no model, CUDA,
+network or downloads; proxy validation decodes media and reads exact source frames.
+W exceptions record `error_type`; sampling retains `webcam_error_type` alongside the reason.
+Approved worker files require all header fields; `span_id` is `<recording>_worker_<n>`.
+
+
+Run from the repository root in the existing Gazelle-next environment. Keep the source
+read-only and choose a data root outside both the repository and source root.
+These tools use CPU/disk only: no models, CUDA, network access, or downloads.
+Use low process priority for long runs. See the [Chinese guide](../../tools/workdata/README_CN.md).
+Remux validation requires 30 decoded frames at the start and middle, then a tail
+window ending at EOF (30 or more consecutive frames, at most 120 reads). The last
+decoded timestamp must be within one `r_frame_rate` interval of the last packet PTS.
+The report includes `last_pts`, actual decoded counts and `tail_eof`.
+
+| Entry module | Reads | Writes | External tools |
+| --- | --- | --- | --- |
+| `tools.workdata.inventory` | Source AVI/MP4; prior inventory hash cache | Atomic inventory JSON, camera roles and packet statistics | ffprobe |
+| `tools.workdata.remux` | Inventory and source AVI | Video-only MP4 and `remux_report.json` | ffprobe, FFmpeg, OpenCV decode checks |
+| `tools.workdata.osd_clock` | One complete local video-frame image | Recognized clock or null on stdout | CPU/OpenCV; no FFmpeg executable |
+| `tools.workdata.timemap` | Inventory, original MP4 and validated remuxes | Anchor caches and per-session time maps | CPU/PyAV (FFmpeg libraries), no FFmpeg executable |
+| `tools.workdata.sync_check` | Time maps and mapped videos | Motion-energy caches and correlation reports | CPU/PyAV; no FFmpeg executable |
+| `tools.workdata.sync_calibrate` | v2 base maps and source videos | 96×54 gray samples, provenance, calibrated maps | CPU/PyAV; no models, network or FFmpeg executable |
+| `tools.workdata.sync_validate` | Calibrated proxies and saved clock sample indices | Residual reports, clock checks, event strips | CPU/OpenCV/Pillow; no models, network or FFmpeg executable |
+| `tools.workdata.proxies` | Valid time maps and mapped videos | Three H.264 proxies/session, frame sidecars, full source decode counts and `session.json` | CPU/PyAV, FFmpeg/libx264, ffprobe |
+| `tools.validation.extract_roi_candidates` | Inventory, validated overview remuxes | 12 JPEGs/session and `roi/candidates.json` | CPU OpenCV/Pillow; no FFmpeg executable |
+| `tools.validation.roi_server` | Candidates and optional saved regions | Atomic region/draft files, backups; reference/class export on request | Local browser at 127.0.0.1 only |
+| `tools.validation.roi_regions` | Region definitions | Validation or derived classes JSON | CPU only |
+| `tools.validation.sample_segments` | Proxy sessions/sidecars, proxy hashes, optional completed regions | Seeded segment manifest, classes and optional ROI reference | CPU; no video decode or FFmpeg executable |
+| `tools.validation.extract_frames` | Manifest and exact proxy videos | Hashed 1920×720 three-view JPEGs, or dataset validation | CPU/OpenCV; no FFmpeg executable |
+| `tools.validation.annotate_server` | Extracted dataset and optional existing labels | Atomic labels and previous-version backup after edits | Browser at 127.0.0.1 only |
+| `tools.validation.labels validate` | Dataset and labels JSON | Strict coverage/schema validation | CPU; no media decode or FFmpeg executable |
+| `tools.validation.render_roi_reference` | Regions and candidate images | Reference PNG, session overlays, classes JSON | Pillow and an existing CJK font |
+
+```powershell
+$raw = 'E:\Gazelle_Workdata'
+$data = 'C:\Users\yun\Documents\Claude_Code\gazelle_data\workdata'
+python -m tools.workdata.inventory --root $raw --out "$data\inventory\inventory.json" --session 20261016 --session 20261023
+python -m tools.workdata.remux --inventory "$data\inventory\inventory.json" --out-root "$data\remux" --session 20261016 --session 20261023
+```
+
+Use `--ffprobe` on either entry and `--ffmpeg` on remux to override PATH lookup.
+Valid existing remuxes are skipped unless `--force` is supplied; failed refreshes
+preserve existing files. Outputs are published only after packet count, duration,
+PTS and head/middle/tail decode checks pass. Derived data must never enter Git.
+
+Region tools do not call models, GPU, an FFmpeg executable, or external network
+services. The editor uses only loopback HTTP and inline page resources. See the
+[region guide](../../tools/validation/ROI_GUIDE_CN.md); run from the repository root:
+
+```powershell
+python -m tools.validation.extract_roi_candidates --inventory "$data\inventory\inventory.json" --remux-root "$data\remux" --out-root "$data\roi"
+python -m tools.validation.roi_server --candidates "$data\roi\candidates.json" --annotator local
+python -m tools.validation.roi_regions validate "$data\roi\roi_regions.json"
+python -m tools.validation.render_roi_reference --regions-path "$data\roi\roi_regions.json" --candidates "$data\roi\candidates.json" --out-root "$data\roi"
+```
+
+Use `--regions-path "$data\roi\review_trial.json"` for a trial: it has separate
+backups/drafts and exports to `review_trial_export`. Simply loading the page does
+not create formal regions. Choose a reference, draw polygons, check every session,
+then export references/classes. Invalid or self-intersecting polygons cannot be
+saved; keep the original candidate manifest when resuming. Stop the server with Ctrl+C.
+Exported classes retain target colors and use configured colors for fixed labels.
+Draw targets first and the work cell last. In an overlap, clicking selects the
+smallest region; its vertex handles stay above every polygon. A double-click
+closes the polygon without adding a duplicate vertex. Custom targets get distinct
+colors. Export requires 1–5 targets and exactly one cell, with no unfinished draft.
+Digit keys follow target drawing order, then `hands_object`, `cell_other`, `away`, `absent` (at
+most 1–9); `unknown` is 0. Deleting and redrawing a target changes that order.
+Autosave alone does not complete annotation: successful export writes
+`roi_regions.complete.json` (version 2, `completed_at`, `regions_sha256`, `export_root`,
+and `exports` hashes for `roi_reference.png` and `classes.json`). Later
+edits invalidate completion until re-export. Downstream tools use
+`roi_regions.completed_document()` to check the marker and all file hashes.
+The page shows completion status and asks for confirmation of regions below 0.5%
+of image area. CLI rendering accepts `--confirm-small` and optional `--out-root`;
+without `--out-root`, `roi_regions.json` exports beside itself and other filenames
+export to `<stem>_export/`. The completion marker always stays beside the region JSON.
+
+Clock commands, from the repository root using the same external `$data`:
+
+```powershell
+python -m tools.workdata.osd_clock --image C:\path\outside-repository\clock.png
+python -m tools.workdata.timemap --inventory "$data\inventory\inventory.json" --remux-root "$data\remux" --out-root "$data\timemaps_v2_base" --session 20261016
+python -m tools.workdata.sync_calibrate --timemaps "$data\timemaps_v2_base" --out-root "$data\timemaps_v3" --samples-root "$data\sync_samples_v2" --session 20260828
+python -m tools.workdata.sync_check --timemaps "$data\timemaps_v2" --out-root "$data\sync_checks" --session 20260828
+```
+
+These commands use no GPU, model, network or downloads. Video commands set below-normal
+priority and stream native PTS through PyAV. v2 base maps fit one robust line per file,
+splitting only at actual decoded PTS discontinuities, not OSD jumps; coverage begins
+at the first decoded frame. All anchor residuals remain in the report; validity requires
+median absolute residual ≤0.5 s and ≥90% within ±1.5 s. Unreadable clocks stay missing.
+
+Synchronization r2 uses front camera B as the reference. A/E use 5 Hz, 96×54 gray
+motion, six cells selected across all lags, 60 s windows and ±10 s correlation search.
+Valid windows require r ≥0.5, prominence ≥0.1 and a peak away from the boundary.
+Theil–Sen fits need ≥10 windows spanning ≥30%, ≥5 per segment, MAD ≤0.08 s and
+at most 10% residuals beyond 0.2 s. Always search one/two cuts per segment (≤3 total):
+L1 cost must decrease ≥25% and every jump must reach max(0.2 s, 4 × candidate MAD).
+Refine each cut within ±120 s using 20 s windows / 10 s strides and minimum two-sided L1.
+v3 fits use camera base centers b = t + L and explicitly compute `T(b) = b - L(b)`.
+Negative jumps leave gaps; positive jumps exclude pre-cut frames whose T is at least
+the actual first post-cut T. The selectable timeline strictly increases. Cut uncertainty
+extends from the nearest valid window center before the cut to the nearest after it,
+adding half of each window's length (60 s long / 20 s refinement). If all refinement
+windows are invalid, `localized: false` retains the full evidence gap. These intervals
+and gap/overlap ranges are flagged `sync_uncertain` in sidecars for both sampling and downstream use.
+Historical receipts explicitly say sampling-time library versions were not recorded
+when unavailable; later verification versions do not establish sampling-time versions.
+It is B's displayed-clock axis, not calibrated UTC. Calibration needs visible worker
+motion; empty or stationary periods cannot calibrate themselves. Uncalibratable cameras
+remain explicit failures and cannot generate calibrated proxies. The optional legacy `sync_check`
+keeps three 120 s, 10 Hz diagnostic windows, reports boundary/non-prominent peaks separately,
+and requires a valid peak with |lag| ≤0.5 s. It is not the r2 residual acceptance gate.
+Caches bind mapping and sampling implementation hashes. See the [Chinese guide](../../tools/workdata/README_CN.md).
+`timemap --sample-cache <previous-v2-root>` refits previously decoded/OCR evidence into a
+different `--out-root`. Source/media signatures, camera identity and sampling settings must match;
+the old sample hash and implementation fingerprint are retained. It performs no video decoding
+or OCR and never labels older samples as newly measured. Equal consecutive PTS are not regressions.
+
+To repair only calibration fitting, explicitly reuse saved grayscale evidence in a fresh map:
+
+```powershell
+python -m tools.workdata.sync_calibrate --timemaps "$data\timemaps_v2_base" --out-root "$data\timemaps_v2_refit" --samples-root "$data\sync_samples_v2" --session 20260828 --reuse-samples
+```
+
+This CPU-only mode compares the actual sampling implementation hash and checks the base-map hash, grid, source size/mtime, pixel SHA-256,
+96×54 uint8 shape, per-step provenance and complete source-decoding records. It performs
+no source-video decoding, model inference, GPU work, FFmpeg calls or network access.
+The output map must not already exist. Original samples remain read-only; `sampling_evidence`
+retains their original fingerprints and file hashes beside the current fitting implementation.
+Source keyframe packets are scanned to EOF without decoding and cached by source SHA,
+size and mtime (`--keyframes-root`). A motion step is missing when files change or a
+keyframe p satisfies previous_pts < p ≤ current_pts. Gaps remain missing. Validation
+also masks proxy keyframes and reports per-camera fractions. Its 96×54 grayscale
+thumbnails use `INTER_AREA`; calibration retains PyAV reformat. Sampling and fitting
+fingerprints are separate. Legacy caches require independently verified source receipts
+(`--sampling-provenance`) binding original sidecar/pixel hashes and the same sampling hash;
+this never permits a mismatch. Reuse is for fitting repairs, not sampling changes.
+Legacy v2 readers retain their two-iteration guard (equation residual / `abs(1+c1)`).
+
+Proxy generation, using the same external `$data`:
+
+```powershell
+python -m tools.workdata.proxies --timemaps "$data\timemaps_v3" --out-root "$data\proxies_v3_pending" --session 20260828 --allow-internal-gaps
+python -m tools.workdata.sync_validate --proxies "$data\proxies" --timemaps "$data\timemaps_v3" --keyframes-root "$data\keyframes_v3" --out-root "$data\sync_validation" --session 20260828 --clock-samples C:\path\outside-repository\check_proxy_clocks.json
+```
+
+Defaults are `--step-hz 5 --size 1920 1080`, CRF 20, yuv420p, constant frame rate,
+and no audio. The command uses below-normal CPU priority, real FFmpeg/ffprobe,
+and no model, GPU, network or downloads. It streams all source frames to EOF,
+records container versus decoded counts (differences above 0.5% need review),
+and validates temporary videos before publication. Valid matching outputs resume;
+`--force` rebuilds them. Existing outputs that fail validation or have a different
+fingerprint are preserved and require explicit `--force` to replace. Sidecars record the nearest source frame, native PTS,
+time difference and a gap flag when the difference exceeds half a grid step.
+
+Multiple common-coverage intervals are rejected by default. The explicit
+`--allow-internal-gaps` option retains one continuous clock grid
+across the entire range and records every coverage gap and nearest-frame gap flag;
+it does not compress time. Adding recordings preserves the original seven outputs. For an approved replacement batch, keep old proxies in place until the entire batch passes;
+then rename them to dated backups and switch the validated directories. `sync_validate`
+reuses the saved fixed k indices: proxy k, then its recorded source frame, then the same
+pairs at k−1/k+1/k−2/k+2, stopping at the first recognized reading. The decoded source PTS
+must match the sidecar exactly. Each attempt records its source and the 96×54 thumbnail
+mean absolute difference. Missing reads remain unevaluable (≥90% must be evaluable).
+`delta_distribution` groups evaluable/unevaluable/pass counts, signed minimum/median/maximum
+and absolute p90 clock differences by camera. Failed differences remain included;
+statistics are null when no readings are evaluable.
+Clock differences are `d = base_X(pts) - reading`, using the selected source frame's
+own base map and integer OSD reading: A/B −0.5 ≤ d <1.5 s, E −1.5 ≤ d <2.5 s.
+`reading_minus_grid_distribution` separately reports reading minus grid time as sign evidence.
+Residual checks cover A–B, E–B and A–E:
+≥90% of valid windows within ±0.2 s, median |lag| ≤0.1 s, midpoint |offset| ≤0.1 s,
+and |drift| ≤0.1 s/hour. All failures remain in reports; no window is removed to pass.
+Results are passed, failed, or `insufficient_evidence` (<10 windows or <30% coverage).
+A–B and E–B must pass; A–E may instead lack evidence, with its inferred lag reported.
+Per-window/overall closure (A−B)−(E−B)−(A−E) and maximum endpoint bias are descriptive, not new gates.
+Three ±1 s worker-motion strips plus one within ±10 s of each cut support visual review;
+every reread frame's thumbnail must match cached validation pixels exactly.
+Compare v3/v2 lag over each existing session: retain v2 proxies and their original SHA
+when every camera differs by ≤0.05 s, otherwise regenerate. Record that provenance.
+Only after the approved replacement batch passes, regenerate trial and completed-ROI datasets;
+redraw segments containing `sync_uncertain` in the same stratum and record every attempt.
+Never create formal labels automatically. Formal annotation waits
+for independent synchronization acceptance. See the
+[Chinese tool guide](../../tools/workdata/README_CN.md).
+
+Three-view annotation, from the repository root in Gazelle-next:
+
+```powershell
+$dataset = 'C:\Users\yun\Documents\Claude_Code\gazelle_validation\roi_r2_trial'
+python -m tools.validation.sample_segments --proxies-root "$data\proxies" --dataset-root $dataset
+python -m tools.validation.extract_frames --dataset-root $dataset
+python -m tools.validation.extract_frames --dataset-root $dataset --validate-only
+python -m tools.validation.annotate_server --dataset-root $dataset --labels-path "$dataset\review_trial.json" --annotator reviewer
+# After annotation and stopping the local server:
+python -m tools.validation.labels validate --dataset-root $dataset --labels-path "$dataset\review_trial.json"
+# Strict pilot check; other segments receive structural checks:
+python -m tools.validation.labels validate --dataset-root $dataset --labels-path "$dataset\review_trial.json" --segment 20260911_pilot
+```
+
+These tools use no model, GPU, downloads, external network or FFmpeg executable.
+Extraction streams CPU OpenCV frames at below-normal priority. Defaults use seed
+20261015, four strata per session (two below 45 minutes), 60-second segments and
+5 Hz steps. Segments with more than two seconds of gap steps are redrawn up to
+ten times; pilot overlaps also trigger a recorded redraw. The fixed pilot is listed
+first and excluded from evaluation. Each session uses `seed + int(session)`;
+`--sessions` defaults to 20260821 20260828 20260903 20260911 20260925 20261002 20261009.
+Other sessions are ignored with a message; the manifest records selected sessions.
+Every proxy and extracted frame is bound by SHA-256.
+
+Explicit `--regions-path` requires completed regions and valid export hashes;
+otherwise sampling fails. Classes and reference bytes come only from the marker's
+export directory, with hashes checked before copying. Omit `--regions-path` to use
+the `roi_r2_trial` dataset with default classes;
+when regions are ready, create a fresh `roi_r2` dataset for formal annotation.
+Existing datasets are refused unless `--overwrite` is explicit; this preserves
+the entire previous directory under a timestamped backup name. Formal labels
+default to `labels.json`; use `--labels-path` for reviews. Displaying a loaded image
+records a viewed step and creates/saves labels. Changes autosave atomically with a
+rolling `.bak` and reject stale or externally changed labels. Resume chooses the
+first unfinished segment, then its first unseen step, first null step, or step 0.
+
+The editor provides playback, step controls, number-key change points, deletion,
+undo, a colour timeline and other-person intervals. It waits for the current
+image before accepting a judgment. Version 3 labels record merged, monotonically
+growing `viewed_ranges`. Unseen steps keep a stripe texture even when labelled.
+Only **本段完成** explicitly writes `finished_at`, after all steps have been viewed
+and labelled, with all required points or skips; changing labels, points, skips or other-person ranges clears it. Completion checks only previously saved viewed ranges; ranges newly
+included in the finish request are saved but do not qualify that request. Replay a long span
+after changing its labels before confirming completion: viewed only means displayed.
+View-only autosaves occur at most once per second during playback and unplayed stepping,
+jumps or change-point navigation. Pausing active playback, switch, finish, hide and close
+flush without throttling. Hiding queues behind in-flight saves; only pagehide/beforeunload dispatch
+direct `keepalive` requests. Delivery on close or network interruption is not guaranteed, so wait for saved status
+before closing. Server revision checks still apply. Label, people and note edits are never throttled; failed saves stop editing.
+`labels validate` errors, including non-object JSON, include the segment
+and reason in one line, exit 1, without traceback.
+Region save/export status comes from the server, including unchanged saves. Version 1 and 2 labels
+are rejected with instructions to reannotate. Strict validation requires all completion
+conditions; repeat `--segment ID` to restrict strict checks to selected segments.
+Unlabelled draft steps are distinct from intentional `unknown`; `--allow-incomplete` only validates drafts and does not
+certify completion. See the [Chinese annotation guide](../../tools/validation/ANNOTATION_GUIDE_CN.md).
+Judge visible eyes before head direction, and head direction before hand activity.
+`hands_object` takes priority over the drawn region containing the attended hand or held object.
+Use a region when gaze lands on the tabletop or an object inside it. Default to a point on the first step
+of the run; otherwise choose the step where the target is clearest. Points and skip marks are mutually exclusive
+within each run. Out-of-view replaces points only when the target is outside the overview for the entire run;
+if partly visible, point only at the visible portion, without out-of-view. If uncertain, skip the whole run.
+S/O removes all points in the run and reports the count; undo restores both. Cancel the mark before adding a point.
+On merging runs, points take priority and conflicting marks are removed with a notice and can be undone.
+Only Ctrl/Cmd+Z without Shift or Alt performs keyboard undo; there is no redo. Other Ctrl/Meta/Alt
+combinations retain browser behavior and do not annotate. Holding S/O/X/Delete/digits/space or Ctrl/Cmd+Z
+acts only once and suppresses repeated browser actions; arrows can repeat. Slow frames receive a full step
+after loading. The `hands_object` class uses bright yellow-green `#b6ff00`.
+After using a slider or dropdown with the mouse, you can use shortcuts immediately. Mouse-clicked
+buttons also release focus; Tab/keyboard operation and the notes field retain focus.
+With four targets, keys are 1–4 targets, 5 hands, 6 `cell_other`, 7 `away`, 8 `absent`, 0 `unknown`.
+Click the overview to add/replace the current step's point. X deletes it; S toggles an `unsure` skip;
+O toggles `out_of_view` for hands/other only. Delete still removes a class change point.
+Every target/hands/other run needs a point or skip. Extra points must be at least 5 steps (1 s) apart
+within a run; away/absent/unknown have no points. Current points are bright, other points in the run
+are faint; the timeline marks points and missing runs. Class edits clean incompatible points/skips
+with a notice, and undo restores them. Merging runs retains the earlier point when spacing conflicts.
+Version 3 adds `points: [{step, x, y}]`, finite normalized 1920×1080 overview coordinates in [0, 1],
+and `point_skips: [{step, reason}]`, where step is a run start and reason is `unsure` or `out_of_view`.
+Point steps are unique. Completion requires previously saved labels/points/skips as well as viewing.
+The editor and labels validator require manifest `annotation_schema_version: 3` before opening labels;
+regenerate old datasets or update their classes and manifest following TASK-125 section 5.
+For an authorized re-export, append `--backup-existing` to the `tools.validation.render_roi_reference`
+command above. It renames prior classes, reference, overlays and completion marker into a dated backup,
+then writes new exports using local CPU/Pillow and an existing font. Region JSON is unchanged;
+there is no model, GPU, FFmpeg executable or network activity.
+All videos, frames and labels remain outside Git and must not be uploaded.
+
+## 16. Validation commands
 
 These checks are offline and do not construct a model. Default tests mock FFmpeg capability probes/transcodes and do not run a real FFmpeg process:
 
 ```powershell
-conda activate Gazelle
+conda activate Gazelle-next
 python main.py --help
 python main.py --list-models
 $env:PYTHONPYCACHEPREFIX = Join-Path $env:TEMP "gazelle-usage-docs-pycache"

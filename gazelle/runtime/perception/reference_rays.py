@@ -163,7 +163,9 @@ def estimate_face_pose_reference_ray(
     pitch = math.radians(float(head_pose.pitch_deg))
     roll = math.radians(float(head_pose.roll_deg))
     horizontal = math.sin(yaw) * math.cos(pitch)
-    vertical = -math.sin(pitch)
+    # Design 2026-07-21 section 14: project the face forward vector as
+    # (r02, -r12) into displayed coordinates (y down, roll clockwise).
+    vertical = math.sin(pitch)
     vector = (
         math.cos(roll) * horizontal - math.sin(roll) * vertical,
         math.sin(roll) * horizontal + math.cos(roll) * vertical,

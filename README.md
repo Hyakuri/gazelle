@@ -1,7 +1,9 @@
 # Gaze-LLE
 #### CVPR 2025 (Highlight)
 
-For complete runtime setup, every CLI option, input/output schemas, and runnable image/video workflows, see the [Project Usage Guide](docs/USAGE.md).
+For complete runtime setup, every CLI option, input/output schemas, and runnable image/video workflows, see the [Project Usage Guide](docs/usage/USAGE.md).
+
+For another computer or agent, start with the [Handoff Guide](docs/handoff/HANDOFF.md) and [Shared Agent Workflow](docs/rules/AGENT_WORKFLOW.md).
 
 [中文说明](README_CN.md)
 
@@ -26,40 +28,35 @@ When adding user-facing features, scripts, CLI arguments, environment requiremen
 
 ## Installation
 
-`environment.yml` is the current recommended Gazelle environment. It documents the validated NumPy 2.4.6 stack for this fork, including Python 3.11, PyTorch 2.6.0 + CUDA 12.6 wheels, xFormers 0.0.29.post3, MediaPipe 0.10.35, production ByteTrack dependencies (`trackers==2.5.0.post0`, `supervision==0.29.1`), and `ultralytics==8.4.104` for the validated dependency transaction.
+`environment.yml` describes the current `Gazelle-next` environment: Python 3.14 (validated with 3.14.8), PyTorch 2.14.1 with CUDA 13.0 wheels, MediaPipe 1.1.1, and OpenCV 5.0. The explicit package versions are `torch==2.14.1+cu130`, `torchvision==0.29.1+cu130`, `timm==1.0.30`, `numpy==2.5.4`, `scipy==1.18.1`, `pandas==2.3.3`, `matplotlib==3.11.2`, `scikit-learn==1.9.1`, `pillow==12.3.0`, `opencv-python==5.0.0.93`, `opencv-contrib-python==5.0.0.93`, `mediapipe==1.1.1`, `trackers==2.6.1`, `supervision==0.30.9`, `av==19.0.1`. pandas stays on 2.3 because the data-preparation scripts have not been validated with pandas 3.0.
 
-`environment_1.0.yml` preserves the previous NumPy 1.26.4 configuration as a rollback/reference copy of the earlier Gazelle environment definition. Both files declare the Conda environment name `Gazelle`, so only create one environment with that name at a time.
+`environment_py311.yml` preserves the previous Python 3.11 definition byte for byte and still declares `name: Gazelle`. Keep that existing environment unchanged for rollback. `environment_1.0.yml` is the older NumPy 1.26.4 reference, also named `Gazelle`; use a separate name if creating it alongside another environment.
 
-For the current workflow, keep using the validated `Gazelle` environment:
+The explicit dependency list has changed as follows:
+
+- `torchaudio` is omitted: repository code does not use it, and the evaluated stack has no matching torch 2.14 audio package.
+- `xformers` is omitted: the evaluated Windows builds were incompatible with this torch version or lacked CUDA operators. DINOv2 uses PyTorch `scaled_dot_product_attention`.
+- `ultralytics` is omitted: repository code does not import it, and YOLO inference/export were not validated.
+- `polars`, `polars-runtime-32`, and `nvidia-ml-py` are omitted with the unused Ultralytics dependency group.
+- `pydeprecate` and `defusedxml` are no longer explicitly pinned. They remain installed as required transitive dependencies of trackers/supervision: `pydeprecate==0.13.0` and `defusedxml==0.7.1`. They must not be uninstalled to match an omission in this file.
+
+For an existing installation, activate it without reinstalling packages:
 
 ```powershell
-conda activate Gazelle
-pip install -e .
+conda activate Gazelle-next
 ```
 
-On a fresh machine, create the current environment from `environment.yml`:
+On a new machine, after authorizing environment creation, run:
 
 ```powershell
 conda env create -f environment.yml
-conda activate Gazelle
+conda activate Gazelle-next
 pip install -e .
 ```
 
-If you need the legacy NumPy 1.26.4 definition alongside the current environment for comparison or rollback, override the name when you create it:
+Creation downloads packages and writes a new `Gazelle-next` environment; editable installation also modifies it. Neither command runs inference. From the repository root, `python main.py` can use the checkout directly. Do not recreate or prune an existing environment.
 
-```powershell
-conda env create -f environment_1.0.yml --name Gazelle-1.0
-```
-
-After activating `Gazelle`, these commands validate the CLI and prepare the default local model cache:
-
-```powershell
-python main.py --help
-python main.py --list-models
-python main.py --prepare-only --model gazelle_dinov2_vitb14_inout --cache-dir models
-```
-
-`--help` and `--list-models` do not download or run inference. `--prepare-only` may download the Gazelle checkpoint and DINOv2 resources on the first run; later runs reuse `models/checkpoints` and `models/torch_hub` when those files are already cached.
+For rollback, use `conda activate Gazelle` if it is retained locally. Only if it is absent and recreation is authorized, run `conda env create -f environment_py311.yml`. Keep `wandb` as a separately installed requirement for the upstream training scripts; this change does not validate training.
 
 ## Pretrained Models
 
@@ -179,6 +176,15 @@ This command loads the image, creates its output directory, collects head observ
 
 When `--overwrite` is used, the per-image output directory is cleaned before writing new results, so stale heatmaps or rendered images from earlier runs are removed.
 
+For image/video inference, argument-only static/json errors are rejected with
+usage exit code 2 before any `--overwrite` deletion: missing/invalid static
+boxes or IDs, and missing/non-file JSON paths. Box validation retains the
+original coordinates in `run_config.json`; pixel clipping still needs image
+dimensions. Deletion remains before provider, model, and resource setup, so
+JSON content errors, MediaPipe resources, checkpoints, and device availability
+can still fail after old results have been removed. `--list-models` and
+`--prepare-only` do not require static boxes or JSON paths.
+
 Head input sources:
 
 - `--head-source none` creates one single-person fallback head with `bbox=None`.
@@ -222,15 +228,46 @@ The pose selection prepares `pose_landmarker_lite.task`, `pose_landmarker_full.t
 
 Default unit tests use fake downloaders and do not access the network. The pinned registry hashes were established once by downloading exactly the five official versioned assets to an OS temporary directory outside the repository, calculating SHA-256, and deleting that temporary directory.
 
-`--head-source mediapipe` is now wired into the runtime head-provider factory. The provider composes prepared resources, the MediaPipe backend, head/pose fusion, video ByteTrack tracking, and the 500 ms short-occlusion bridge. Image IDs are deterministic and start at zero; video IDs come from ByteTrack. In single-person mode, a post-bridge arbitration step keeps at most one identity and prunes stale identities replaced by a current observation. By default, Gazelle receives normalized, non-`None` MediaPipe head bboxes only when the current perception passes the conservative gaze-eligibility policy, including minimum perception and face-ray confidence values of `0.50`.
+`--head-source mediapipe` is now wired into the runtime head-provider factory. The provider composes prepared resources, the MediaPipe backend, head/pose fusion, video ByteTrack tracking, and the 500 ms short-occlusion bridge. Image IDs are deterministic and start at zero; video IDs come from ByteTrack. For every `--max-heads` value, post-bridge arbitration limits the output and prunes bridges according to the confirmed selection. By default, Gazelle receives normalized, non-`None` MediaPipe head bboxes only when the current perception passes the conservative gaze-eligibility policy, including minimum perception and face-ray confidence values of `0.50`.
 
 The integration keeps the model boundary deliberately small: fusion/tracking produces an ordered `HeadObservation(person_id, bbox, confidence)` tuple and an aligned `HeadPerception` tuple for observation sidecars and rendering. The default `--gazelle-head-mode eligible` passes only conservative eligible heads. Diagnostic selectors may instead opt in one or more states (`face_pose`, `face_only`, `pose_only`, `tracked_only`) or views (`frontal`, `profile`, `back_or_occluded`, `unknown`); `observed` selects current observations, and `all` selects every active perception. Multiple selectors use OR semantics. Even in diagnostic mode, expired tracks cannot be revived and normalized non-`None` bbox validation remains mandatory. Face bbox, face mesh, face/pose keypoints, both head-pose reference rays, head pose, and tracking state are never added to the Gazelle tensor input. Gazelle returns results in the selected-person order.
 
-The current `environment.yml` dependency set has been validated with real MediaPipe 0.10.35, production ByteTrack via `trackers==2.5.0.post0`, Gazelle/DINOv2 CUDA image inference, and a short rendered video pipeline. This repository now treats that NumPy 2.4.6 environment as the recommended end-to-end setup for the staged runtime work. Optional Ultralytics YOLO model inference and export have not been validated and are not claimed here.
+The 2026-10-17 environment evaluation verified the `Gazelle-next` stack with the complete offline gate, 300-frame static and MediaPipe/production ByteTrack CUDA runs, decoded-frame comparisons, and mp4v/H.264 rendering. Environment changes do not establish accuracy improvements or validate training/YOLO. Current-environment smoke checks use local cached resources; MediaPipe may send telemetry, and Torch Hub may probe GitHub.
 
-The runtime narrowly filters the exact upstream `trackers` `target=None` deprecation warning during the lazy ByteTrack import while leaving unrelated `FutureWarning` messages visible. Normal CUDA image/video inference resolves the checkpoint without constructing DINOv2, then constructs the predictor once with xFormers available. If optional Triton is absent and the user has not set an xFormers Triton override, model construction temporarily sets the official `XFORMERS_FORCE_DISABLE_TRITON=1` switch; this skips the unavailable Triton probe without disabling other xFormers operators or modifying the Conda environment. `--prepare-only` still intentionally disables xFormers during strict-load validation, so DINOv2 may print non-fatal xFormers-disabled/not-available status warnings on that path. Because DINOv2 caches its backend choice at first import, a long-lived Python process that later requests an incompatible CPU/prepare-only versus xFormers-enabled CUDA construction now fails clearly instead of silently reusing the wrong backend; use a fresh process to switch backend modes.
+The runtime narrowly filters the upstream `trackers` `target=None` deprecation warning during lazy import while retaining other warnings. Checkpoint resolution does not construct DINOv2; inference constructs the predictor once. The current `Gazelle-next` environment does not install xFormers; DINOv2 uses PyTorch `scaled_dot_product_attention`. The runtime retains its compatibility policy for environments that do install xFormers: CPU construction and `--prepare-only` disable it; CUDA may request it unless `XFORMERS_DISABLED` is set. When optional Triton is absent and no override is set, `XFORMERS_FORCE_DISABLE_TRITON=1` skips that probe without disabling other xFormers operators or modifying the environment. Nonfatal xFormers-disabled/not-available messages may still appear during strict loading. DINOv2 caches its backend selection, so switching incompatible CPU/prepare-only and xFormers-enabled CUDA modes in a long-lived process requires a fresh process.
 
 ### Independent Head Observation Schema
+
+`head_pose` uses displayed-image signs: positive yaw turns right, positive pitch down,
+and positive roll clockwise. The face reference ray is the normalized `(r02, -r12)`
+projection of the matrix forward vector (x right, y down). Roll and vertical face-ray
+signs differ from earlier outputs; downstream consumers must account for this correction.
+The two independent rays remain uncalibrated 2D head-pose references, not measured eye gaze.
+
+MediaPipe video frame 0 and each new track's first frame emit the observed head with
+`tracking.provisional=true` and age 1. Confirmation with IoU ≥0.20 within two frame
+indices links to the same public ID. Provisional heads do not seed the short-occlusion
+bridge; image mode, confirmed heads and `tracked_only` use `tracking.provisional=false`.
+Bridge retention uses a separate selection excluding all provisional heads, for every `--max-heads`.
+A one-frame spawn is neutral to bridge pruning when its frame has at least one confirmed
+perception and the candidate count, including the spawn, does not exceed the candidate pool size.
+Without these conditions, continuity is not guaranteed.
+Face/pose matching uses at least 3 candidates before output selection. The anchor rule requires
+the pose nose inside the face-derived head box; without a nose, at least two available head
+keypoints must be inside, or, if fewer than two exist, the head center must be between and above
+both shoulders. Video selection prefers the same observed identity, then spatial continuity
+with fresh observations, then identity continuity (including active bridges), then existing priority.
+Clearly separated observed head boxes (IoU below 0.05) record a pair that blocks spatial
+replacement until either ID has been absent longer than the bridge window. Overlapping
+candidates may replace each other; this is not a guarantee of physical identity. Spatial
+matches use global center-distance order, independent of previous-selection order. Selection memory
+uses confirmed heads, falling back to the output only when no confirmed head is selected.
+Bridge pruning applies to every `--max-heads` value. Image IDs are renumbered from 0;
+video IDs need not start at 0 or be contiguous. Eligibility thresholds and CLI options are unchanged.
+Provisional heads can enter Gazelle: `--gazelle-head-mode all` selects pose-only heads,
+and conservative mode selects heads with a valid face ray. An unconfirmed one-frame spawn
+increases the number of distinct `person_id` values; downstream identity counts should
+first exclude rows with `tracking.provisional=true`.
 
 `gazelle.runtime.perception.outputs` provides `head_frame_to_json_dict(...)` for one independent provider result. The image pipeline uses `write_head_observations_json(output_path, **frame_kwargs)` to create parent directories and write exactly one indented JSON document with a trailing newline. The video pipeline writes every serialized provider result as one compact `head_observations.jsonl` row. The record has exactly `frame_index`, `timestamp_ms`, `status`, `width`, `height`, `provider`, `timings_ms`, and `people` fields. `status` is `"ok"` when the result has heads and `"no_head"` otherwise. `timings_ms` retains provider timing names and finite millisecond values.
 
@@ -307,7 +344,219 @@ python main.py `
   --overwrite
 ```
 
+### Research data tools
+
+The intake scope is the original seven recordings plus `20261016` and `20261023`;
+`20261030` has a separate intake contract. Use `E:\Gazelle_Workdata` as the read-only
+source root. Inventory and remux accept repeated `--session` arguments and preserve
+unselected rows; do not rescan the whole root when an unrecognized recording is present.
+Back up shared manifests before appending records. Historical paths in hashed outputs
+remain provenance records; relocated remux inputs are checked by relative path, size and SHA-256.
+
+The optional webcam `cam_w` uses `WIN_YYYYMMDD_HH_MM_SS_Pro.mp4` filename time plus native PTS
+(`filename_clock`, slope 1; naive computer time encoded as UTC epoch seconds).
+It is stored in `auxiliary_cameras`; required `cameras` remain A/B/E and only they determine overlap.
+W uses the same 5 Hz calibration method and uncertainty rules, with a 1280×720 video-only
+`proxy_webcam.mp4` and sidecar; A/B/E remain 1920×1080. W–B uses the A–B residual thresholds;
+W failure makes W unavailable without blocking A/B/E. OSD checks apply only to A/B/E.
+These tools decode/encode locally on CPU (FFmpeg for remux/proxies), with no model, CUDA or downloads.
+
+For an approved additional cohort, sampling accepts `--no-pilot --cohort 2026-10` and
+`--worker-spans <worker_spans.json>`. Defaults retain the original pilot protocol.
+Each segment gets `span_id` by maximum time overlap, or nearest worker interval if entirely
+inside a handover gap; ties use the earlier interval and never trigger resampling.
+Sampling only reads metadata/hashes and writes a new dataset; extraction uses CPU/OpenCV.
+A W reference requires passing W–B validation bound by `proxies/manifest.json` hashes.
+It is a separate 640×360 JPEG per step with SHA-256, gap and `sync_uncertain` flags.
+The editor shows a collapsible W reference with an uncertainty notice; gaze points remain
+on E in the unchanged three-view montage. Preserve existing datasets and labels.
+The formal `roi_r2_2026_10` dataset is generated only after its complete approved cohort is ready.
+
+`sync_calibrate`, `proxies`, and `sync_validate` accept `--inventory <inventory.json>` for
+moved originals: valid recorded paths (including remux files) stay in use; missing paths
+are resolved in memory from inventory root/relative path after matching source SHA records
+and file sizes. Disk mtime must equal inventory `mtime_ns` and mapped `media_mtime_ns`;
+resolved paths are checked again. A missing remux path (`needs_remux=true`) is rejected.
+They do not rehash entire source videos or rewrite old mapping paths.
+Refined cuts stay inside the closed `adjacent_window_centers` interval; without a candidate,
+the coarse cut is retained with `refined=false`. `--reuse-samples` refits verified saved
+samples into a fresh output map, without decoding; proxy generation records
+`allow_internal_gaps` and overlap bounds in `session.json`.
+Inventory reruns preserve row order and reject a selected root missing existing sources.
+Remux merges report rows even without `--session`; a failed refresh keeps an existing valid row.
+Webcam filename formats are shared through `tools/workdata/camera_roles.json`.
+W event-frame failures retry strips without W. Missing, moved or stale W validation evidence
+is recorded in `webcam_unavailable` in the new dataset manifest, while A/B/E sampling continues.
+The W panel follows the timeline and class buttons; loading reserves its space, hides stale
+images and does not mark a step viewed or block three-view labelling on W failure.
+Worker files marked `review-only` are rejected. Spans must fit the overlap bounds; header and
+handover fields are allowlisted. Header fields are `clock`, `rule`, `precision_seconds`
+(5), `handover_face_grace_seconds` (10), `status` (`approved`), and `source_draft_sha256`;
+`tools/workdata/workers.py` defines the exact anonymous rule/clock values.
+
+`sync_calibrate` and `sync_validate` offer `--second-look` (off by default) for recordings
+from 20261016 onward. It reuses the same signals in 120-second windows, 60-second steps,
+without changing fit coefficients or first-pass evidence. A/E fits recheck only
+`residual_tail_exceeds_0_2`; A–B/E–B recheck only `fraction_within_0_2 < 0.9`.
+Those rechecks require fraction ≥0.9, median absolute residual ≤0.1 s, absolute midpoint
+bias ≤0.1 s and absolute drift ≤0.1 s/hour. A failed A–E pair rechecks with median and
+absolute midpoint bias ≤0.15 s, absolute drift ≤0.15 s/hour, without a fraction gate.
+Every recheck needs ≥10 valid windows and ≥30% coverage. W–B is never rechecked and
+cannot change the session grade. Original A–E `insufficient_evidence` remains allowed.
+Validation writes `sync_grade`: `official` for original gates, `second_look` if any authorized
+recheck was used, or null if synchronization failed. New index records require a successful
+grade; missing grades in the old seven recordings mean `official`. A `valid_second_look`
+map requires `--second-look` validation. Existing recordings are not implicitly rerun.
+The accepted 20261016 validation remains unchanged; only its index grade is added.
+Rechecks use CPU and write maps/validation outside the repository, with no model, CUDA,
+network or downloads; proxy validation decodes media and reads exact source frames.
+W exceptions record `error_type`; sampling retains `webcam_error_type` alongside the reason.
+Approved worker files require all header fields; `span_id` is `<recording>_worker_<n>`.
+
+
+The local annotation toolkit samples 60-second three-view segments, extracts
+JPEG steps, and serves an autosaving browser editor at `127.0.0.1`. Completed
+region definitions supply the classes. Omit `--regions-path` for a default-class
+trial dataset; an explicit unfinished region file is rejected. Each session uses
+`seed + int(session)` independently; `--sessions` defaults to the original seven dates
+and formal segments never overlap the pilot. Labels use version 3: `viewed_ranges`
+records displayed steps, unseen steps retain stripes, and **本段完成** explicitly
+writes `finished_at` only after every step has been viewed, labelled and point-covered. Editing
+labels, points, skips or other-person ranges clears completion. Replay a long span after changing its labels
+before confirming completion: viewed only means displayed. Completion uses previously saved
+viewed ranges; new ranges in that request are saved but cannot qualify it. View-only autosaves
+are coalesced to at most once per second during playback and unplayed stepping/jumps.
+Pausing active playback, switch/finish/hide/close flush without throttling. Hiding queues behind
+in-flight saves; only pagehide/beforeunload send direct `keepalive` requests. Delivery on close
+or network interruption is not guaranteed, so wait for saved status before closing. Server revision checks remain; label, people
+and note edits save immediately. `labels validate --segment ID`
+strictly checks just that segment; repeat the option for several. It uses CPU only, with no FFmpeg executable, model, GPU, downloads
+or external network. See [usage](docs/usage/USAGE.md#15-research-data-tools) and the
+[annotation guide](tools/validation/ANNOTATION_GUIDE_CN.md).
+
+Judge visible eyes before head direction, and head direction before hand activity.
+`hands_object` takes priority over a drawn region when attention is on a hand or held object.
+Use a region when gaze lands on the tabletop or an object inside it. Default to a point on the first step
+of the run; otherwise choose the step where the target is clearest. Points and skip marks are mutually exclusive
+within each run. Out-of-view replaces points only when the target is outside the overview for the entire run;
+if partly visible, point only at the visible portion, without out-of-view. If uncertain, skip the whole run.
+S/O removes all points in the run and reports the count; undo restores both. Cancel the mark before adding a point.
+On merging runs, points take priority and conflicting marks are removed with a notice and can be undone.
+Only Ctrl/Cmd+Z without Shift or Alt performs keyboard undo; there is no redo. Other Ctrl/Meta/Alt
+combinations retain browser behavior and do not annotate. Holding S/O/X/Delete/digits/space or Ctrl/Cmd+Z
+acts only once and suppresses repeated browser actions; arrows can repeat. Slow frames receive a full step
+after loading. The `hands_object` class uses bright yellow-green `#b6ff00`.
+After using a slider or dropdown with the mouse, you can use shortcuts immediately. Mouse-clicked
+buttons also release focus; Tab/keyboard operation and the notes field retain focus.
+The editor and labels validator require manifest `annotation_schema_version: 3` before opening labels;
+regenerate old datasets or update their classes and manifest following TASK-125 section 5.
+With four targets, keys are 1–4 targets, 5 hands, 6 `cell_other`, 7 `away`, 8 `absent`, 0 `unknown`.
+Click the overview to add/replace a point; X deletes the current point, S toggles an `unsure` skip,
+and O toggles `out_of_view` (hands/other only). Delete still deletes a class change point.
+Each target/hands/other run needs a point or skip; extra points must be at least 5 steps (1 s) apart.
+Away/absent/unknown runs have no points. Class changes clean incompatible points/skips with a notice;
+undo restores them. Version 3 stores `points: [{step, x, y}]` in normalized 1920×1080 overview
+coordinates and `point_skips: [{step, reason}]`; datasets record `annotation_schema_version: 3`.
+Completion uses previously saved labels/points/skips as well as viewing. Versions 1 and 2 require reannotation.
+Authorized re-export with `render_roi_reference --backup-existing` renames old exports and the completion
+marker into a dated backup; it preserves the region JSON and uses local CPU only.
+
+`tools.workdata.proxies` creates three 5 Hz, 1920×1080 videos per
+session, with source-frame sidecars and full decode counts. It uses CPU PyAV and
+FFmpeg/libx264, writes outside the repository, and uses no model, GPU or network.
+See [Research data tools](docs/usage/USAGE.md#15-research-data-tools) for commands and
+the explicit policy for internal coverage gaps.
+
+The clock tools `tools.workdata.osd_clock`, `tools.workdata.timemap`, and
+`tools.workdata.sync_check` read displayed clocks, fit native video PTS, and check
+motion alignment. They use CPU/PyAV and write maps and reports outside the
+repository; no FFmpeg executable, GPU, model, or network is used. Unreadable
+clocks remain missing, and failed synchronization checks require review.
+
+Synchronization r2 uses front camera B as the reference. `tools.workdata.sync_calibrate`
+fits A/E motion offsets, drift and supported steps after a v2 native-PTS base map;
+`tools.workdata.sync_validate` measures residual lag, checks fixed clock samples and
+exports event strips for human review. Both run on CPU, write only external data,
+and use no models, GPU or network. Per-camera clock differences are summarized in
+`delta_distribution`; missing reads stay missing. Calibration needs visible worker motion;
+empty or stationary periods cannot supply calibration windows. Preserve previous
+proxies and datasets as dated backups. Formal annotation waits for synchronization review.
+For a fitting-only repair, `timemap --sample-cache <previous-v2-root>` can reuse verified
+decoded/OCR evidence in a different output root, retaining its original implementation and file hashes.
+`sync_calibrate --reuse-samples` refits verified grayscale caches without decoding source
+video. Use a fresh output map; the old sampling fingerprint and current fitting fingerprint
+are recorded separately, and the original samples remain unchanged.
+Reuse compares the actual sampling implementation hash; a mismatch is rejected. Packet-only
+keyframe scans mask motion steps crossing a source keyframe or source-file boundary;
+validation also masks proxy keyframes and uses `INTER_AREA` thumbnails. v3 fits use
+`T(b) = b - L(b)` in each camera's base time, an L1 step search with ≥25% gain,
+and explicit overlap exclusion. Cut uncertainty covers the nearest valid window centers
+on both sides, extended by each window's half length (60 s long / 20 s refinement).
+Without valid refinement windows, `localized: false` preserves the full evidence gap.
+These intervals and gaps/overlaps carry `sync_uncertain` in sidecars; sampling redraws
+affected segments within the same stratum. Clock reads try proxy k, its exact source PTS,
+then the same pairs at k−1/k+1/k−2/k+2; each attempt records its source and the 96×54
+thumbnail mean absolute difference. Sampling-time library versions absent from old
+receipts are explicitly recorded as unknown, separately from later verification versions.
+Residual results are passed, failed, or `insufficient_evidence` (<10 windows or <30% coverage).
+A–B/E–B must pass; A–E may lack evidence, with closure inference reported. Clock checks use
+`d = base_X(pts) - reading`: A/B −0.5 ≤ d <1.5 s, E −1.5 ≤ d <2.5 s.
+Preserve the original seven recordings' outputs and datasets when adding recordings.
+Any approved replacement batch must pass validation before a backed-up directory switch or dataset rebuild.
+
+Local research data tools build a read-only source inventory and losslessly
+remux AVI empty packets. Run `python -m tools.workdata.inventory` and
+`python -m tools.workdata.remux` from the repository root; these read the source
+videos and write derived files outside the repository, invoking ffprobe/FFmpeg
+on CPU without GPU, models, or network access. See the research data tools in
+[USAGE](docs/usage/USAGE.md) and the [Chinese tool guide](tools/workdata/README_CN.md).
+
+Overview region tools extract local candidate frames and provide a browser editor
+at `127.0.0.1`, with autosave and reference/class export. Read the
+[region guide](tools/validation/ROI_GUIDE_CN.md) and [USAGE](docs/usage/USAGE.md) for
+repository-root commands. Images and region files stay in the external data root;
+these tools use CPU/OpenCV/Pillow, no FFmpeg executable, models, GPU, or external network.
+Exported annotation classes retain region colors for the later annotation tool.
+Draw targets first and the work cell last; clicking overlapping regions selects
+the smallest region, with its vertex handles above the cell. Export requires
+1–5 targets and exactly one cell. Digit keys follow target drawing order, then
+`hands_object`, `cell_other`, `away`, `absent` (at most 1–9); `unknown` is 0. Autosave is a draft:
+successful export writes `roi_regions.complete.json` with a timestamp and region
+SHA-256. Marker version 2 also binds `export_root` and the SHA-256 of
+`roi_reference.png` and `classes.json`; sampling verifies both before copying.
+`--out-root` selects the CLI export directory; otherwise formal regions export
+beside their JSON and other filenames export to `<stem>_export/`. The page displays
+completion status, and regions below 0.5% of the image require confirmation.
+Editing invalidates completion until the next export.
+
 ### Video Inference
+
+Video timestamps preserve valid container times, minimally repair rounded collisions,
+and estimate missing times as `max(prev_out + 1000 / fps, p + 1)`: the larger of
+the previous unrounded output plus one nominal frame interval and the previous
+rounded output plus 1 ms. Missing means nonfinite, negative, or zero from frame
+index 2 onward. A zero at index 1 becomes 1 ms instead of a frame-index estimate.
+`run_config.json` records `container_frame_count`,
+`frames_required`, `decode_complete`, and `timestamp_sources` (counts for
+`container`, `repaired`, and `fps_fallback`). With a known container count N,
+the tolerance is T = max(2, ceil(0.005 * N)). A requested `--max-frames` at or
+before N - T must be decoded exactly; otherwise at least max(0, N - T) frames
+are required. Unknown counts disable this check. Early decoding failure exits
+nonzero and preserves partial JSONL and the failure config. With rendering enabled,
+`avc1` skips H.264 finalization and leaves only JSONL and `run_config.json`;
+`mp4v` also leaves an incomplete `rendered.mp4`. Unknown counts make
+`container_frame_count`, `frames_required`, and `decode_complete` null.
+
+For AVI files containing tiny empty packets, run this local lossless remux from
+the repository root (replace the input/output paths):
+
+```powershell
+ffmpeg -n -fflags +genpts -i "C:\path\to\read-only-source\input.avi" -map 0:v:0 -c:v copy -bsf:v "noise=drop=lt(size\,64)" "C:\path\outside-repository\remuxed.mp4"
+```
+
+This invokes FFmpeg and writes a new video-only MP4; it preserves the input and
+refuses an existing output. It uses no model, CUDA, network, or downloads.
+
 
 The runtime can process a local video file frame by frame in an offline pipeline:
 
@@ -418,7 +667,7 @@ Perception and tracking run exactly once on every decoded and written frame. `--
 The image and video smoke tests should be run inside the existing local Conda environment:
 
 ```powershell
-conda activate Gazelle
+conda activate Gazelle-next
 ```
 
 Single-image smoke test:
@@ -449,7 +698,7 @@ python main.py `
   --overwrite
 ```
 
-These commands construct the real Gazelle predictor and DINOv2 backbone once per image run or once on the first usable video frame, load the Gazelle checkpoint, run inference, and write output directories. Checkpoint resolution itself does not construct DINOv2. If `models/checkpoints` or `models/torch_hub` are empty, the first run may download the Gazelle checkpoint, DINOv2 PyTorch Hub repository, and DINOv2 weights. Re-running the same commands should reuse the cache. CPU smoke tests are supported with `--device cpu`; when constructing DINOv2 on CPU, the runtime temporarily disables xFormers so a CUDA-only xFormers wheel does not force an unsupported CPU attention kernel. CUDA construction keeps xFormers enabled and skips only the optional Triton probe when Triton is unavailable. Repeated programmatic construction may reuse the backend already selected in that process, but switching between incompatible CPU/prepare-only and xFormers-enabled CUDA modes requires a fresh process.
+These commands construct the real Gazelle predictor and DINOv2 backbone once per image run or once on the first usable video frame, load the Gazelle checkpoint, run inference, and write output directories. Checkpoint resolution itself does not construct DINOv2. If `models/checkpoints` or `models/torch_hub` are empty, the first run may download the Gazelle checkpoint, DINOv2 PyTorch Hub repository, and DINOv2 weights. Re-running the same commands should reuse the cache. CPU smoke tests use `--device cpu`. The current `Gazelle-next` environment does not install xFormers; DINOv2 uses PyTorch `scaled_dot_product_attention`. The runtime retains its compatibility policy for environments that do install xFormers: CPU construction and `--prepare-only` disable it; CUDA may request it unless `XFORMERS_DISABLED` is set. When optional Triton is absent and no override is set, `XFORMERS_FORCE_DISABLE_TRITON=1` skips that probe without disabling other xFormers operators or modifying the environment. Nonfatal xFormers-disabled/not-available messages may still appear during strict loading. DINOv2 caches its backend selection, so switching incompatible CPU/prepare-only and xFormers-enabled CUDA modes in a long-lived process requires a fresh process.
 
 ### Programmatic Single-Frame Predictor
 

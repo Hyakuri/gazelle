@@ -23,6 +23,7 @@ from gazelle.runtime.perception.contracts import (
     ReferenceRaySource,
 )
 from gazelle.runtime.perception.provider import MediaPipeHeadProvider
+from tests.test_media import FakeCapture
 
 
 class FakePredictor:
@@ -178,6 +179,79 @@ def make_config(**overrides):
 
 
 class VideoPipelineTest(unittest.TestCase):
+    def test_decode_completeness_uses_requested_count_and_preserves_partial_outputs(self):
+        cases = (
+            (108219, None, 1, 107677, False),
+            (108219, 50, 1, 50, False),
+            (33600, 300, 300, 300, True),
+            (33600, 300, 299, 300, False),
+            (33600, 33590, 33550, 33432, True),
+            (1000, None, 996, 995, True),
+            (30, None, 1, 28, False),
+            (30, 100, 30, 28, True),
+            (None, None, 1, None, None),
+            (1, None, 1, 0, True),
+            (2, None, 2, 0, True),
+        )
+        for count, limit, readable, required, complete in cases:
+            with self.subTest(count=count, limit=limit, readable=readable), TemporaryDirectory() as tmpdir:
+                path = Path(tmpdir) / "fake.mp4"
+                path.touch()
+                capture = FakeCapture(fps=30, frame_count=count, readable_count=readable)
+                provider = FakeHeadProvider(result_factory=lambda _: HeadFrameResult(heads=()))
+                config = make_config(input_path=str(path), output_dir=tmpdir, max_frames=limit)
+                with patch("cv2.VideoCapture", return_value=capture), patch(
+                    "gazelle.runtime.pipeline.build_head_provider_from_config", return_value=provider
+                ), patch("gazelle.runtime.pipeline._build_real_predictor", side_effect=AssertionError("unexpected model")):
+                    if complete is False:
+                        with self.assertRaisesRegex(ValueError, "truncated") as error:
+                            run_video_pipeline(config)
+                        for token in (f'read {readable} frames', f'required {required}',
+                                      f'container reports {count}', str(path), 'undecodable packets', 'USAGE'):
+                            self.assertIn(token, str(error.exception))
+                    else:
+                        result = run_video_pipeline(config)
+                        self.assertEqual(result.frames_read, readable)
+                output = Path(tmpdir) / "fake_gazelle"
+                payload = json.loads((output / "run_config.json").read_text())
+                self.assertEqual(payload["container_frame_count"], count)
+                self.assertEqual(payload["frames_required"], required)
+                self.assertIs(payload["decode_complete"], complete)
+                self.assertEqual(payload["timestamp_sources"], {"container": readable, "repaired": 0, "fps_fallback": 0})
+                self.assertEqual(len(read_jsonl(output / "predictions.jsonl")), readable)
+                self.assertEqual(len(read_jsonl(output / "head_observations.jsonl")), readable)
+                self.assertEqual(capture.release_calls, 1)
+                self.assertEqual(provider.close_calls, 1)
+
+    def test_truncated_decode_skips_h264_finalization_and_counts_timestamp_sources(self):
+        with TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "fake.avi"
+            path.touch()
+            capture = FakeCapture([0, 0, float("nan")], fps=30, frame_count=30)
+            provider = FakeHeadProvider(result_factory=lambda _: HeadFrameResult(heads=()))
+            writer = FakeVideoWriter()
+            def create_writer(destination, *args, **kwargs):
+                writer.path = Path(destination)
+                writer.path.write_bytes(b'partial encoded frames')
+                return writer
+            config = make_config(input_path=str(path), output_dir=tmpdir, save_rendered=True, video_codec="avc1")
+            with patch("cv2.VideoCapture", return_value=capture), patch(
+                "gazelle.runtime.pipeline.build_head_provider_from_config", return_value=provider
+            ), patch("gazelle.runtime.pipeline.VideoFrameWriter", side_effect=create_writer), patch(
+                "gazelle.runtime.pipeline.detect_ffmpeg_capabilities", return_value=object()
+            ), patch("gazelle.runtime.pipeline.transcode_h264") as transcode:
+                with self.assertRaisesRegex(ValueError, "truncated"):
+                    run_video_pipeline(config)
+            payload = json.loads((Path(tmpdir) / "fake_gazelle/run_config.json").read_text())
+            self.assertEqual(payload["timestamp_sources"], {"container": 1, "repaired": 1, "fps_fallback": 1})
+            self.assertFalse(payload["decode_complete"])
+            self.assertEqual(writer.close_calls, 1)
+            self.assertEqual(provider.close_calls, 1)
+            self.assertEqual(capture.release_calls, 1)
+            transcode.assert_not_called()
+            self.assertFalse(list((Path(tmpdir) / "fake_gazelle").glob("*.mp4")))
+            self.assertFalse(writer.path.exists())
+
     def test_video_pipeline_preserves_ordered_head_observations_for_predictor(self):
         heads = (
             HeadObservation(7, (0.55, 0.15, 0.85, 0.65), 0.91),

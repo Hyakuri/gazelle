@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>作业区域标记</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f4f6f9;color:#182535;font:15px system-ui,sans-serif}header{padding:18px 24px;background:#fff;border-bottom:1px solid #dbe1e8}h1{font-size:22px;margin:0 0 8px}button,select,input{font:inherit;border:1px solid #b8c5d3;border-radius:6px;padding:7px;background:white}button{cursor:pointer}button:hover{background:#e9f0fa}button:disabled{opacity:.4;cursor:default}main{display:grid;grid-template-columns:270px 1fr;gap:18px;padding:18px}aside{background:white;padding:14px;border-radius:10px}section{min-width:0}.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}.canvas{width:100%;aspect-ratio:16/9;background:#172333;border-radius:8px;touch-action:none}.canvas>*{pointer-events:none}.canvas>.vertex{pointer-events:all}.vertex{cursor:grab}.selected{outline:3px solid #2563eb}.candidates{max-height:550px;overflow:auto}.candidate{width:100%;margin-bottom:8px;padding:4px;text-align:left}.candidate img{width:100%;display:block}.region{display:block;width:100%;text-align:left;margin:5px 0}#status{font-weight:600;color:#256042}#status.error{color:#b42318}.hint{color:#506176;line-height:1.6}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.grid svg{width:100%;background:#172333}.panel{padding:14px;background:white;border-radius:8px;margin-top:15px}label{display:block;margin:8px 0}input{width:100%}h2{font-size:17px}#reference{margin-bottom:8px;color:#506176}@media(max-width:900px){main{grid-template-columns:1fr}.candidates{display:flex;max-height:200px}.candidate{min-width:200px;width:200px}.grid{grid-template-columns:1fr}}
+</style>
+<header><h1>作业区域标记</h1><span id="status" role="status">正在加载候选画面…</span><span class="hint"> · 仅在本机保存</span><p id="completion"></p></header>
+<main><aside><h2>1. 选择主参考画面</h2><p class="hint">选择桌面清楚、遮挡较少的一帧。切换参考帧时保留已有多边形，便于比较。</p><div id="candidates" class="candidates"></div></aside>
+<section><div id="reference">尚未选择主参考画面</div><div class="toolbar"><select id="type" aria-label="区域类型"></select><button id="new">开始画区域</button><button id="close">闭合多边形</button><button id="undo">撤销</button><button id="deleteVertex">删除选中顶点</button><button id="deleteRegion">删除选中区域</button></div>
+<svg id="canvas" class="canvas" viewBox="0 0 1920 1080" aria-label="区域画布"></svg>
+<p class="hint">单击加顶点，回车或双击闭合。点击多边形选中，再拖动圆点修改。Delete 删除选中顶点，Esc 取消未闭合草稿。每次操作自动保存，出错时顶部会提示；请修正或撤销后再关闭。</p>
+<div class="panel"><h2>2. 已标记区域</h2><div id="regions"></div><details><summary>新增自定义目标区域</summary><label>中文名称<input id="customName" maxlength="80" placeholder="例如：工具架"></label><label>英文键<input id="customKey" maxlength="80" placeholder="例如：tool_rack"></label><button id="custom">添加并开始绘制</button></details></div>
+<div class="panel"><h2>3. 跨日期核对</h2><p class="hint">每次录制显示一张候选画面。核对桌面边缘与多边形是否对齐；若机位移动，请先记录问题。</p><div id="review" class="grid"></div><button id="export">导出参考图与类别</button></div>
+</section></main>
+<script>
+const ns='http://www.w3.org/2000/svg', $=id=>document.getElementById(id);
+let data, regions=[], draft={points:[],region:null}, reference=null, selected=-1, vertex=-1, drag=null, history=[], pending=null, saving=false, saveError=false, vertexClick=false;
+function node(tag,attrs={},text=null){const n=document.createElementNS(ns,tag);for(const [k,v] of Object.entries(attrs))n.setAttribute(k,v);if(text!==null)n.textContent=text;return n}
+function friendlyError(detail){
+ const pairs=[
+ ['self-intersect','多边形不能自相交'],['vertices must be distinct','不能重复顶点'],['nonzero area','多边形面积不能为零'],
+ ['3 to 500 vertices','多边形需要 3 至 500 个顶点'],['coordinates','顶点坐标必须在画面范围内'],
+ ['colors must','目标颜色不能重复或与固定类别相同'],['five target','最多五个目标区域'],
+ ['At least one target','至少需要一个目标区域'],['Exactly one cell','完成前必须有且仅有一个工作区'],
+ ['At most one cell','只能有一个工作区'],['keys must be unique','区域英文键不能重复'],
+ ['non-reserved ASCII','请使用有效且未保留的英文键'],['Region name','请填写区域名称'],
+ ['draft','请闭合或取消未完成草稿'],['changed during export','区域已改变，请重新导出'],
+ ['Chinese font','没有找到中文字体，请按指南指定本机字体'],['token','页面会话已失效，请刷新后重试']
+ ];
+ return pairs.find(([key])=>String(detail).includes(key))?.[1]||'操作未完成，请检查区域内容与本机文件权限';
+}
+function message(text,error=false){$('status').textContent=text;$('status').classList.toggle('error',error)}
+function snapshot(){history.push(JSON.stringify({regions,draft,reference}));if(history.length>100)history.shift()}
+function imageUrl(row){return '/image/'+encodeURIComponent(row.id)}
+function polygonArea(points){return Math.abs(points.reduce((s,p,i)=>{const q=points[(i+1)%points.length];return s+p[0]*q[1]-q[0]*p[1]},0))/2}
+function contains(points,p){let inside=false;for(let i=0,j=points.length-1;i<points.length;j=i++){const a=points[j],b=points[i],cross=(b[0]-a[0])*(p[1]-a[1])-(b[1]-a[1])*(p[0]-a[0]);if(Math.abs(cross)<1e-10&&p[0]>=Math.min(a[0],b[0])&&p[0]<=Math.max(a[0],b[0])&&p[1]>=Math.min(a[1],b[1])&&p[1]<=Math.max(a[1],b[1]))return true;if((a[1]>p[1])!==(b[1]>p[1])&&p[0]<(b[0]-a[0])*(p[1]-a[1])/(b[1]-a[1])+a[0])inside=!inside}return inside}
+function hitRegion(p){let best=-1,area=Infinity;regions.forEach((r,i)=>{const size=polygonArea(r.polygon);if(size<area&&contains(r.polygon,p)){best=i;area=size}});return best}
+function polygons(svg,editable){
+ const order=regions.map((r,i)=>({r,i})).sort((a,b)=>(a.r.kind!=='cell')-(b.r.kind!=='cell'));
+ for(const {r,i} of order){
+  const points=r.polygon.map(p=>`${p[0]*1920},${p[1]*1080}`).join(' ');
+  svg.append(node('polygon',{points,fill:r.color,'fill-opacity':.17,stroke:r.color,'stroke-width':i===selected&&editable?6:3,'pointer-events':'none'}));
+  svg.append(node('text',{x:r.polygon[0][0]*1920+8,y:r.polygon[0][1]*1080+28,fill:r.color,stroke:'#fff','stroke-width':.8,'font-size':28,'paint-order':'stroke','pointer-events':'none'},r.name_zh));
+ }
+ if(editable&&selected>=0){const r=regions[selected];r.polygon.forEach((p,j)=>{
+  const dot=node('circle',{cx:p[0]*1920,cy:p[1]*1080,r:j===vertex?12:9,fill:'#fff',stroke:r.color,'stroke-width':4,class:'vertex','pointer-events':'all'});
+  dot.addEventListener('pointerdown',e=>{e.stopPropagation();vertexClick=true;vertex=j;drag={region:selected,vertex:j,moved:false};$('canvas').setPointerCapture(e.pointerId);renderCanvas()});
+  dot.addEventListener('click',e=>e.stopPropagation());svg.append(dot);
+ })}
+}
+function renderCanvas(){const svg=$('canvas');svg.replaceChildren();const row=data.candidates.find(r=>r.id===reference)||data.candidates[0];svg.append(node('image',{href:imageUrl(row),width:1920,height:1080}));polygons(svg,true);if(draft.region){svg.append(node('polyline',{points:draft.points.map(p=>`${p[0]*1920},${p[1]*1080}`).join(' '),fill:'none',stroke:draft.region.color,'stroke-width':5}));draft.points.forEach(p=>svg.append(node('circle',{cx:p[0]*1920,cy:p[1]*1080,r:8,fill:draft.region.color})))}}
+function render(){renderCanvas();$('reference').textContent=reference?`主参考：${data.candidates.find(r=>r.id===reference).session} · ${(data.candidates.find(r=>r.id===reference).container_time_ms/1000).toFixed(2)} 秒`:'请选择主参考画面后开始标记';$('regions').replaceChildren();regions.forEach((r,i)=>{const b=document.createElement('button');b.className='region';b.textContent=`${r.name_zh} (${r.kind==='cell'?'工作区边界':'目标区域'})`;b.style.borderLeft=`6px solid ${r.color}`;b.onclick=()=>{if(draft.region){message('请先闭合或取消草稿',true);return}selected=i;vertex=-1;render()};$('regions').append(b)});$('review').replaceChildren();const sessions=new Set();for(const row of data.candidates){if(sessions.has(row.session))continue;sessions.add(row.session);const box=document.createElement('div'),title=document.createElement('p');title.textContent=row.session;const svg=node('svg',{viewBox:'0 0 1920 1080'});svg.append(node('image',{href:imageUrl(row),width:1920,height:1080}));polygons(svg,false);box.append(title,svg);$('review').append(box)}$('new').disabled=!reference;$('close').disabled=draft.points.length<3;$('undo').disabled=!history.length;$('deleteVertex').disabled=selected<0||vertex<0;$('deleteRegion').disabled=selected<0;document.querySelectorAll('.candidate').forEach(b=>b.classList.toggle('selected',b.dataset.id===reference))}
+function completion(){ $('completion').textContent=data.complete?'已导出、未修改':data.has_export?'导出后有修改或导出文件失效，需要重新导出':'尚未导出'; }
+function updateCompletion(result){data.complete=result.complete===true;data.has_export=result.has_export===true;completion();}
+async function save(){if(!reference)return;pending=JSON.parse(JSON.stringify({reference_id:reference,regions,draft}));if(saving)return;saving=true;while(pending){const body=pending;pending=null;message('正在保存…');try{const response=await fetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json','X-Editor-Token':data.token},body:JSON.stringify(body)});const result=await response.json();if(!response.ok)throw new Error(result.error||'保存失败');updateCompletion(result);saveError=false;message('草稿已自动保存 · '+new Date().toLocaleTimeString())}catch(error){saveError=true;message('未保存：'+friendlyError(error.message),true)}}saving=false}
+function point(event){const p=new DOMPoint(event.clientX,event.clientY).matrixTransform($('canvas').getScreenCTM().inverse());return [Math.max(0,Math.min(1,p.x/1920)),Math.max(0,Math.min(1,p.y/1080))]}
+$('canvas').addEventListener('pointerdown',()=>{vertexClick=false});
+$('canvas').addEventListener('click',e=>{
+ if(vertexClick){vertexClick=false;return}
+ if(!draft.region){selected=hitRegion(point(e));vertex=-1;render();return}
+ if(e.detail>1){closePolygon();return}
+ const p=point(e),last=draft.points.at(-1);
+ if(last&&Math.hypot((last[0]-p[0])*1920,(last[1]-p[1])*1080)<=3)return;
+ snapshot();draft.points.push(p);selected=-1;vertex=-1;render();save();
+});
+$('canvas').addEventListener('pointermove',e=>{if(drag){if(!drag.moved)snapshot();drag.moved=true;regions[drag.region].polygon[drag.vertex]=point(e);renderCanvas()}});
+$('canvas').addEventListener('pointerup',()=>{if(drag){const changed=drag.moved;drag=null;render();if(changed)save()}});
+$('canvas').addEventListener('pointercancel',()=>{vertexClick=false;if(drag){const changed=drag.moved;drag=null;render();if(changed)save()}});
+function closePolygon(){if(!draft.region||draft.points.length<3)return;snapshot();regions.push({...draft.region,polygon:draft.points});selected=regions.length-1;vertex=-1;draft={points:[],region:null};render();save()}
+$('canvas').addEventListener('dblclick',e=>{e.preventDefault();closePolygon()});$('close').onclick=closePolygon;
+function begin(region){if(draft.region){message('请先闭合或取消草稿',true);return}if(region.kind==='target'&&regions.filter(r=>r.kind==='target').length>=5){message('最多五个目标区域，数字键须保持在 1–9',true);return}if(!reference){message('请先选择主参考画面',true);return}if(regions.some(r=>r.key===region.key)){message('该区域已存在，请选中后编辑',true);return}snapshot();draft={points:[],region};selected=-1;vertex=-1;render();save()}
+$('new').onclick=()=>begin(data.defaults[Number($('type').value)]);
+$('undo').onclick=()=>{if(!history.length)return;const old=JSON.parse(history.pop());regions=old.regions;draft=old.draft;reference=old.reference;selected=-1;vertex=-1;render();save()};
+$('deleteVertex').onclick=()=>{if(selected<0||vertex<0)return;if(regions[selected].polygon.length<=3){message('至少需要三个顶点，可删除整个区域',true);return}snapshot();regions[selected].polygon.splice(vertex,1);vertex=-1;render();save()};
+$('deleteRegion').onclick=()=>{if(selected<0)return;snapshot();regions.splice(selected,1);selected=-1;vertex=-1;render();save()};
+$('custom').onclick=()=>{const key=$('customKey').value.trim(),name=$('customName').value.trim();if(!/^[a-z][a-z0-9_]*$/.test(key)||!name||data.reserved_keys.includes(key)){message('请填写中文名和有效且未保留的英文键',true);return}const used=new Set(regions.map(r=>r.color.toLowerCase()));const color=data.custom_colors.find(c=>!used.has(c.toLowerCase()));if(!color){message('可用目标颜色已用完',true);return}begin({key,name_zh:name,kind:'target',color})};
+async function exportRegions(confirmSmall=false){if(!reference||draft.region||!regions.some(r=>r.kind==='target')||regions.filter(r=>r.kind==='cell').length!==1){message('请闭合草稿，并完成至少一个目标区域和恰好一个工作区',true);return}if(saving||pending||saveError){message('请等待保存完成，或先修正未保存的区域',true);return}try{message('正在导出…');const response=await fetch('/api/export',{method:'POST',headers:{'Content-Type':'application/json','X-Editor-Token':data.token},body:JSON.stringify({confirm_small:confirmSmall})});const result=await response.json();if(!response.ok)throw new Error(result.error);if(result.confirmation_required){const names=result.small_regions.map(r=>r.name_zh).join('、');if(window.confirm(`${names} 的面积小于画面的 0.5%。确认这些小区域是有意画出，并继续导出？`))await exportRegions(true);else message('已取消导出，区域已保留');return;}updateCompletion(result);message(`已导出 ${result.images} 张参考图与类别文件 · 完成标记已更新`)}catch(error){message('导出失败：'+friendlyError(error.message),true)}}
+$('export').onclick=()=>exportRegions();
+document.addEventListener('keydown',e=>{if(['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName))return;if(e.key==='Enter'){e.preventDefault();closePolygon()}else if(e.key==='Delete'){$('deleteVertex').click()}else if(e.key==='Escape'&&draft.region){snapshot();draft={points:[],region:null};render();save()}else if((e.ctrlKey||e.metaKey)&&e.key==='z'){e.preventDefault();$('undo').click()}});
+window.addEventListener('beforeunload',e=>{if(saving||pending||saveError){e.preventDefault();e.returnValue=''}});
+async function init(){try{const response=await fetch('/api/state');data=await response.json();if(!response.ok)throw new Error(data.error||'加载失败');regions=data.document?.regions||[];draft=data.draft;reference=data.reference_id;data.defaults.forEach((r,i)=>{const o=document.createElement('option');o.value=i;o.textContent=r.name_zh;$('type').append(o)});for(const row of data.candidates){const b=document.createElement('button');b.className='candidate';b.dataset.id=row.id;const img=document.createElement('img');img.loading='lazy';img.alt=row.session+' 候选画面';img.src=imageUrl(row);const caption=document.createElement('span');caption.textContent=row.session+' · '+(row.container_time_ms/1000).toFixed(1)+' 秒';b.append(img,caption);b.onclick=()=>{if(reference)snapshot();reference=row.id;render();save()};$('candidates').append(b)}render();message(`已加载 ${data.candidates.length} 张候选画面${data.document?' · 已恢复标记':' · 请选择主参考画面'}`)}catch(error){message('无法加载：'+friendlyError(error.message),true)}}
+init().then(()=>{if(data)completion();});
+</script></html>

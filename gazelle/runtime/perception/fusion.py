@@ -281,6 +281,27 @@ def build_pose_head_candidate(
     )
 
 
+def _pose_anchors_match(head_bbox, keypoints: PoseHeadKeypoints) -> bool:
+    def inside(point):
+        return (head_bbox[0] <= point.x <= head_bbox[2]
+                and head_bbox[1] <= point.y <= head_bbox[3])
+
+    if keypoints.nose is not None:
+        return inside(keypoints.nose)
+    head_points = tuple(point for point in (
+        keypoints.left_eye, keypoints.right_eye, keypoints.left_ear,
+        keypoints.right_ear, keypoints.mouth_left, keypoints.mouth_right,
+    ) if point is not None)
+    if len(head_points) >= 2:
+        return sum(inside(point) for point in head_points) >= 2
+    left, right = keypoints.left_shoulder, keypoints.right_shoulder
+    if left is None or right is None:
+        return False
+    center_x, center_y = _bbox_center(head_bbox)
+    return (min(left.x, right.x) <= center_x <= max(left.x, right.x)
+            and center_y < (left.y + right.y) / 2.0)
+
+
 def associate_face_pose(
     face_candidate: HeadCandidate,
     pose_candidate: HeadCandidate,
@@ -290,7 +311,7 @@ def associate_face_pose(
     pose_bbox = _sanitize_or_none(pose_candidate.head_bbox)
     if face_bbox is None or pose_bbox is None:
         return False
-    return (
+    return _pose_anchors_match(face_bbox, pose_candidate.pose_head_keypoints) and (
         _bbox_iou(face_bbox, pose_bbox) >= config.min_consistent_iou
         or _normalized_center_distance(face_bbox, pose_bbox)
         <= config.max_center_distance_diagonal_ratio
@@ -413,26 +434,6 @@ def build_head_candidates(
         )
         if candidate is not None
     )
-
-    if max_heads == 1:
-        face_candidate = max(
-            enumerate(face_candidates), key=lambda item: (item[1].confidence, -item[0]), default=(None, None)
-        )[1]
-        pose_candidate = max(
-            enumerate(pose_candidates), key=lambda item: (item[1].confidence, -item[0]), default=(None, None)
-        )[1]
-        if face_candidate is not None and pose_candidate is not None:
-            return (
-                fuse_head_candidates(
-                    face_candidate,
-                    pose_candidate,
-                    config,
-                    reference_ray_length,
-                ),
-            )
-        return _sort_candidates(
-            tuple(candidate for candidate in (face_candidate, pose_candidate) if candidate is not None)
-        )[:1]
 
     pairs = []
     for face_index, face_candidate in enumerate(face_candidates):

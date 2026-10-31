@@ -4,6 +4,8 @@ from typing import Optional, Sequence, TextIO
 
 from gazelle.runtime.config import (
     RuntimeConfig,
+    SUPPORTED_BBOX_FORMATS,
+    SUPPORTED_HEAD_SOURCES,
     SUPPORTED_GAZELLE_HEAD_MODE_SELECTORS,
     SUPPORTED_GAZE_RENDER_MODES,
 )
@@ -53,7 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--head-source",
-        choices=("none", "static", "json", "mediapipe"),
+        choices=SUPPORTED_HEAD_SOURCES,
         default="none",
         help="Head input source for image or video inference.",
     )
@@ -82,7 +84,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--bbox-format",
-        choices=("normalized", "pixel"),
+        choices=SUPPORTED_BBOX_FORMATS,
         default="normalized",
         help="Coordinate format for --bbox values.",
     )

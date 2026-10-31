@@ -1,5 +1,6 @@
 import math
 import unittest
+from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -10,7 +11,8 @@ from gazelle.runtime.perception.contracts import (
     NormalizedLandmark,
 )
 from gazelle.runtime.perception.provider import MediaPipeHeadProvider
-from gazelle.runtime.perception.tracking import TrackedHeadCandidate
+from gazelle.runtime.perception.tracking import TrackedHeadCandidate, ShortOcclusionBridge
+from tests.test_head_tracking import FakeTracker as RawTracker, make_tracker, tracked_output
 
 
 def make_config(**overrides):
@@ -112,6 +114,83 @@ class FakeTrackerFactory:
 
 
 class MediaPipeHeadProviderTest(unittest.TestCase):
+    def _sequence(self, sequence, max_heads=1):
+        # Scripted upstream rows use ByteTrack spawn=-1, later confirmation IDs,
+        # and no output row during misses; the real adapter and bridge are used.
+        raw=RawTracker()
+        raw.output_builder=lambda d: tracked_output(d,sequence[len(raw.updates)-1][1])
+        tracker,_,_=make_tracker(raw,source_fps=30.)
+        bridge=ShortOcclusionBridge(max_gap_ms=500.)
+        backend=FakeBackend([SimpleNamespace(faces=(),poses=(),timings_ms={}) for _ in sequence])
+        provider=MediaPipeHeadProvider(backend=backend,max_heads=max_heads,tracker=tracker,bridge=bridge)
+        retained=[]
+        original_retain=bridge.retain_person_ids
+        def retain(ids):
+            retained.append(tuple(ids))
+            original_retain(ids)
+        with patch('gazelle.runtime.perception.provider.build_head_candidates',
+                   side_effect=[row[0] for row in sequence]) as build, patch.object(bridge,'retain_person_ids',side_effect=retain):
+            results=[provider.get_frame_result('frame',i,i*1000/30,100,100) for i in range(len(sequence))]
+        self.assertTrue(all(call.kwargs['max_heads']==max(3,max_heads) for call in build.call_args_list))
+        provider.close()
+        return results,retained
+
+    @staticmethod
+    def _small_candidate(x, **changes):
+        return replace(make_candidate(),head_bbox=(x,.1,x+.1,.2),face_bbox=(x,.1,x+.1,.2),**changes)
+
+    def test_far_spawn_keeps_previous_subject_until_bridge_expiry(self):
+        a,b=self._small_candidate(.1),self._small_candidate(.7)
+        sequence=[((a,),(-1,))]+[((a,),(10,))]*4+[((b,),(-1,))]+[((),())]*15
+        results,retained=self._sequence(sequence)
+        self.assertEqual([r.perceptions[0].person_id for r in results[:20]],[0]*20)
+        self.assertTrue(all(r.perceptions[0].state is HeadPerceptionState.TRACKED_ONLY for r in results[5:20]))
+        self.assertEqual(results[20].perceptions,())
+        self.assertEqual(retained[5],(0,))
+
+    def test_same_position_spawn_preserves_old_bridge_until_new_confirmation(self):
+        a=self._small_candidate(.2)
+        prefix=[((a,),(-1,))]+[((a,),(10,))]*4+[((a,),(-1,))]
+        for next_raw,expected in ((10,0),(30,1)):
+            with self.subTest(next_raw=next_raw):
+                results,retained=self._sequence(prefix+[((a,),(next_raw,)),((),())])
+                self.assertTrue(results[5].perceptions[0].provisional)
+                self.assertEqual(results[5].perceptions[0].person_id,1)
+                self.assertEqual(retained[5],(0,))
+                self.assertEqual(retained[6],(expected,))
+                self.assertEqual([r.perceptions[0].person_id for r in results[6:]],[expected,expected])
+
+    def test_s4_spawn_is_neutral_to_bridge_retention(self):
+        a=self._small_candidate(.1)
+        b=self._small_candidate(.21,state=HeadPerceptionState.POSE_ONLY,face_pose_reference_ray=None)
+        prefix=[((a,),(-1,))]+[((a,),(10,))]*2+[((a,b),(10,-1)),((a,b),(10,20))]
+        baseline,base_retained=self._sequence(prefix+[((b,),(20,))]+[((),())]*3)
+        for x in (.1,.7):
+            spawn=self._small_candidate(x)
+            results,retained=self._sequence(prefix+[((b,spawn),(20,-1))]+[((),())]*3)
+            self.assertEqual(retained[5:],base_retained[5:])
+            self.assertEqual([r.perceptions for r in results[6:]],[r.perceptions for r in baseline[6:]])
+        self.assertEqual([r.perceptions[0].person_id for r in baseline[5:]],[0]*4)
+
+    def test_multiple_heads_also_prune_replaced_bridge_ids(self):
+        a,b=self._small_candidate(.1),self._small_candidate(.7)
+        results,retained=self._sequence([((a,b),(-1,-1)),((a,b),(10,20)),
+            ((a,b),(-1,-1)),((a,b),(30,40)),((),())],max_heads=2)
+        self.assertEqual(retained[2],(0,1))
+        self.assertEqual(retained[3],(2,3))
+        self.assertEqual([p.person_id for p in results[4].perceptions],[2,3])
+
+    def test_image_selection_renumbers_after_priority_filter(self):
+        backend=FakeBackend([SimpleNamespace(faces=(),poses=(),timings_ms={})])
+        provider=MediaPipeHeadProvider(backend=backend,max_heads=2)
+        candidates=(self._small_candidate(.1,state=HeadPerceptionState.POSE_ONLY),
+                    self._small_candidate(.4,confidence=.9),self._small_candidate(.7,confidence=.8))
+        with patch('gazelle.runtime.perception.provider.build_head_candidates',return_value=candidates):
+            result=provider.get_frame_result('frame',0,0,100,100)
+        self.assertEqual([p.person_id for p in result.perceptions],[0,1])
+        self.assertEqual([p.head_bbox[0] for p in result.perceptions],[.4,.7])
+        provider.close()
+
     def test_tracker_construction_failure_closes_backend_without_masking_error(self):
         backend = FakeBackend([])
         construction_error = RuntimeError("tracker construction failed")
@@ -180,6 +259,7 @@ class MediaPipeHeadProviderTest(unittest.TestCase):
         self.assertEqual(result.heads[0].bbox, (0.0, 0.1, 1.0, 0.6))
         self.assertEqual(result.perceptions[0].face_bbox, (0.0, 0.15, 0.8, 0.5))
         self.assertEqual(len(result.perceptions[0].face_landmarks), 478)
+        self.assertFalse(result.perceptions[0].provisional)
         self.assertEqual(result.timings_ms["face_detector"], 1.25)
         self.assertTrue(math.isfinite(result.timings_ms["fusion"]))
 
@@ -263,6 +343,39 @@ class MediaPipeHeadProviderTest(unittest.TestCase):
         self.assertEqual(tuple(item.person_id for item in first.perceptions), (1,))
         self.assertEqual(tuple(item.person_id for item in replacement.perceptions), (2,))
         self.assertEqual(tuple(item.person_id for item in bridged.perceptions), (2,))
+
+    def test_single_person_provisional_winner_preserves_confirmed_bridge(self):
+        backend = FakeBackend([
+            SimpleNamespace(faces=(), poses=(), timings_ms={}) for _ in range(9)
+        ])
+        class SpawnTracker:
+            def update(self, candidates, *, frame_index, **kwargs):
+                if frame_index <= 4:
+                    return (TrackedHeadCandidate(0, candidates[0], frame_index + 1),)
+                if frame_index == 5:
+                    return (TrackedHeadCandidate(1, candidates[0], 1, provisional=True),)
+                return ()
+
+            def close(self):
+                pass
+
+        provider = MediaPipeHeadProvider.create(
+            make_config(max_heads=1), media_type="video", source_fps=30.0,
+            backend_factory=lambda config, *, media_type: backend,
+            tracker_factory=lambda source_fps: SpawnTracker(),
+        )
+        try:
+            with patch("gazelle.runtime.perception.provider.build_head_candidates",
+                       side_effect=[(make_candidate(),)] * 6 + [()] * 3):
+                results = [provider.get_frame_result("frame", i, i * 1000 / 30, 100, 80)
+                           for i in range(9)]
+            self.assertTrue(results[5].perceptions[0].provisional)
+            for result in results[6:]:
+                self.assertEqual([p.person_id for p in result.perceptions], [0])
+                self.assertEqual(result.perceptions[0].state, HeadPerceptionState.TRACKED_ONLY)
+                self.assertFalse(result.perceptions[0].provisional)
+        finally:
+            provider.close()
 
     def test_empty_fusion_result_is_empty_and_get_heads_remains_compatible(self):
         backend = FakeBackend(

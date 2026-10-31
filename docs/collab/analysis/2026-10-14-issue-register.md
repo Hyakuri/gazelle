@@ -1,0 +1,194 @@
+# Gazelle 问题登记表（2026-10-14）
+
+配套报告：[2026-10-14-codebase-analysis.md](2026-10-14-codebase-analysis.md)。路线图：[../ROADMAP.md](../ROADMAP.md)。
+
+本表由只读分析工作流生成：10 个子系统读取代理 + 6 个补充调查，共报告 104 个去重问题；每条由独立复核代理尝试反驳，87 条确认、17 条驳回。`严重度` 采用复核代理修正后的值（括号内为原报告值）。`证据` 列：`复核确认` = 读取代理报告且复核代理未能反驳；`主线程复现` = Claude 主线程亲自用离线代码或实测数据复现。复核确认属于同一产品内的只读交叉检查，不等同于用户或外部的独立验收。
+
+## 1. 问题组索引
+
+| 组 | 主题 | 组内条目 |
+| --- | --- | --- |
+| GZ-01 | 单人模式 face/pose 跨人误配，融合头框横跨两人并送入 Gazelle（主线程新发现） | N001（主线程新发现，见报告 §5） |
+| GZ-02 | 面部参考射线垂直方向与规范 §14 相反；head_pose roll 符号与规范相反 | C001 |
+| GZ-03 | 视频中每条 ByteTrack 轨迹的首帧（含 frame 0）被静默丢弃并记为 no_head | C007, C011, C054 |
+| GZ-04 | --overwrite 在纯参数校验之前递归删除旧结果 | C004, C008, C056, C061 |
+| GZ-05 | 小于约 1/32 画幅的头框被栅格化为空 head map，等价于无框却仍标记 valid | C003, C009 |
+| GZ-06 | find_packages 只发现 tests；pip install -e . 对库式 import 无效 | C010 |
+| GZ-07 | 时间戳：回退时钟固定 30 FPS 与 --output-fps 分叉；整数毫秒碰撞中止整段视频 | C005, C006, C036, C081 |
+| GZ-08 | 研究脚本：VAT 预处理在 Windows 必崩、评测非严格加载、核心模型无测试 | C002, C026, C077, C078 |
+| GZ-09 | 视频解码帧尺寸与容器元数据尺寸从不比对 | C022, C037, C062, C082 |
+| GZ-10 | DINOv2 torch.hub：未 pin、每次探测 GitHub、截断权重不可恢复、--force-download 不覆盖 | C023, C024, C025 |
+| GZ-11 | checkpoint --force-download 的 strict 校验发生在替换之后 | C012, C076 |
+| GZ-12 | bridge 有效时长受固定常数限制；ByteTrack 窗口不随 --head-track-max-gap-ms 变化；多人幽灵 | C018, C048, C053, C055 |
+| GZ-13 | 失败路径：部分输出无完成标记、error 行从不写出、JSON head 级校验延迟 | C034, C035, C063, C064, C087 |
+| GZ-14 | 图像 predictions.json 无法区分 no_head 与 no_gaze | C021, C059, C060 |
+| GZ-15 | 面向 Multi-Pose 的库式调用契约不完整（in/out 分类、torch.hub 全局副作用、config 契约、FramePacket） | C030, C046, C067, C068, C069, C070 |
+| GZ-16 | MediaPipe 前端：阈值依赖上游默认、crop 内 landmarker 取 faces[0]、非有限 landmark 未拒绝 | C041, C042, C043, C044 |
+| GZ-17 | 文档同步与文档契约测试缺口 | C013, C014, C015, C016, C017, C019, C020, C040, C049, C050, C071, C084, C085 |
+| GZ-18 | 其他鲁棒性与可维护性（P3） | C027, C028, C029, C031, C032, C033, C038, C039, C045, C051, C052, C057, C058, C065, C066, C072, C073, C074, C075 |
+| GZ-19 | 场景切换未处理（交接遗留路线图项） | C047 |
+| GZ-20 | 测试加固（边界值、全局状态卫生、管线级集成） | C079, C080, C083, C086 |
+
+## 2. 已确认问题（87 条，按严重度、文件、行号排序）
+
+| ID | 组 | 严重度 | 类别 | 位置 | 问题 | 修复方向（摘要） | 证据 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| C001 | GZ-02 | P1 (P2) | risk | `gazelle/runtime/perception/reference_rays.py:166` | 面部参考射线的垂直方向符号约定未声明、未测试，且与姿态射线的图像 y 向下约定可能不一致 | (1) 在 docs/usage/USAGE.md 与 USAGE_CN.md 的 head_pose/reference-ray 条目中明确声明符号约定（正 yaw 对应图像右，正 pitch 对应图像上/下），四份用户文档同步；(2) 在 tests/test_reference_rays.py 增加 pitch≠0 与 roll≠0 的用例固定… | 主线程复现+实测数值 |
+| C002 | GZ-08 | P2 | bug | `data_prep/preprocess_vat.py:55` | preprocess_vat.py 以 '/' 拆分 glob 路径，在 Windows 上得到错误的 images 目录并崩溃 | 改为 `parts = pathlib.Path(seq_path).parts[-2:]` 或 `os.path.normpath(seq_path).split(os.sep)[-2:]`，并把 :80 的 `os.path.join(seq_img_path, row["path"])` 输出统一为 POSIX 风格（如 `Path… | 主线程复现 |
+| C003 | GZ-05 | P2 (P1) | risk | `gazelle/model.py:91` | 小于一个特征格的合法 head bbox 被 round() 栅格化为空 head map，静默退化为无 bbox 模式 | 在运行时层（不改上游模型）增加诊断：在 `prepare_head_bboxes` 或 predictor 中按模型 `featmap_w/featmap_h` 预计算 `round()` 后是否为空；若为空，二选一并经用户决定：(a) 在 `GazePrediction`/JSON 中记录 `head_map_empty`/降级 `ga… | 主线程复现 |
+| C004 | GZ-04 | P2 | risk | `gazelle/runtime/config.py:274` | provider 跨字段约束与静态 bbox 有限性未在 RuntimeConfig.validate() 中校验，导致 --overwrite 先删旧输出再报参数错误；RuntimeConfig 作为公共编程契约也不完整 | 在 RuntimeConfig.validate() 末尾增加纯配置检查：head_source ∈ 支持集合（复用 heads.SUPPORTED_BBOX_FORMATS 与一个新的 SUPPORTED_HEAD_SOURCES 常量）；head_source=="static" 时要求 bboxes 非空、每个 bbox 为 4 个… | 复核确认 |
+| C005 | GZ-07 | P2 (P1) | contract-violation | `gazelle/runtime/media.py:160` | 源 FPS 无效时 reader 回退时钟固定 30 FPS，与 writer/tracker 的 `--output-fps` 时钟不一致且未记录 | 给 `VideoFrameReader` 增加 `fallback_fps`（或 `timestamp_fallback_fps`）参数，由 pipeline 传入 `video_fps`；或把回退时间戳的计算移到 pipeline（reader 只返回原始 POS_MSEC 与是否有效）。在 run_config.json 增加 `ti… | 复核确认 |
+| C006 | GZ-07 | P2 (P1) | risk | `gazelle/runtime/perception/mediapipe_backend.py:328` | MediaPipe 整数毫秒时间戳碰撞会让 backend 自关闭并中止整段视频 | 在 `VideoFrameReader.__iter__` 中维护 `last_timestamp_ms`，若新值 `<= last` 则改为 `last + 1000/fps`（或至少 `last + 1.0`），并在 VideoFrame 或 run_config 中记录是否发生过修正；或在 `MediaPipeHeadProvide… | 复核确认 |
+| C007 | GZ-03 | P2 (P1) | contract-violation | `gazelle/runtime/perception/tracking.py:279` | 视频模式静默丢弃每条 ByteTrack 轨迹的 spawn 帧：视频 frame 0 恒为 no_head，新出现/断裂重建的头首帧消失，no_head 语义漂移 | 需用户决策（涉及状态语义/科学口径）。候选：(A) 最小改动：在四份文档 §12/§14 记录'视频 people 仅包含 ByteTrack 已确认 ID；每条轨迹（含 frame 0）的首帧不输出，video 的 no_head 可能表示已检出未确认'，并在 head_observations 行增加可审计字段（如 `unconfir… | 主线程复现+实测 |
+| C008 | GZ-04 | P2 | risk | `gazelle/runtime/pipeline.py:250` | --overwrite 递归删除发生在 provider 先决条件与 head 数据校验之前，配置错误时旧结果被删且无新输出 | 在 RuntimeConfig.validate() 或 pipeline 的 create_output_dir 之前增加轻量预检：head_source=='static' 需 bboxes 非空且 (bbox_format=='normalized' 时) 可 sanitize；head_source=='json' 需 head_… | 复核确认 |
+| C009 | GZ-05 | P2 | risk | `gazelle/runtime/predictor.py:63` | 窄于一个 DINOv2 feature cell 的有效 bbox 被模型量化为空 head map，但仍以带 bbox 的 VALID 预测输出 | 这是协议敏感的改动，需用户批准：方案 A 在 prepare_head_bboxes 之后按模型 featmap_h/w（可从 model 对象读取）复算量化后的 head map 是否为空，为空时记录警告并在 GazePrediction 增加 `head_map_empty`/`bbox_below_model_resolution`… | 主线程复现 |
+| C010 | GZ-06 | P2 | risk | `setup.py:8` | gazelle/ 顶层无 __init__.py 且 setup.py 用 find_packages()：按 setuptools 语义 gazelle 包不会被安装发现（tests 反而会），库式 import 仅靠仓库根目录在 sys… | 先在 Gazelle 环境从非仓库目录验证（例如 `pip show -f gazelle` 与 `python -c 'import gazelle.runtime.predictor'`）；确认后改为 `find_namespace_packages(include=['gazelle*'])` 或新增 gazelle/__init_… | 主线程复现 |
+| C011 | GZ-03 | P2 | test-gap | `tests/test_head_tracking.py:91` | 测试仅用'首帧即给 ID'的 FakeTracker，未覆盖上游 spawn 帧 -1 语义与 image/video 不对称 | 新增模拟上游语义的 fake（spawn 帧 -1、次帧分配 ID、低分未匹配 -1、IoU 断裂重建）并在 provider/pipeline 级断言期望的 frame 0 行为（按用户选定的策略）；另加一个 `unittest.skipUnless(importlib.util.find_spec('trackers'))` 的本地集… | 复核确认 |
+| C012 | GZ-11 | P3 | doc-mismatch | `README.md:164` | README 声称 Gazelle checkpoint '只有下载并校验后才替换旧缓存'，但 strict 校验在替换之后、且普通推理路径不校验 | 二选一：(a) 改 README.md/README_CN.md 措辞为'替换前仅检查可反序列化，strict 校验在 --prepare-only 中于替换后进行'；(b) 小改 `_validate_candidate`/`ensure_checkpoint`，在暂存路径上完成 strict 校验后再 `replace`（需同步 te… | 复核确认 |
+| C013 | GZ-17 | P3 | doc-mismatch | `README.md:174` | README 运行时示例使用未跟踪的 samples\ 路径且未标注为模板，与 USAGE.md 的占位约定不一致 | 在 README.md 'Unified Runtime Preview' 开头加一句与 USAGE.md:9 等价的模板说明，或将图像示例改用 tracked 的 assets\the_office.png、视频示例改用 USER_INPUT_PATH；同步 README_CN.md。 | 复核确认 |
+| C014 | GZ-17 | P3 | doc-mismatch | `README.md:275` | README.md 对 face-ray 回退条件的 'three other' 措辞与实现不符 (USAGE.md 正确) | 将 README.md:275 改为与 USAGE.md:260 相同的 'at least three finite current face keypoints (including any finite eye point)'，同步 README_CN.md 对应段落。 | 复核确认 |
+| C015 | GZ-17 | P3 | doc-mismatch | `README_CN.md:248` | README_CN.md:248/250 缩短了 README.md:239/241 的 observation 字段枚举与 bbox ordering 声明 | 按 README.md:239、241 补齐 README_CN.md:248、250 的字段枚举与两句省略内容。 | 复核确认 |
+| C016 | GZ-17 | P3 | doc-mismatch | `README_CN.md:284` | README_CN.md:335 的「上述」引用悬空：README.md:275 对 perception 控制项与 primary bbox 独立于 `--head-box` 的说明在中文侧被省略 | 将 README.md:275 被省略的两句译入 README_CN.md:284（primary bbox 默认绘制且独立于 `--head-box`；列出七个 perception 控制项），使 L335 的「上述」有所指。 | 复核确认 |
+| C017 | GZ-17 | P3 | doc-mismatch | `README_CN.md:643` | README_CN.md 中文独有的「推荐执行顺序」推荐 `checkpoints\` 与 `TORCH_HOME=.torch_cache`，与 runtime 缓存约定不一致且无英文对应 | 二选一：(a) 在该节开头注明仅适用于直接调用 `gazelle.model.get_gazelle_model` 的研究 API，并补一句 runtime CLI/predictor 使用 `--cache-dir`/`GAZELLE_CACHE_DIR` 下的 `torch_hub/`，TORCH_HOME 不生效；(b) 删除或迁移… | 复核确认 |
+| C018 | GZ-12 | P3 | doc-mismatch | `docs/usage/USAGE.md:145` | --head-track-max-gap-ms 的有效 bridge 时长还受固定 500 ms 衰减常数与 0.15 置信下限限制，文档未说明 | 文档层：在第 6/14 节注明有效桥接时长 = min(max_gap_ms, 500·ln(last_confidence/0.15)) 且 tracker 丢失缓冲固定约 500 ms。行为层 (需审批)：让衰减常数或 lost_track_buffer 随 head_track_max_gap_ms 缩放，并更新 07-21 规格 … | 复核确认 |
+| C019 | GZ-17 | P3 | doc-mismatch | `docs/usage/USAGE.md:152` | heatmaps 文件名文档未覆盖重复 person_id 时的 person_<id>_<n>.pt 后缀 | 在 USAGE.md/USAGE_CN.md 第 8/12 节注明重复 person_id 的后缀规则并建议以 predictions.json 的 heatmap_path 为准；或在 StaticHeadProvider/JsonHeadProvider 构造时拒绝同帧重复 person_id (行为变更，需焦点测试)。 | 复核确认 |
+| C020 | GZ-17 | P3 | doc-mismatch | `docs/usage/USAGE.md:331` | reference-ray 子对象的键名与枚举值未在 USAGE.md 中列出 | 在第 12 节增加 'Reference-ray object' 小表 (键、Presence、取值) 并把 origin_normalized/direction_normalized/endpoint_normalized/projection_status/axial_projection/pose_head 加入 test_usa… | 复核确认 |
+| C021 | GZ-14 | P3 | doc-mismatch | `docs/usage/USAGE.md:368` | USAGE.md 对图像 predictions.json 的 people 为空条件描述不完整 (遗漏 no_gaze 情形) | 将该行改为 'Empty when the provider returned no heads or when no head matched --gazelle-head-mode; consult head_observations.json gazelle_selected/gaze_status to distinguish'，… | 复核确认 |
+| C022 | GZ-09 | P3 | doc-mismatch | `docs/usage/USAGE.md:447` | 文档对 width/height 来源的三种措辞（source frame / frame / decoded video）与代码实际来源（open 时的 CAP_PROP_FRAME_WIDTH/HEIGHT）仅在尺寸一致时同义 | 实现 Q2 校验后，把四处措辞统一为 'decoded frame pixel dimensions，来自 OpenCV 报告值并与每个解码帧校验相等'（USAGE.md:301、376、447-448 与 USAGE_CN.md 对应行同步）；README.md:237 / README_CN.md:246 仅列字段名，无需改动。若暂不… | 复核确认 |
+| C023 | GZ-10 | P3 | doc-mismatch | `docs/usage/USAGE.md:465` | 用户文档未明示 --force-download 不刷新 torch_hub/，也无损坏 hub 缓存的恢复步骤；文档测试无对应 token | 在 USAGE.md/USAGE_CN.md 第 13 节与 README/README_CN 的 --force-download 段落增加一句：'`--force-download` 不刷新 `torch_hub/`（DINOv2 仓库代码与骨干权重由 torch.hub 管理，无哈希校验）；如需重建请删除 `<cache>/torc… | 复核确认 |
+| C024 | GZ-10 | P3 (P2) | risk | `gazelle/backbone.py:31` | 截断的 DINOv2 骨干权重可被持久化到 torch_hub/checkpoints 且永不刷新；--force-download 不覆盖，文档无恢复指引 | 短期：在四份用户文档明示 `--force-download` 不刷新 `torch_hub/`，并给出恢复步骤（删除 `torch_hub/checkpoints/dinov2_*_pretrain.pth`，必要时删 `torch_hub/facebookresearch_dinov2_main/` 与 `*.partial`/`ma… | 复核确认 |
+| C025 | GZ-10 | P3 (P2) | risk | `gazelle/backbone.py:31` | DINOv2 仓库字符串无 ref pin，导致每次模型构造都向 github.com 探测默认分支，即使缓存已热；非 404 HTTP 错误会中止运行 | 在 backbone.py:31 固定 ref（如 'facebookresearch/dinov2:<commit>'），hub.py:150-151 将跳过探测；注意缓存目录名随之变为 `facebookresearch_dinov2_<ref>`（hub.py:234-240），需一次重下或文档化重命名现有缓存，并同步四份文档中 '… | 复核确认 |
+| C026 | GZ-08 | P3 (P2) | test-gap | `gazelle/model.py:80` | 核心模型与指标函数没有任何离线单元测试 | 新增 `tests/test_model_core.py` 与 `tests/test_metrics.py`：用实现 `Backbone` 抽象 (gazelle/backbone.py:7-24) 的假 backbone（返回固定 `[B,C,32,32]` 张量）构造 `GazeLLE`，断言输出形状 `[N,64,64]`/`[N… | 复核确认 |
+| C027 | GZ-18 | P3 | maintainability | `gazelle/runtime/cli.py:60` | --max-heads/--pose-model/--head-track-max-gap-ms/--save-face-landmarks 在 argparse 中没有 help 文本 | 补充与 USAGE.md 第 6 节一致的简短 help 字符串；tests/test_runtime_cli.py 若已有 help 文本断言可一并覆盖。 | 复核确认 |
+| C028 | GZ-18 | P3 | maintainability | `gazelle/runtime/cli.py:122` | parser choices 与 config/heads 常量重复定义且大小写策略不一致，存在漂移风险 | 让 cli.py 的 choices 全部引用单一常量（为 head_source 新增 SUPPORTED_HEAD_SOURCES 于 config.py 并在 pipeline.build_head_provider_from_config 复用；--bbox-format 引用 heads.SUPPORTED_BBOX_FORMA… | 复核确认 |
+| C029 | GZ-18 | P3 | risk | `gazelle/runtime/config.py:270` | 空字符串路径选项被当作"未设置"而非错误，--checkpoint "" 会静默回退到下载注册 checkpoint | 在 validate() 中对 cache_dir/checkpoint/head_data 做 `str.strip()`，空串直接 raise ValueError（"--checkpoint must not be empty"）或显式归一为 None 并在文档中说明；补充单元测试。 | 复核确认 |
+| C030 | GZ-15 | P3 | maintainability | `gazelle/runtime/contracts.py:43` | FramePacket 是无引用死代码（自 197a065 起未使用、未文档化、未测试） | 删除该类（无引用、无风险，PR 说明无需用户文档更新的原因）；若用户决定保留为下游帧信封，则补文档（四份）与一个形状/校验测试。 | 复核确认 |
+| C031 | GZ-18 | P3 (P2) | risk | `gazelle/runtime/environment.py:89` | CUDA 且 xFormers 不可导入时，同进程第二次构造模型被守卫误拒 | 守卫只在 xFormers 确实可用却被禁用时才触发：例如 `importlib.util.find_spec("xformers") is not None` 作为前置条件，或在 temporarily_disable_xformers 内记录模块级标志 `_runtime_disabled_xformers`，以运行时自身的意图而非 … | 复核确认 |
+| C032 | GZ-18 | P3 | maintainability | `gazelle/runtime/ffmpeg.py:187` | FFmpeg 子进程继承 stdin 且无超时 | 命令加 `-nostdin` 或 runner 传 `stdin=subprocess.DEVNULL`；可选地暴露超时参数。更新 test_ffmpeg.py 中的命令断言。 | 复核确认 |
+| C033 | GZ-18 | P3 | risk | `gazelle/runtime/heads.py:144` | static/json provider 不检查同一帧内 person_id 重复 | 在 StaticHeadProvider.__init__ 对显式 person_ids 去重校验，在 _validate_frame_record 或 JsonHeadProvider.__init__ 对每帧 heads 的显式 person_id 去重校验，报错带 frame_index；补充两条单测。 | 复核确认 |
+| C034 | GZ-13 | P3 (P2) | design | `gazelle/runtime/heads.py:276` | JsonHeadProvider.__init__ 只校验 record 级结构，head 级字段与多头 bbox=None 组合在加载期可判定却延后到逐帧/推理期，且仅 inference_due 帧触发 | 在 `_validate_frame_record` 或 `JsonHeadProvider.__init__` 中增加 head 级预校验：Mapping 类型、person_id、confidence、head 级 bbox_format、bbox 键存在、`None` 允许但 `len(heads) > 1` 时任一 None 立即… | 复核确认 |
+| C035 | GZ-13 | P3 | design | `gazelle/runtime/heads.py:301` | JSON head 记录的 head 级校验延迟到逐帧 get_heads，错误在视频中途才暴露 | 在 __init__ 对每个 head 做与尺寸无关的结构校验（Mapping、person_id、confidence、bbox 为 None/4 元 finite、bbox_format 合法、多头帧不得含 null bbox），尺寸相关的 pixel 转换仍留在 get_heads。 | 复核确认 |
+| C036 | GZ-07 | P3 (P2) | risk | `gazelle/runtime/media.py:160` | reader 时间戳回退混用两套时钟并忽略 --output-fps，可产生非单调时间戳使 MediaPipe/tracker 中止 | 给 `VideoFrameReader` 增加 `fallback_fps` 构造参数并由流水线传入已解析的 `video_fps`；一旦某帧触发回退，后续帧统一采用索引时钟（或取 `max(prev + 1/fps, fallback)` 保证单调），并在 `run_config.json` 记录 `timestamp_source`；… | 复核确认 |
+| C037 | GZ-09 | P3 (P2) | risk | `gazelle/runtime/media.py:163` | 解码帧尺寸与 VideoMetadata 尺寸在写出 JSONL/送入模型前无任何一致性校验；唯一校验在 --save-rendered 的 writer 且位于推理之后 | 在 VideoFrameReader.__iter__（media.py:163-164）对每帧比较 `image.size` 与 `(self._metadata.width, self._metadata.height)`，不等则抛 ValueError（含路径、frame index、两组尺寸），从而先于 provider 调用、J… | 复核确认 |
+| C038 | GZ-18 | P3 | risk | `gazelle/runtime/outputs.py:155` | 视频 run_config.json 的 source_fps 原样序列化，非有限值会写出非标准 NaN 字面量 | `source_fps` 非有限时写 null（并在 USAGE 表格把类型改为 nullable），或 `json.dumps(..., allow_nan=False)` 配合预清洗。 | 复核确认 |
+| C039 | GZ-18 | P3 | maintainability | `gazelle/runtime/perception/contracts.py:86` | `PoseObservation.world_landmarks` 复用 `NormalizedLandmark` 类型承载米制坐标 | 增加 `WorldLandmark` 别名或 docstring 说明单位；或在 outputs 层明确标注单位。 | 复核确认 |
+| C040 | GZ-17 | P3 (P2) | design | `gazelle/runtime/perception/gaze_policy.py:101` | 视角选择器 frontal/profile/unknown 会命中 tracked_only 的陈旧 view_state，从而把桥接头送入 Gazelle，文档与测试均未说明 | 二选一并补测试：(a) 保持字面匹配语义，在 docs/usage/USAGE.md:147/319 与中文文档注明 '视角选择器会匹配 tracked_only 沿用的 view_state，如需排除请同时依赖 observed'；(b) 让视角选择器仅匹配 observed=True 的 perception（tracked_only 只能通过 … | 复核确认 |
+| C041 | GZ-16 | P3 (P2) | doc-mismatch | `gazelle/runtime/perception/mediapipe_backend.py:80` | MediaPipe 检测/landmark 阈值依赖上游默认值，spec §18 承诺的 frozen internal config 未实现，链路下限不是仓库内常量 | 增加 frozen dataclass（如 MediaPipeThresholdConfig：min_detection_confidence=0.5, min_suppression_threshold=0.3, 三组 landmarker 0.5）并显式传入三个 Options（与当前默认值相同，行为中性）；为 _create_med… | 复核确认 |
+| C042 | GZ-16 | P3 (P2) | design | `gazelle/runtime/perception/mediapipe_backend.py:94` | 裁剪内 FaceLandmarker 使用 `num_faces=max_heads` 并取 `faces[0]`，多人近距场景可能把邻人 landmark 挂到当前检测 | crop-local landmarker 固定 `num_faces=1`（spec §6.2 “independently cropped face ROI” 语义），并可选地验证返回 landmark 质心位于原检测框（或其小幅扩展）内，否则置 landmarks=()/head_pose=None。 | 复核确认 |
+| C043 | GZ-16 | P3 (P2) | contract-violation | `gazelle/runtime/perception/mediapipe_backend.py:130` | adapter 边界未拒绝非有限 face landmark/keypoint，导致运行在 JSONL 序列化阶段中止 | 在 `_convert_landmark`/`_remap_face_landmark` 中对 x/y（及可选 z/visibility/presence）做有限性检查：非有限则丢弃该 landmark（keypoints）或整张脸（landmarks），并增加 `test_mediapipe_backend.py` 回归用例（NaN k… | 复核确认 |
+| C044 | GZ-16 | P3 | test-gap | `gazelle/runtime/perception/mediapipe_backend.py:242` | FaceLandmarker 奇异（gimbal-lock）分支无测试，spec §14 要求锁定 singular case | 添加 yaw=90° 合成矩阵用例断言 roll=0 与 pitch 分支，以及非有限/2x2 矩阵 → head_pose=None、transformation_matrix=None 的用例。 | 复核确认 |
+| C045 | GZ-18 | P3 | maintainability | `gazelle/runtime/perception/outputs.py:109` | _reference_ray_to_json_dict 不校验射线内部一致性（origin 非空、AVAILABLE⇔direction/endpoint 存在） | 在 _reference_ray_to_json_dict 中要求 origin 为 2 元有限列表；AVAILABLE 时 direction/endpoint 必须为 2 元有限列表，AXIAL 时必须为 None；补两个负向测试。 | 复核确认 |
+| C046 | GZ-15 | P3 (P2) | maintainability | `gazelle/runtime/perception/provider.py:124` | MediaPipeHeadProvider.create 的 config 鸭子类型契约不一致：reference_ray_length 容错、其余字段硬读且无构造期校验 | 二选一并写入 docstring：(a) 把 config 类型化为 RuntimeConfig，直接读 config.reference_ray_length，去掉 getattr，更新 make_config 桩加入该字段；(b) 改为显式关键字参数（max_heads, head_track_max_gap_ms, referenc… | 复核确认 |
+| C047 | GZ-19 | P3 (P2) | risk | `gazelle/runtime/perception/provider.py:169` | 场景切换完全未处理：tracker/bridge 的 reset() 在 gazelle/ 中没有任何调用点 | 作为独立里程碑（需 spec）：在 provider 前加入可注入的 scene-cut detector（如帧直方图/下采样 L1 距离阈值），触发时调用 `tracker.reset()` + `bridge.reset()` 并在 head JSONL 行写 `scene_cut: true`；在此之前至少在 USAGE 的 kno… | 复核确认 |
+| C048 | GZ-12 | P3 (P2) | design | `gazelle/runtime/perception/provider.py:178` | ByteTrack lost_track_buffer 固定为 15 帧且不随 max_gap_ms 变化；max_heads>=2 时旧 ID 的 tracked_only 幽灵可与新 ID 的 observed 同帧共存，post-br… | 最小修复：在 provider._assign_people 对所有 max_heads 做 post-bridge 去重——若某 tracked_only 感知的 head_bbox 与任一 observed 感知 IoU 超过阈值（可复用 fusion._bbox_iou 与 min_consistent_iou 或 ByteTrac… | 复核确认 |
+| C049 | GZ-17 | P3 | doc-mismatch | `gazelle/runtime/perception/provider.py:224` | 规范 §16 的 timings_ms 键名 fusion_tracking 与实现的 fusion/tracking/backend_total 不一致 | 在规范末尾或 docs/usage/USAGE.md 的 timings_ms 行补充当前实际键名（backend 键 + backend_total + fusion + tracking + total），不改代码。 | 复核确认 |
+| C050 | GZ-17 | P3 | doc-mismatch | `gazelle/runtime/perception/resources.py:262` | spec §19 的按任务子目录布局与实现/USAGE 的扁平布局不一致 | 在 spec 文档加一行“实现采用扁平布局”的勘误，或保持现状并在后续 spec 修订时同步。 | 复核确认 |
+| C051 | GZ-18 | P3 | risk | `gazelle/runtime/perception/tracking.py:166` | trackers/supervision 可用性检查推迟到首帧 update，而非 provider/tracker 构造期 | 在 ByteTrackHeadTracker.__init__ 末尾或 MediaPipeHeadProvider.create 的 video 分支中显式调用 `_load_supervision()` 与 `_load_tracker_factory()`（保留模块级懒导入以满足 test_import_does_not_import… | 复核确认 |
+| C052 | GZ-18 | P3 | maintainability | `gazelle/runtime/perception/tracking.py:166` | 可提前的外部依赖与数据校验被推迟到首帧/逐帧：trackers/supervision 延迟导入、JSON head bbox 逐帧校验 | 视频模式下在 `MediaPipeHeadProvider.create` 后立即调用 `tracker._ensure_tracker()`（或提供公开的 `prepare()`）；`JsonHeadProvider` 在构造时对 normalized 格式 bbox 做 `sanitize_normalized_bbox`，pixel… | 复核确认 |
+| C053 | GZ-12 | P3 | risk | `gazelle/runtime/perception/tracking.py:172` | tracker 存活缓冲 int(frame_rate/30*15) 在低 FPS 下为 0，且与 bridge 的 500 ms 时钟存在逐帧偏差 | 在 ByteTrackHeadTracker.__init__/_ensure_tracker 对 int(fps/30*15)==0 的情况提前报错或警告；文档 §14 说明缓冲以帧为单位按 FPS 取整，与 --head-track-max-gap-ms 的毫秒时钟不完全对齐。 | 复核确认 |
+| C054 | GZ-03 | P3 | maintainability | `gazelle/runtime/perception/tracking.py:264` | adapter 不校验 tracker 是否为每个候选返回一行，上游静默丢弃（高分但低于 activation）不可见 | 在 _TRACKER_CONFIGURATION 处注释该耦合，或在 _map_tracked_candidates 统计并暴露'未返回行数'（可与 P1 的 unconfirmed 计数合并）。 | 复核确认 |
+| C055 | GZ-12 | P3 (P2) | doc-mismatch | `gazelle/runtime/perception/tracking.py:582` | bridge 衰减常数与置信度下限固定，使 --head-track-max-gap-ms 超过约 600–950 ms 后静默失效 | 二选一并同步四份用户文档与 tests/test_usage_docs.py：(a) 把衰减时间常数与 max_gap_ms 关联（例如 decay = max_gap_ms 或在 ShortOcclusionBridge 构造时接受 decay_time_ms），使任意 max_gap 内置信度都可保持 ≥ min_confidence… | 复核确认 |
+| C056 | GZ-04 | P3 | risk | `gazelle/runtime/pipeline.py:124` | --overwrite 清理可能删除位于输出目录内部、且已被 reader 打开的输入视频 | `create_output_dir` 接收 input_path 后，在清理前检查 `Path(input_path).resolve(strict=False)` 是否位于 `output_path_resolved` 之下，若是则抛 ValueError('Refusing to clean output directory con… | 复核确认 |
+| C057 | GZ-18 | P3 (P2) | risk | `gazelle/runtime/pipeline.py:151` | 显式 --device cuda[:N] 不可用仅在惰性模型构建时检测，晚于输出目录清理、MediaPipe 资源准备与逐帧感知；无选中 head 的运行会静默成功；--prepare-only 完全不校验 --device | 在 run_image_pipeline/run_video_pipeline 开头（create_output_dir 之前，与 save_heatmaps/FFmpeg 检查并列）调用 `from gazelle.runtime.predictor import resolve_torch_device; resolve_torch_… | 复核确认 |
+| C058 | GZ-18 | P3 | doc-mismatch | `gazelle/runtime/pipeline.py:212` | run_config.json 可能把非有限 `source_fps` 序列化为非标准 JSON（NaN/Infinity） | `_video_run_config_payload` 中对非有限值写 `None` 并额外记录 `source_fps_valid: bool`；或 `json.dumps(..., allow_nan=False)` 配合显式清洗；同步文档。 | 复核确认 |
+| C059 | GZ-14 | P3 | doc-mismatch | `gazelle/runtime/pipeline.py:290` | 图像 predictions.json 无帧级 status，选择器拒绝（no_gaze）与无头部（no_head）不可区分；文档描述不完整 | 最小修复：在 USAGE.md/USAGE_CN.md/README 的 predictions.json 表格中说明 `people` 为空也可能是选择器拒绝，需结合 head_observations.json 的 `gazelle_selected` 判断；可选的加法式 schema 改动：为图像 predictions.json … | 复核确认 |
+| C060 | GZ-14 | P3 | doc-mismatch | `gazelle/runtime/pipeline.py:310` | 图像模式 predictions.json 无法区分 no_head 与 no_gaze，USAGE 描述不完整 | 最小修改：把 docs/usage/USAGE.md:368 与 USAGE_CN.md 对应行改为 'Empty when no head was selected for Gazelle (provider returned no heads, or no head matched --gazelle-head-mode); see head_o… | 复核确认 |
+| C061 | GZ-04 | P3 (P2) | risk | `gazelle/runtime/pipeline.py:361` | JSON/static head 级校验延后到逐帧，而 --overwrite 的递归删除先于 provider 构建：无效 head 数据在旧结果已删除、部分输出已写出后才致命中止 | 分两步且需同做：(a) 在 `JsonHeadProvider.__init__` 对每个 head 做与尺寸无关的校验（见 issue 2），在 `StaticHeadProvider.__init__` 对 normalized 框做完整校验、对 pixel 框做有限/四元/顺序校验，或在 `RuntimeConfig.validat… | 复核确认 |
+| C062 | GZ-09 | P3 | risk | `gazelle/runtime/pipeline.py:413` | pipeline 信任容器元数据尺寸而不校验解码帧尺寸；未开渲染时错误归一化会静默发生 | 在 `VideoFrameReader.__iter__` 中若 `image.size != (metadata.width, metadata.height)` 抛 ValueError（或在 pipeline 第 0 帧校验一次）；成本极低。 | 复核确认 |
+| C063 | GZ-13 | P3 (P2) | design | `gazelle/runtime/pipeline.py:428` | 中途失败会留下行数可能不对齐、且无完成标记的部分输出；`error` 状态从不写出 | 在 `except BaseException` 分支中（可区分 Exception 与 KeyboardInterrupt）为当前帧补写一条 `status="error"`、`error=repr(exc)` 的 gaze 行以保持行数对齐，并写出带 `completed: false`、`failed_frame_index` 的 … | 复核确认 |
+| C064 | GZ-13 | P3 | risk | `gazelle/runtime/pipeline.py:428` | predictor 阶段逐帧失败后 head_observations.jsonl 比 predictions.jsonl 多一行，且磁盘上无任何显式失败标记 | 两选一并记录决策：(a) 保持致命语义，但在 USAGE.md/USAGE_CN.md 第 12 或 14 节补一句'失败运行可能留下部分 JSONL/渲染输出且不写 run_config.json；两份 JSONL 应按 frame_index 对齐'；(b) 在重新抛出前为当前帧写一行 `status="error"`（`error=… | 复核确认 |
+| C065 | GZ-18 | P3 | risk | `gazelle/runtime/pipeline.py:452` | 设备/检查点校验被惰性推迟到首个可推理帧，长视频可能在大量工作后才失败 | 在 `run_video_pipeline`/`run_image_pipeline` 入口（真实 predictor 路径）先调用 `resolve_torch_device(config.device)` 做纯校验；对显式 `--checkpoint` 的本地路径可提前 `exists()` 检查；模型构建保持惰性以维持 '无选中头部… | 复核确认 |
+| C066 | GZ-18 | P3 | test-gap | `gazelle/runtime/predictor.py:104` | float ndarray 帧路径截断而 tensor 路径四舍五入，且这两条输入路径无测试 | ndarray 路径改为 `np.rint(...)` 后再 astype；补充 tensor [3,H,W]/[H,W,3]、float/uint8 ndarray、RGBA PIL 与非法形状的单测。 | 复核确认 |
+| C067 | GZ-15 | P3 | design | `gazelle/runtime/predictor.py:201` | from_checkpoint 在校验 device 之前已创建 cache 目录并修改全局 torch.hub 目录 | 把 resolve_torch_device 提前到 get_model_spec 之后、任何文件系统/全局状态修改之前。 | 复核确认 |
+| C068 | GZ-15 | P3 (P2) | design | `gazelle/runtime/predictor.py:203` | 进程全局 torch.hub.set_dir 不恢复、默认相对路径、且早于设备校验执行，对库式嵌入（Multi-Pose）构成静默副作用 | 在 resources.py 增加上下文管理器：保存 `torch.hub.get_dir()`，`set_dir(str(Path(torch_hub_dir).resolve()))`，构造完成后 `finally` 恢复（DINOv2 权重在构造期同步加载，backbones.py:63-75，恢复安全）；predictor.py … | 复核确认 |
+| C069 | GZ-15 | P3 (P2) | design | `gazelle/runtime/predictor.py:203` | GazellePredictor.from_checkpoint 永久改写进程全局 torch.hub 目录且不恢复；cache_dir=None 时在 host CWD 创建 models/，编程文档未披露 | 在 from_checkpoint 中 `previous = torch.hub.get_dir()`，构造完成后在 finally 中 `torch.hub.set_dir(previous)`（hub 加载的 dinov2 模块已驻留 sys.modules，恢复不影响已构造模型）；resources.py:316/367 同样处理… | 复核确认 |
+| C070 | GZ-15 | P3 (P2) | design | `gazelle/runtime/predictor.py:243` | predict_frame 返回的 GazePrediction.gaze_status 恒为默认 valid，未按 in/out 阈值分类；README_CN 的 Multi-Pose 稳定接口却把 in/out threshold 列为… | 最小改动：在四份文档的编程段落明确 predict_frame 不做 in/out 分类，gaze_status 保持默认 valid，并给出 `apply_prediction_gaze_status(predictions, inout_threshold=0.5)` 示例；可选：为 predict_frame 增加 `inout_t… | 复核确认 |
+| C071 | GZ-17 | P3 | design | `gazelle/runtime/renderer.py:149` | gaze peak 标记/箭头终点落在 argmax 单元左上角，相对 heatmap 亮斑中心系统性偏向左上 | 先在 docs 中明确 `gaze_peak_normalized` 表示 argmax 单元左上角；若经协议确认应表示单元中心，则在 predictor 改为 `(x_index+0.5)/width`（研究语义变更，需审批并同步四份文档），渲染器无需改动。不建议在渲染器里按 `prediction.heatmap.shape` 偷偷补… | 复核确认 |
+| C072 | GZ-18 | P3 (P2) | perf | `gazelle/runtime/renderer.py:237` | contour 叠加层逐像素 Python 绘制，视频场景性能风险 | 用 numpy 做边界加粗（对 `boundary` 做 width×width 的位移 OR / 或 `Image.fromarray(boundary).filter(ImageFilter.MaxFilter(width))`），一次性构造 RGBA 数组（RGB=color，A=255*mask）并 `Image.fromarra… | 复核确认 |
+| C073 | GZ-18 | P3 | maintainability | `gazelle/runtime/renderer.py:338` | `draw_prediction` 无条件计算未使用的标签锚点，使退化 bbox 在所有 bbox 相关层关闭时仍抛 ValueError | 删除 338 行；若希望对退化 bbox 快速失败，应在 `render` 入口显式校验并给出清晰错误，而不是依赖副作用。 | 复核确认 |
+| C074 | GZ-18 | P3 | design | `gazelle/runtime/renderer.py:353` | mediapipe 模式下 `--head-box` 的 Gazelle 预测框被同色同宽的感知 head box 完全覆盖 | 让预测框在视觉上可区分（例如更细/内缩 1-2px 或不同线型），或在文档中说明 mediapipe 下两框重合。 | 复核确认 |
+| C075 | GZ-18 | P3 | design | `gazelle/runtime/renderer.py:701` | legacy 路径与 perception 路径图层顺序不一致：多人时后一人的 heatmap 压在前一人的箭头/标签上 | 将 legacy 路径改写为与 perception 路径相同的分层顺序（或把 perception 路径的 `if perceptions:` 分支改为始终执行、perceptions 为空时跳过感知层）。这会改变多人 legacy 图像的字节，但不改变任何 JSON；需在 USAGE 的渲染章节一句话说明。 | 复核确认 |
+| C076 | GZ-11 | P3 | risk | `gazelle/runtime/resources.py:119` | --force-download 的 strict 校验发生在原子替换之后，下载成功但校验失败会覆盖原本有效的缓存 | 给 ensure_checkpoint 增加可选 `validator: Callable[[Path], None]` 参数，在 replace 之前对 temp_checkpoint_path 执行 strict 校验；_validate_candidate 与 resolve_runtime_checkpoint 传入基于当前 mo… | 复核确认 |
+| C077 | GZ-08 | P3 | security | `hubconf.py:10` | hubconf.py 的 load_state_dict_from_url 未传 weights_only=True | 四处调用追加 `weights_only=True`（权重为纯 state dict，兼容）。 | 复核确认 |
+| C078 | GZ-08 | P3 (P2) | risk | `scripts/eval_vat.py:56` | 上游非严格加载让评测脚本在缺失 inout 权重时静默输出随机 inout AP | 给 `load_gazelle_state_dict` 增加 `strict: bool = False` 参数（保持默认兼容），`scripts/eval_gazefollow.py` 与 `scripts/eval_vat.py` 以 `strict=True` 调用或在存在缺失/多余键时 `raise`；`scripts/train… | 复核确认 |
+| C079 | GZ-20 | P3 (P2) | test-gap | `tests/test_gaze_policy.py:107` | 缺少回归测试固定 'axial_projection 面部射线仍可 eligible' 的保守策略语义 | 在 tests/test_gaze_policy.py 增加用例：构造 projection_status=AXIAL、direction=endpoint=None、confidence=0.9 的射线，断言 annotate_gaze_eligibility 得到 gaze_eligible=True 且 gaze_status=No… | 复核确认 |
+| C080 | GZ-20 | P3 | test-gap | `tests/test_gaze_policy.py:119` | 0.50 边界缺少恰好相等的测试：_MIN_FACE_GAZE_CONFIDENCE 与 HeadBoxFusionConfig.min_visibility/min_presence | 增加 confidence=0.50 / ray.confidence=0.50 → eligible 的断言，以及 visibility=0.50、presence=0.50 → _is_reliable 为真、0.4999 为假的断言。 | 复核确认 |
+| C081 | GZ-07 | P3 | test-gap | `tests/test_media.py:92` | VideoFrameReader 时间戳语义与回退分支无测试覆盖 | 对 5fps 三帧小视频断言 `[f.timestamp_ms for f in frames] == [0.0, 200.0, 400.0]`（允许小容差）；用 patch `gazelle.runtime.media._import_cv2` 注入假 VideoCapture 覆盖 POS_MSEC 为 NaN/0/负值时的回退与 i… | 复核确认 |
+| C082 | GZ-09 | P3 (P2) | test-gap | `tests/test_media.py:157` | 测试缺口：没有任何用例覆盖 metadata 尺寸与解码帧尺寸不一致，管线对帧尺寸的处理在测试中不可观测 | 新增离线用例：(1) tests/test_media.py 用假 cv2.VideoCapture 模拟属性 40x30、read() 返回 32x24，断言 VideoFrameReader 迭代时抛 ValueError；(2) tests/test_mediapipe_backend.py 传 Image.new('RGB', (… | 复核确认 |
+| C083 | GZ-20 | P3 | test-gap | `tests/test_predictor.py:167` | 测试中 torch.hub.set_dir 指向已删除的 TemporaryDirectory 且未恢复，污染进程全局状态 | 在相关用例中 `previous = torch.hub.get_dir(); self.addCleanup(torch.hub.set_dir, previous)`，或统一 patch gazelle.runtime.predictor.torch.hub.set_dir / resources.torch.hub.set_dir。 | 复核确认 |
+| C084 | GZ-17 | P3 | test-gap | `tests/test_usage_docs.py:328` | test_usage_docs.py 的 samples 路径守卫使用双反斜杠字面量，实际无法拦截 samples\ 单反斜杠路径 | 改为 `self.assertNotRegex(guide, r"samples[\\\\/]")` 或 `self.assertNotIn("samples\\", guide)` (普通字符串)；可同时覆盖 README。 | 复核确认 |
+| C085 | GZ-17 | P3 (P2) | test-gap | `tests/test_usage_docs.py:515` | tests/test_usage_docs.py 对五条 prose 契约在中英双语均无 token 锁定；README 散文仅受 codec token 与链接检查保护 | 参照 L275-278 的 'no audio'/'无音频' 配对模式，新增一个 (section, english_token, chinese_token) 表并分别断言：如 (12, '`skipped` takes precedence', '`skipped` 优先')、(12, 'always `false` on `fram… | 复核确认 |
+| C086 | GZ-20 | P3 (P2) | test-gap | `tests/test_video_pipeline.py:794` | 视频管线缺少规范 §22.1 要求的 tracker+bridge 端到端覆盖（stable IDs / short gap / long gap） | 在 tests/test_video_pipeline.py 增加一个用例：FakeBackend 产出若干帧的 faces/poses（含一段 ≤500 ms 缺失与一段 >500 ms 缺失），tracker_factory 返回 `ByteTrackHeadTracker(fps, tracker_factory=Recording… | 复核确认 |
+| C087 | GZ-13 | P3 | test-gap | `tests/test_video_pipeline.py:968` | 测试缺口：中途致命路径、JSON 多头 None 到达 predictor、--bbox 非有限/倒序值通过 CLI 解析均无回归覆盖 | 新增：(1) `run_video_pipeline` + 真实 JSON 文件，frame 1 含非法 head，断言在 `--overwrite` 下旧目录内容被删除且输出只有 1 行（记录当前行为或新行为）；(2) JSON 多头 None 记录 → `ValueError` 'requires a valid bbox'，pred… | 复核确认 |
+
+## 3. 被驳回的报告（17 条）
+
+驳回不代表代码完美：多数是“已批准规范要求的既定行为”“已在用户文档声明的已知限制”或“触发前提在受支持输入下不存在”。
+
+| 原严重度 | 位置 | 报告 | 驳回理由（摘要） |
+| --- | --- | --- | --- |
+| P3 | `gazelle/runtime/cli.py:324` | main() 对非 argparse 失败直接抛 Python traceback（exit 1），且含两处不可达代码 | 代码事实可复现，但"缺陷/一致性问题"的定性不成立；这是项目范围内未文档化但内部一致的设计选择，而非 cli.py:324 的局部缺陷。  一、代码层面的事实（与报告一致） - gazelle/runtime/cli.py:324 `media_type = detect_media_type(config.input_path)` 未被 try/except 包裹；gazelle/runtime/media.py:42-48 对不支持… |
+| P3 | `gazelle/runtime/resources.py:153` | load_checkpoint_state_dict 的 TypeError 回退会静默放弃 weights_only 安全加载 | 结论：代码形态与“无测试覆盖”两点属实，但该发现的核心安全推理（TypeError 回退 => 以完整 pickle 反序列化 => 任意代码执行面）在本项目实际环境中不成立，且分析者关于“torch 2.6 下该分支本应永不执行”的前提也不准确。  1) 代码确实如引用。gazelle/runtime/resources.py:150-154：`try: torch_load(path, map_location="cpu", wei… |
+| P3 | `gazelle/runtime/resources.py:330` | resolve_runtime_checkpoint 与 prepare_runtime_resources 对多 candidate 规格行为不对称 | 结论：代码字面描述属实，但"行为不对称是潜在缺陷、需要代码修复"这一核心推理被现有设计、提交历史和回归测试直接反驳，因此判为 refuted。  1. 代码确实如报告所述。gazelle/runtime/resources.py:330-338 在 `candidate_count != 1` 时抛 ValueError；prepare_runtime_resources（355-399）委托 resolve_checkpoint_ca… |
+| P2 | `gazelle/runtime/perception/mediapipe_backend.py:328` | OpenCV `CAP_PROP_POS_MSEC` 非严格递增时 backend 硬中止整段视频 | 结论：代码机制描述属实，但作为"新发现的 P2 风险"应予驳回。它是 spec 明确批准、实施计划明确要求、单元测试固定、四份用户文档逐字标注为 known runtime limitation、handoff 列为 Open Problem #2 的既有行为；分析者给出的真实触发场景（VFR、重复帧、B-frame）在本仓库锁定的 OpenCV 版本上不成立或未被证实（分析者自述"未在本机实测"）。  1. 代码确认（与 findin… |
+| P3 | `gazelle/runtime/perception/mediapipe_backend.py:370` | `max_heads` 截断发生在裁剪有效性校验之前 | 1. 代码读法本身无误。`gazelle/runtime/perception/mediapipe_backend.py:370-374` 先按 `_detection_confidence` 降序排序再切片 `[: self._max_heads]`，`:378-385` 对切片后的每个 detection 调 `_crop_box`，为 `None` 时 `continue`。机械上，"top-1 退化 + 第二名有效 + `max… |
+| P3 | `gazelle/runtime/perception/mediapipe_backend.py:140` | `_detection_confidence` 将非有限/缺失分数钳为 0.0 而非拒绝 | 1. 代码事实核对：`gazelle/runtime/perception/mediapipe_backend.py:140-145` 的确如所述——`categories` 为空返回 0.0，非有限 `score` 返回 0.0；该值用于 `sorted(..., key=_detection_confidence)`（:370-374）和 `FaceObservation.confidence`（:399）。代码读取准确，但“与 s… |
+| P3 | `gazelle/runtime/perception/tracking.py:556` | bridge 过期仅依赖时间戳；时间戳相等时不衰减不过期（missed_frames 不参与过期判定） | **1. 代码引用是否属实：属实。** `gazelle/runtime/perception/tracking.py:556-557` 只拒绝 `timestamp_ms < self._last_timestamp_ms`，相等被接受；`:581-583` 相等时 `missed_ms = 0.0`，`confidence = state.confidence * exp(0)` 不衰减，`missed_ms > self._max… |
+| P3 | `gazelle/runtime/perception/gaze_policy.py:103` | select_gazelle_head_indices 对未知/误传 selector 静默不匹配，仅依赖 config 层校验 | 结论：代码层面的描述属实，但作为"缺陷/违背设计"的 finding 不成立；它只是一个可选的防御性加固建议，而非需要修复的问题。  1. 代码确实如所述（可复现）： - gazelle/runtime/perception/gaze_policy.py:92-103 `_matches_gazelle_selector` 对不在 {"all","observed","eligible", state.value, view_state… |
+| P3 | `gazelle/runtime/perception/outputs.py:264` | head_frame_to_json_dict 在缺省 gazelle_selected_indices 时回退到保守策略，可能把'建议'误记为'实际决策' | 结论：被引用代码的字面描述准确，但"契约脆弱点 / 违背设计意图"的推理不成立，该回退是经批准的接口契约，且现有 pipeline 测试已能捕获分析者假设的遗漏传参回归。  1. 代码事实核对（属实）：gazelle/runtime/perception/outputs.py:258-274 中，当 result.perceptions 非空且 gazelle_selected_indices is None 时，调用 select_g… |
+| P2 | `gazelle/runtime/ffmpeg.py:150` | avc1 终结对奇数分辨率源在整段处理完后才失败，且 mp4v 中间产物被丢弃 | **引用代码逐字核对（这部分分析员说得对）**：`_transcode_command` 确实固定 `-pix_fmt yuv420p` 且无 `-vf scale/pad`（gazelle/runtime/ffmpeg.py:150-151）；`run_video_pipeline` 取得 `metadata.width/height`（pipeline.py:360，391-392）后不做奇偶检查；`transcode_h264` … |
+| P3 | `gazelle/runtime/pipeline.py:486` | run_config.json 在 H.264 终结之前写出，且实际使用的编码器被丢弃 | 结论：代码事实描述准确，但"缺陷/设计问题"的定性不成立——这是已批准 spec/plan 明文规定、文档记录、测试守护的既定行为；finding 的 IMPACT 主张（失败运行与成功运行不可区分）与实际控制流矛盾。  1. 代码确实如所述（无争议部分）： - `gazelle/runtime/pipeline.py:486-498` 调 `write_run_config_json`，`:513-518` 之后才调 `transco… |
+| P3 | `tests/test_image_pipeline.py:412` | _safe_clear_output_dir 的根目录/越界/非目录守卫无测试 | 结论：事实层面的"无测试"陈述成立，但该 finding 赖以成立的失败场景与影响（守卫被误删 → `--overwrite` 递归删除外部目录）不成立，因此作为"破坏性操作安全守卫缺少回归保护"的发现予以驳回；残留的只是一个可选的测试卫生项。  1. 引用代码核对（属实） - `gazelle/runtime/pipeline.py:105-125` `_safe_clear_output_dir` 确有四段守卫：106-107 危险… |
+| P3 | `gazelle/runtime/renderer.py:340` | `RenderOptions.arrow_width` / `peak_marker_size` 未做任何校验 | 结论：代码事实部分属实，但 IMPACT 与“校验策略不一致”的论证不成立，且该路径在本项目的任何受支持入口都不可达，不构成 risk 级 finding。  1. 代码事实核对（属实的部分） - gazelle/runtime/renderer.py:340-341 确实是 `options.arrow_width or line_width` / `options.peak_marker_size or _auto_peak_mar… |
+| P3 | `gazelle/utils.py:58` | random_crop 使用裸 except 进入 pdb，DataLoader worker 内会挂起训练 | 结论：代码引用属实，但该 finding 的标题结论（"DataLoader worker 内会挂起训练"）与影响描述（"无提示地卡死"）与实际控制流相反，且触发场景在本项目的数据管线中没有证据支持；剩余的只是一个继承自上游的调试残留（代码卫生问题）。  1. 代码确认（claim 属实的部分） - `gazelle/utils.py:53-59` 确为 `try: random.randint(...) x4 / except: im… |
+| P3 | `gazelle/runtime/perception/outputs.py:264` | head_frame_to_json_dict 省略 gazelle_selected_indices 时用硬编码 ('eligible',) 重算 gazelle_selected，忽略配置的 selector | 结论：代码读法正确，但“缺陷”定性不成立，属于已批准设计下的 caller 契约，而非仓库缺陷。  1. 引用代码确认：`gazelle/runtime/perception/outputs.py:264-269` 在 `gazelle_selected_indices is None` 且 result 含 rich perceptions 时，调用 `select_gazelle_head_indices(result)`；`gaz… |
+| P2 | `gazelle/runtime/pipeline.py:452` | 普通推理的 --force-download 刷新被推迟到首个选中头帧，晚于 --overwrite 删除旧输出与 JSONL 流式写出，尽管存在不构造模型的早期解析点 | 结论：控制流描述属实，但"这是违反 AGENTS.md 不变量的设计缺陷"不成立；它是被文档明确记录、被测试钉住、且被已批准 spec 要求的既定顺序，并且不是 `--force-download` 特有的问题，建议的修复也无法达成其声称的保证。  1. 代码确实如所述（已核对）：`gazelle/runtime/pipeline.py:361-365` `create_output_dir(overwrite=...)` -> `:1… |
+| P3 | `gazelle/runtime/perception/fusion.py:82` | 缺失 visibility/presence 时 fusion 与 reference_rays 采用相反默认（0.0 vs 1.0），潜在导致 pose-only 候选 image 可见、video 永不入轨 | 结论：代码字面与报告一致，但报告的核心解释（"两处采用相反默认 → 口径不一致 → 应统一"）不成立，触发前提在本项目受支持的输入下不存在，且两条子结论有误。作为缺陷/设计不一致项予以否定；残留的只是 spec 未写明"pose 分数全部缺失"这一角落情形，属可选加固，不是修复项。  1. 代码字面核实（成立） - gazelle/runtime/perception/fusion.py:82 `return _clipped_conf… |
+
+## 4. 2026-10-15 追加：作业数据证据
+
+依据：[作业数据分析](2026-10-15-workdata-analysis.md)。以下条目已在本机作业数据上实际运行验证。
+
+| 编号 | 级别 | 位置 | 问题 | 处理 |
+| --- | --- | --- | --- | --- |
+| GZ-21（新） | P0 | `gazelle/runtime/media.py:148`、`gazelle/runtime/pipeline.py:402` | `VideoFrameReader` 在第一次 `read()` 失败时结束迭代，管线不比较已读帧数与 `metadata.frame_count`。作业数据的 11 个 AVI 只解出 1 帧，运行仍正常完成 | TASK-131 |
+| GZ-07（升级为 P0） | P0 | `gazelle/runtime/media.py:155` | 可变帧率 MP4 的下标 1 返回 `POS_MSEC = 0`，回退值 `1000 / fps` 大于下标 2 的真实时间戳，MediaPipe 后端随即中止。作业数据 29 个 MP4 分段中 12 个触发 | TASK-131 |
+| GZ-22（新） | P1 | 数据 | 摄像机身份不能由文件名确定：2026-09-03 文件夹中两台人脸摄像机的编号互换 | TASK-132、TASK-133 |
+
+驳回结论的更正：第 3 节中“`mediapipe_backend.py:328` 遇非递增时间戳硬中止整段视频”一条，当时以“支持的输入下不触发”为由驳回。作业数据证明该前提不成立，此条改为确认，并入 GZ-07。
+
+## 5. 2026-10-16 追加：第 1 轮真实运行中的发现
+
+依据：Codex 第 1 轮实施报告（TASK-131）与 Claude 的独立复跑。两项都不是第 1 轮任务引入的缺陷。
+
+| 编号 | 级别 | 位置 | 问题 | 处理 |
+| --- | --- | --- | --- | --- |
+| GZ-23（新） | P1，隐私与网络 | 依赖 `mediapipe 0.10.35` | MediaPipe 原生库会向 Google 的 clearcut 服务（play.googleapis.com）发送使用遥测。Codex 沙盒中连接失败并打印 `Failed to send to clearcut`；在不隔离网络的环境中可能真实发出。上游 issue google-ai-edge/mediapipe#6291：维护者表示不发送输入数据，也不提供官方关闭方法；可行办法是阻断该主机、固定到旧版本（例如 0.10.21）或从源码构建 | 用户 2026-10-16 决定：开发阶段接受遥测，研究完成后再做安全处理 |
+| GZ-24（新） | P2，离线稳健性 | `torch.hub.load` 加载 DINOv2 | 即使本地已有缓存，加载时仍会联网探测仓库默认分支。断网时回退到缓存并成功；在网络受限或代理异常时可能报错或拖慢启动 | 与 D8（固定 DINOv2 版本）一并处理，候选第 4 阶段 TASK-007 |
+
+## 6. 2026-10-17 追加：环境评估中的发现
+
+依据：[候选环境评估](../evidence/2026-10-17-env-next-evaluation.md) §5。属于性能问题，不影响正确性。
+
+| 编号 | 级别 | 位置 | 问题 | 处理 |
+| --- | --- | --- | --- | --- |
+| GZ-25（新） | P2，性能 | `gazelle/runtime/predictor.py:214`（`predict_frame`）、`gazelle/backbone.py:47`（`get_transform`） | Gazelle 的输入预处理在 CPU 上对整帧做 ToTensor 与 Normalize，再缩放到 448×448。4K 管线实测每次调用约 81 ms（原环境）至 99 ms（`Gazelle-next`），其中预处理约 47 至 67 ms（探针测量）；耗时还受混合架构 CPU 调度影响。在完整管线中把预处理移到 GPU 后，实测降到 36 至 41 ms，输出等价。另外，读取器（`gazelle/runtime/media.py:179`）、MediaPipe 后端（`gazelle/runtime/perception/mediapipe_backend.py:359`）与预测器（`gazelle/runtime/predictor.py:80`）之间还有多次整帧复制 | 预处理移到推理设备：TASK-136（用户 2026-10-17 同意 D17，第 3 轮开头）。整帧复制问题需要改动读取器的帧类型，以后另议 |
+
+## 7. 2026-10-17 追加：第 2 轮审查中的发现
+
+依据：[同步分析](../evidence/2026-10-17-sync-analysis.md)；TASK-121、TASK-133 的第 2 轮审查结论。
+
+| 编号 | 级别 | 位置 | 问题 | 处理 |
+| --- | --- | --- | --- | --- |
+| GZ-26（新） | P0，同步 | `tools/workdata/timemap.py`、`tools/workdata/sync_check.py`、作业数据 | 三台摄像机的画面时钟各自设定。以前方 B 为基准，右侧 A 偏 −0.63 至 +2.83 秒，全局 E 偏 −0.95 至 +2.47 秒并有漂移。E 的显示时钟还有亚秒级跳变，而帧时间稳定。现行映射对 0.35 至 1 秒的跳变既不拟合也不分段，超过 1 秒的跳变则被切段，在 0925、1009 造成 0.7 至 1.0 秒错位；有效性规则无法失败 | 同步协议 r2：以 B 为基准、画面内容校准（D18，用户 2026-10-17 批准）。TASK-139 部分通过：基础映射 v2、校准机制与 18 段新代理通过，验证与台阶规则由 TASK-140 修订 |
+| GZ-27（新） | P0，标注完整性 | `tools/validation/annotation_page.html`、`tools/validation/labels.py:162` | 数字键从当前步标到下一个变化点，没有后续变化点时标到片段末尾；服务端随即写入 `finished_at`，续标跳到下一段，严格校验也能通过。中途停下时，未看过的部分会被当作已完成 | **已关闭**（TASK-138 accepted，2026-10-17）。加固项见 TASK-124 |
+
+## 8. 2026-10-17 追加：第 3 轮审查中的发现
+
+依据：TASK-102、TASK-002、TASK-139 的第 3 轮审查结论；[第 3 轮同步验证复核](../evidence/2026-10-17-sync-validation-r3.md)。
+
+| 编号 | 级别 | 位置 | 问题 | 处理 |
+| --- | --- | --- | --- | --- |
+| GZ-28（新） | P2，几何语义 | `gazelle/runtime/perception/reference_rays.py:115-117`、`:220-223` | 两条参考射线都在归一化坐标中计算方向，而不是像素各向同性的方向。符号正确，但在非正方形画面上角度变形，例如 640×360 上物理方向 28.9° 被画成 17.2°；作业视频是 16:9。现有测试只用了正方形坐标 | 原定第 3 阶段提取特征（TASK-141）之前修复。2026-10-18 起，系统设计 v2 的阶段 3 改用三维视线，不再依赖这两条二维参考射线；作为现有输出的正确性问题转入阶段 4 |
+| GZ-29（新） | P1，同步验证 | `tools/workdata/sync_validate.py:111`、`tools/workdata/sync_calibrate.py`（运动能量） | 源视频每个关键帧都会在相邻帧差上产生一个脉冲。0925、1002、1009 的两台人脸摄像机关键帧间隔都是 2.0 秒，在 5 Hz 网格上正好 10 步，形成锁相的梳状信号；0821 至 0911 为 2.5 秒，全局摄像机为 4.0 秒。验证用 `cv2.resize` 的双线性插值从 1080p 直接缩到 96×54，会放大这种脉冲：B 代理在 10 步滞后上的高通自相关为 0.50 至 0.68。互相关峰因此落在梳齿上，0925 A–B 的 −0.165 秒残差就是这样产生的；经 E 中转推算，真实残差约 −0.05 秒 | TASK-140：屏蔽跨关键帧的能量步，校准与验证统一使用面积平均缩略图。**已实施并通过（2026-10-18）**：7 次录制的验证用新方法全部通过 |
+| GZ-30（新） | P1，跟踪 | `gazelle/runtime/perception/provider.py:177-181` | 单人模式下，一帧的 provisional 头在仲裁中胜过已确认轨迹的 `tracked_only` 行，随后 `retain_person_ids` 删掉了已确认轨迹的桥接状态，后续帧从 `tracked_only` 变为 `no_head` | **已关闭**（TASK-102 第 2 轮修复，2026-10-18 accepted）。“临时头中立”的细化写入 TASK-101 契约 r2 |
