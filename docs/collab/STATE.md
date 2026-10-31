@@ -10,14 +10,26 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 | stage | 阶段 2：作业数据可用、多机同步、正确性修复，建立区域标注 |
 | branch | `feature/stage2-correctness`（基于 PR #5 head `bbec056`） |
 | pr | [#6](https://github.com/Hyakuri/gazelle/pull/6)（draft）；正文来源 `docs/collab/STAGE2_PR_BODY.md` |
-| writer | codex |
-| next_actor | codex |
+| writer | none |
+| next_actor | claude |
 | current_task | 第 9 轮：TASK-101 契约修订 r3 已完成实现与验证，待审查；继续 TASK-150 契约修订 r5 的第 1 至 9 条。第 10 条与 `20261023` 的代理等用户回答 Q-032 |
 | after_current | 做完，或做到 Q-032 阻塞处，就把 `next_actor` 设为 `claude`。TASK-152、TASK-151、TASK-153 与阶段 3 本轮都不做，轮次调整见 Q-033 |
 | environment | `Gazelle-next`：`C:\Users\yun\anaconda3\envs\Gazelle-next\python.exe`（用户 2026-10-17 决定 D16）。现有 `Gazelle` 作为回退保留，不改动 |
-| last_pushed | `d31b41d3f7cae7a1fa387286161a9dc1aa3d6cdd` |
+| last_pushed | `27d530165bd39ee2ed6df3ba6e4e8a9b8d02e453` |
 | last_accepted | `476ebdf`。2026-10-31 第 8 轮审查：`acae8a1`（协调文档）核对无误；`980d8ee`（TASK-125 第 4 轮）accepted，`476ebdf` 只含报告。其后 `569394b`（TASK-101）与 `397c5d1`、`9684f1f`（TASK-150）changes-requested，所以基准停在 `476ebdf`；`6270380`（TASK-140 第 3 轮）accepted，它只改测试与说明。第 7 轮审查：`806068c`（TASK-125 第 3 轮）accepted |
 | 更新 | 2026-10-31，Claude 完成第 8 轮审查：TASK-125 第 4 轮、TASK-140 第 3 轮通过，TASK-101、TASK-150 退回。Q-029 至 Q-031 已处理，新增 Q-032、Q-033 给用户。标注用 `476ebdf`。未读写 `roi_r2\labels.json` |
+
+## 第 9 轮交接记录（Codex，2026-10-31）
+
+- 主线程 Inline Execution，无子代理、额外 checkout 或新分支。TASK-101 r3 与 TASK-150 r5 第 1 至 9 条已执行到 Q-032 阻塞处，交回 Claude；**以下仅为 Codex 验证结果，尚待 Claude 独立审查及用户独立 checkout 验收**。`last_accepted=476ebdf` 不变；`last_pushed` 指向本轮任务报告截止提交，末次交接提交仅含协作记录、生成视图与本轮基线。PR #6 保持 draft，未合并。
+- TASK-101：实现 `d31b41d`、报告 `a692e5a`；同身份优先、排除共存轨迹接替、临时头不抹去已记主体。757 tests / 0 skip，25/25 必需变异；五项缓存真实模型检查 exit 0，Sunny A 全 30 帧保持 ID 0，62 张作业视频画面（含全部 ID 切换位置）目视抽查。短时遮挡/窄框仍有限制，未承诺长期身份稳定或科学精度。详细证据与真实 CUDA/MediaPipe/FFmpeg 活动见 TASK-101 §2。
+- TASK-150：实现 `c1b8416`、报告 `27d5301`；切点闭区间、迁移源内存解析、W 失败隔离与稳定占位、作业者校验、清单/重封装重跑保护已实现，四份公共用户说明同步。最终代码门 **774 tests / 68.758s / 0 skip**，compileall/help/list-models、两个 Node harness、docs build/check、diff check 全部 exit 0；必需变异 **34/34**。48 个受保护 AST 仅获准的 refine_breakpoints 改变，sampling SHA 保持 `7c6c32f4…`。临时内置浏览器检查通过；Headless Edge 启动因 GPU 子进程失败，独立 Edge 验收待 Claude。
+- 真实数据：先提交干净代码，再保留两份旧失败映射并以 `--reuse-samples` 重新拟合。1016 E 尾部 **5/50=10.0%**、切点 **1135.213989s**，通过；1023 E 尾部 **2/55=3.6364%**、两切点 **1175.352834/1595.144727s**，通过；1023 A 仍为 **7/53=13.2075%**，整体 calibrated=false。八组缓存像素与旁注 SHA 不变，A/W 拟合参数不变，未重新解码采样。
+- **1016 四路代理与原门槛验证通过并追加索引**：每路 18,019 帧；A/B/E 1080p，W 720p，5 Hz、无音轨。缺口 A/B/E/W 为 0/0/1/0，同步不确定步 0/0/251/0；所有来源到 EOF，帧数差异检查通过。四对残差、9/9 时钟检查通过，4 张事件条图已目视。A–E 漂移实测 **0.077786s/h**（预演 0.122），E–B 占比 **93.8776%**（预演 90.0%）；请 Claude 独立复算，不以预演取代真实结果。验证在 `sync_validation_r5/20261016.json`；索引现 8 条，旧 7 条逐字段不变，原索引保留为 `manifest.before-task150-r5.json`。新记录标明 Codex 检查通过、独立验收待进行；未使用 second-look/sync_grade 新规则。
+- 保护核对：16,891 个预登记文件、90,097,391,320 bytes 重算 SHA 通过；两份旧失败映射在改名备份处核对。追加索引前旧内容相同；追加后其余 16,890 文件大小/mtime 不变，原索引备份 SHA 与前测相同，inventory 56 行与 remux 13 行不变。两份正式数据集的限定元数据/帧不改，**未读写 roi_r2/labels.json 及 .bak**。新索引读回可正常加载 W 参考；没有生成正式新数据集或 worker 表。
+- 实际活动与未运行项：TASK-150 使用 CPU/PyAV/FFmpeg/ffprobe/OpenCV、缓存采样/来源 keyframe 与新代理 keyframe 缓存，没有模型推理、CUDA、下载或环境修改。全部本轮真实处理与临时服务已结束。没有运行 1023 代理、第 10 条、正式 worker 表、20261030 接入、TASK-152/151/153 或阶段 3；Q-032 继续等待，后续轮次由 Q-033 决定。普通文件预检与获准 yun Git/GitHub 例外分开记录；源只读，媒体/派生物/缓存/凭据没有上传。
+- Claude 待处理：TASK-150 §2 的 A 级接口选择、实际代理与预演差别、VALSET 4.5.0 §11.3 正文缺少其版本记录所称的精度/末端例外说明，以及独立浏览器验收。没有擅自修改受控规范。报告、完整命令、失败与跳过项、哈希和变异证据在任务 §2 及仓库外 `gazelle_runs/codex-round9/`。
+- 交接按 build → snapshot「第 9 轮结束」→ check，随后释放 writer；报告与 STATE 属于内部记录更新，使用静态文档检查，不为纯文字更改重跑完整代码测试。
 
 ## 第 8 轮审查结论（Claude，2026-10-31）
 
@@ -74,7 +86,7 @@ Codex 与 Claude 每次开始工作先读本文件，再按控制块行事。字
 | Codex 第 8 轮 | [TASK-150](tasks/TASK-150-new-sessions-and-webcam-intake.md) 新录制与 webcam 接入（D26） | changes-requested | 主体实现正确；W 的隔离、页面与测试要补；1016 E、1023 A 校准失败，代理未生成 |
 | Codex 第 8 轮 | TASK-140 第 3 轮：只补测试与正式字段说明 | accepted | Claude 2026-10-31 审查通过 |
 | Codex 第 9 轮 | TASK-101 契约修订 r3：同身份优先、共存过的轨迹不能接替主体、中立性，重跑真实 smoke | ready-for-review | 实现 d31b41d；757 tests / 0 skip，25/25 变异；Sunny A 0 切换；62 张作业画面抽查，详见 TASK-101 §2 |
-| Codex 第 9 轮 | TASK-150 契约修订 r5：切点规则、路径解析、W 的隔离、页面、测试、作业者表、代理与验证 | ready | 第 10 条与 `20261023` 的代理等 Q-032 |
+| Codex 第 9 轮 | TASK-150 契约修订 r5：切点规则、路径解析、W 的隔离、页面、测试、作业者表、代理与验证 | ready-for-review | 实现 c1b8416、报告 27d5301；774 tests / 0 skip，34/34 变异；1016 四路代理、四对残差、9/9 时钟通过并追加索引；1023 A 仍失败，第 10 条、1023 代理与正式 worker 表等 Q-032 |
 | Codex 第 10 轮 | [TASK-152](tasks/TASK-152-recording-20261030-intake.md) 新录制 `20261030` 接入与 2026-10 分层数据集（12 段） | proposed | 等 TASK-150 通过审查；契约 r2 已按实际实现修订；轮次待 Q-033 |
 | Codex 第 10 轮 | TASK-151 工作区域自动重配准：背景图、区域指纹、逐区域配准、检查提示、录制内监测 | proposed | 方案已确认（Q-028）；等 TASK-150、TASK-152 的代理；契约在第 9 轮审查时编写；轮次待 Q-033 |
 | Codex 第 11 轮 | TASK-153 区域复核模式与盲测 | proposed | 等 TASK-151；轮次待 Q-033 |

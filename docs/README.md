@@ -2,7 +2,7 @@
 
 > 本文件由 `python -m tools.docs build` 自动生成，与 [总览网页](portal/index.html) 内容相同，不要手改。规则见 [文档记录体系与版本规则](rules/DOCS_SYSTEM_CN.md)。
 
-当前基线：**B023**（2026-10-31）；其后有更新的来源：`docs/collab/STATE.md`。
+当前基线：**B024**（2026-10-31）；其后有更新的来源：`docs/collab/STATE.md`。
 
 ## 1. 总览
 
@@ -10,7 +10,7 @@
 | --- | --- |
 | 当前阶段 | 阶段 2：作业数据可用、多机同步、正确性修复，建立区域标注 |
 | 当前任务 | 第 9 轮：TASK-101 契约修订 r3 已完成实现与验证，待审查；继续 TASK-150 契约修订 r5 的第 1 至 9 条。第 10 条与 `20261023` 的代理等用户回答 Q-032 |
-| 轮到 | Codex |
+| 轮到 | Claude |
 | 最近更新 | 2026-10-31，Claude 完成第 8 轮审查：TASK-125 第 4 轮、TASK-140 第 3 轮通过，TASK-101、TASK-150 退回。Q-029 至 Q-031 已处理，新增 Q-032、Q-033 给用户。标注用 `476ebdf`。未读写 `roi_r2\labels.json` |
 
 ### 需要你处理
@@ -281,7 +281,7 @@ flowchart LR
 | Codex 第 8 轮 | [TASK-150](collab/tasks/TASK-150-new-sessions-and-webcam-intake.md) 新录制与 webcam 接入（D26） | changes-requested | 主体实现正确；W 的隔离、页面与测试要补；1016 E、1023 A 校准失败，代理未生成 |
 | Codex 第 8 轮 | TASK-140 第 3 轮：只补测试与正式字段说明 | accepted | Claude 2026-10-31 审查通过 |
 | Codex 第 9 轮 | TASK-101 契约修订 r3：同身份优先、共存过的轨迹不能接替主体、中立性，重跑真实 smoke | ready-for-review | 实现 d31b41d；757 tests / 0 skip，25/25 变异；Sunny A 0 切换；62 张作业画面抽查，详见 TASK-101 §2 |
-| Codex 第 9 轮 | TASK-150 契约修订 r5：切点规则、路径解析、W 的隔离、页面、测试、作业者表、代理与验证 | ready | 第 10 条与 `20261023` 的代理等 Q-032 |
+| Codex 第 9 轮 | TASK-150 契约修订 r5：切点规则、路径解析、W 的隔离、页面、测试、作业者表、代理与验证 | ready-for-review | 实现 c1b8416、报告 27d5301；774 tests / 0 skip，34/34 变异；1016 四路代理、四对残差、9/9 时钟通过并追加索引；1023 A 仍失败，第 10 条、1023 代理与正式 worker 表等 Q-032 |
 | Codex 第 10 轮 | [TASK-152](collab/tasks/TASK-152-recording-20261030-intake.md) 新录制 `20261030` 接入与 2026-10 分层数据集（12 段） | proposed | 等 TASK-150 通过审查；契约 r2 已按实际实现修订；轮次待 Q-033 |
 | Codex 第 10 轮 | TASK-151 工作区域自动重配准：背景图、区域指纹、逐区域配准、检查提示、录制内监测 | proposed | 方案已确认（Q-028）；等 TASK-150、TASK-152 的代理；契约在第 9 轮审查时编写；轮次待 Q-033 |
 | Codex 第 11 轮 | TASK-153 区域复核模式与盲测 | proposed | 等 TASK-151；轮次待 Q-033 |
@@ -716,6 +716,7 @@ flowchart TB
 
 | 基线 | 日期 | 说明 | 文档版本 | 快照 |
 | --- | --- | --- | --- | --- |
+| B024 | 2026-10-31 | 第 9 轮结束 | COLLAB v0.10.0、DOCS v1.2.0、GOALS v3.5.1、PERCEPTION v1.2.0、ROIREG v1.0.2、STAGE3 v3.7.0、SYSTEM v1.7.1、VALSET v4.5.0 | [网页](archive/baselines/B024/index.html) |
 | B023 | 2026-10-31 | 第 8 轮审查后的记录核对：VALSET 4.5.0 改正交接时段的说明 | COLLAB v0.10.0、DOCS v1.2.0、GOALS v3.5.1、PERCEPTION v1.2.0、ROIREG v1.0.2、STAGE3 v3.7.0、SYSTEM v1.7.1、VALSET v4.5.0 | [网页](archive/baselines/B023/index.html) |
 | B022 | 2026-10-31 | 第 8 轮审查：PERCEPTION 1.2.0、VALSET 4.4.2 | COLLAB v0.10.0、DOCS v1.2.0、GOALS v3.5.1、PERCEPTION v1.2.0、ROIREG v1.0.2、STAGE3 v3.7.0、SYSTEM v1.7.1、VALSET v4.4.2 | [网页](archive/baselines/B022/index.html) |
 | B021 | 2026-10-31 | 第 8 轮结束 | COLLAB v0.10.0、DOCS v1.2.0、GOALS v3.5.1、PERCEPTION v1.1.2、ROIREG v1.0.2、STAGE3 v3.7.0、SYSTEM v1.7.1、VALSET v4.4.1 | [网页](archive/baselines/B021/index.html) |

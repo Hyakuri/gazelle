@@ -678,6 +678,37 @@
         "docs/rules/COLLABORATION_PLAN_CN.md": "61cd631c8015e49b09bdd37f4d885e30b03a113ed8c0bcc3347b6e95f8669416",
         "docs/rules/DOCS_SYSTEM_CN.md": "4455cee71c032a000e506fd3dd6d53d75e18a12017c4fe4a304b3d69bcfd94d8"
       }
+    },
+    {
+      "date": "2026-10-31",
+      "documents": {
+        "COLLAB": "0.10.0",
+        "DOCS": "1.2.0",
+        "GOALS": "3.5.1",
+        "PERCEPTION": "1.2.0",
+        "ROIREG": "1.0.2",
+        "STAGE3": "3.7.0",
+        "SYSTEM": "1.7.1",
+        "VALSET": "4.5.0"
+      },
+      "files": {
+        "docs/archive/baselines/B024/README.md": "b8a97afb1b1089734c4bed37160c0ff51213185df4f0ca3f81631b8adb751863",
+        "docs/archive/baselines/B024/index.html": "b2dd89684d5a4ecce5b25c2c2f2486cd84239724493c017f420eec3d421d6d27"
+      },
+      "id": "B024",
+      "note": "第 9 轮结束",
+      "sources": {
+        "docs/collab/ROADMAP.md": "16fc4cc842fa548f404c5269a4ba473c34a0484a1247f0a6304e6a1219be5df9",
+        "docs/collab/STATE.md": "108a96e9f82f40905e0a4f998489d4a91f7ea4a61b94d3941a12362e9f5bb912",
+        "docs/design/PERCEPTION_D1_D2_DESIGN.md": "9caa0d4061cee1f6aee5c99529f8a9d22a123758a26feb58481135ab78dc0eb2",
+        "docs/design/REGION_REGISTRATION_CN.md": "ff702ca5b3b14e75b29981fc19ec9f5a3389338cb070c58dcb69b5c87bc90eff",
+        "docs/design/STAGE3_GAZE_ATTENTION_CN.md": "095dfe9a6510be18f7185f0550b0d60ca8f6e5af3b596bb4644bd587d2e77535",
+        "docs/design/SYSTEM_OVERVIEW_CN.md": "d119f8ae7ee88bbfe0991eb64a19e4e9c1f207d5ff325c629657a3d6dc7b3fef",
+        "docs/design/VALIDATION_SET_DESIGN.md": "cf82fa620cf717806e8f858aa253b15b18010e595c03ddebb4610fd1734d26fe",
+        "docs/requirements/PROJECT_GOALS_CN.md": "ea262bd0f780a371240bc5643712cebb542eeb45affe3799bd0abdf9b3563a08",
+        "docs/rules/COLLABORATION_PLAN_CN.md": "61cd631c8015e49b09bdd37f4d885e30b03a113ed8c0bcc3347b6e95f8669416",
+        "docs/rules/DOCS_SYSTEM_CN.md": "4455cee71c032a000e506fd3dd6d53d75e18a12017c4fe4a304b3d69bcfd94d8"
+      }
     }
   ],
   "documents": [
