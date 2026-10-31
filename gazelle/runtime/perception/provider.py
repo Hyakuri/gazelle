@@ -7,11 +7,14 @@ from gazelle.runtime.contracts import HeadObservation
 from gazelle.runtime.geometry import sanitize_normalized_bbox
 from gazelle.runtime.heads import HeadProvider
 from gazelle.runtime.perception.contracts import HeadFrameResult, HeadPerception, candidate_pool_size
-from gazelle.runtime.perception.fusion import build_head_candidates
+from gazelle.runtime.perception.fusion import _bbox_iou, build_head_candidates
 from gazelle.runtime.perception.gaze_policy import (
     annotate_gaze_eligibility,
     arbitrate_perceptions,
 )
+
+
+COEXIST_MAX_IOU = 0.05
 
 
 def _create_default_backend(config, *, media_type: str):
@@ -105,6 +108,7 @@ class MediaPipeHeadProvider(HeadProvider):
         self._closed = False
         self._previous_selection = ()
         self._coexisted = set()
+        self._last_present = {}
 
     @classmethod
     def create(
@@ -179,9 +183,17 @@ class MediaPipeHeadProvider(HeadProvider):
             image_height=image_height,
         )
         perceptions = self._bridge.update(tracked, timestamp_ms=timestamp_ms)
-        present_ids = {item.person_id for item in perceptions}
-        self._coexisted = {pair for pair in self._coexisted if all(pid in present_ids for pid in pair)}
-        self._coexisted.update(combinations(sorted(item.person_id for item in perceptions if item.observed), 2))
+        self._last_present.update((item.person_id, timestamp_ms) for item in perceptions)
+        self._last_present = {
+            pid: seen for pid, seen in self._last_present.items()
+            if timestamp_ms - seen <= self._bridge.max_gap_ms
+        }
+        self._coexisted = {
+            pair for pair in self._coexisted if all(pid in self._last_present for pid in pair)
+        }
+        for left, right in combinations((item for item in perceptions if item.observed), 2):
+            if _bbox_iou(left.head_bbox, right.head_bbox) < COEXIST_MAX_IOU:
+                self._coexisted.add(tuple(sorted((left.person_id, right.person_id))))
         # Provisional heads may win output selection but must not affect bridge pruning.
         confirmed = arbitrate_perceptions(
             (item for item in perceptions if not item.provisional),

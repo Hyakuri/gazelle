@@ -95,11 +95,10 @@ def arbitrate_perceptions(
             selected.add(same)
         else:
             missing.append((person_id, bbox))
-    unmatched = []
+    pairs = []
     for person_id, bbox in missing:
         center_x, center_y = (bbox[0] + bbox[2]) / 2.0, (bbox[1] + bbox[3]) / 2.0
         diagonal = math.hypot(bbox[2] - bbox[0], bbox[3] - bbox[1])
-        nearby = []
         for index, item in enumerate(perceptions):
             if index in selected or not item.observed:
                 continue
@@ -109,11 +108,15 @@ def arbitrate_perceptions(
             distance = math.hypot((current[0] + current[2]) / 2.0 - center_x,
                                   (current[1] + current[3]) / 2.0 - center_y)
             if distance <= diagonal:
-                nearby.append((distance, _perception_priority(item), index))
-        if nearby and len(selected) < max_heads:
-            selected.add(min(nearby)[2])
-        else:
-            unmatched.append(person_id)
+                pairs.append((distance, _perception_priority(item), person_id, index))
+    claimed = set()
+    for _, _, person_id, index in sorted(pairs):
+        if len(selected) >= max_heads:
+            break
+        if person_id not in claimed and index not in selected:
+            selected.add(index)
+            claimed.add(person_id)
+    unmatched = [person_id for person_id, _ in missing if person_id not in claimed]
     for person_id in unmatched:
         if len(selected) >= max_heads:
             break

@@ -520,6 +520,10 @@ class ShortOcclusionBridge:
         self._states = {}
         self._last_timestamp_ms: Optional[float] = None
 
+    @property
+    def max_gap_ms(self) -> float:
+        return self._max_gap_ms
+
     @staticmethod
     def _observed_perception(tracked: TrackedHeadCandidate) -> HeadPerception:
         candidate = tracked.candidate

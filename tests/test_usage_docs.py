@@ -45,7 +45,8 @@ class UsageDocumentationTest(unittest.TestCase):
             for token in ('at least 3 candidates','anchor rule','pose nose','both shoulders',
                           'spatial continuity','identity','video IDs need not start at 0',
                           'excluding all provisional','neutral to bridge pruning',
-                          'same observed identity', 'Tracks observed together cannot replace',
+                          'same observed identity', 'IoU below 0.05', 'at least one confirmed',
+                          'does not exceed the candidate pool size', 'global center-distance order',
                           'memory\nuses confirmed heads', 'Bridge pruning applies to every'):
                 self.assertIn(token,text,str(path))
             self.assertNotIn('provisional winner preserves existing confirmed bridge state',text)
@@ -53,7 +54,8 @@ class UsageDocumentationTest(unittest.TestCase):
             text=self._read(path)
             for token in ('至少 3 个候选','锚点规则','姿态鼻点','双肩','空间连续','身份连续',
                           '视频 ID 不保证从 0 开始','排除全部 provisional','不影响桥接修剪',
-                          '仍被观测的同一身份','同时被观测过的轨迹不能','选择记忆使用已确认',
+                          '仍被观测的同一身份','IoU 小于 0.05','选择记忆使用已确认',
+                          '至少有一个已确认感知','候选数不超过候选池上限','全局中心距排序',
                           '桥接修剪适用于每个'):
                 self.assertIn(token,text,str(path))
             self.assertNotIn('临时头部胜出时保留已有的已确认轨迹桥接状态',text)

@@ -162,7 +162,7 @@ class MediaPipeHeadProviderTest(unittest.TestCase):
 
     def test_s4_spawn_is_neutral_to_bridge_retention(self):
         a=self._small_candidate(.1)
-        b=self._small_candidate(.15,state=HeadPerceptionState.POSE_ONLY,face_pose_reference_ray=None)
+        b=self._small_candidate(.21,state=HeadPerceptionState.POSE_ONLY,face_pose_reference_ray=None)
         prefix=[((a,),(-1,))]+[((a,),(10,))]*2+[((a,b),(10,-1)),((a,b),(10,20))]
         baseline,base_retained=self._sequence(prefix+[((b,),(20,))]+[((),())]*3)
         for x in (.1,.7):

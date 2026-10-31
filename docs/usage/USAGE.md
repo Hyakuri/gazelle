@@ -378,13 +378,18 @@ to the same `person_id`; age counts from the original spawn. Provisional observa
 create or refresh bridge state, so a one-frame detection cannot create a stale ghost.
 Image mode, confirmed observations and `tracked_only` always use `tracking.provisional=false`.
 Bridge retention uses a separate selection excluding all provisional heads, for every `--max-heads`.
-Thus a one-frame spawn is neutral to bridge pruning, whether or not it wins output selection.
+A one-frame spawn is neutral to bridge pruning when its frame has at least one confirmed
+perception and the candidate count, including the spawn, does not exceed the candidate pool size.
+Without these conditions, continuity is not guaranteed.
 Face/pose matching uses at least 3 candidates before output selection. The anchor rule requires
 the pose nose inside the face-derived head box; without a nose, at least two available head
 keypoints must be inside, or, if fewer than two exist, the head center must be between and above
 both shoulders. Video selection prefers the same observed identity, then spatial continuity
 with fresh observations, then identity continuity (including active bridges), then existing priority.
-Tracks observed together cannot replace each other through spatial continuity. Selection memory
+Clearly separated observed head boxes (IoU below 0.05) record a pair that blocks spatial
+replacement until either ID has been absent longer than the bridge window. Overlapping
+candidates may replace each other; this is not a guarantee of physical identity. Spatial
+matches use global center-distance order, independent of previous-selection order. Selection memory
 uses confirmed heads, falling back to the output only when no confirmed head is selected.
 Bridge pruning applies to every `--max-heads` value. Image IDs are renumbered from 0;
 video IDs need not start at 0 or be contiguous. Eligibility thresholds and CLI options are unchanged.
