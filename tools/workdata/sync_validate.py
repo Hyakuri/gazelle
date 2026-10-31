@@ -125,6 +125,34 @@ def session_passed(pairs):
             and pairs['A-E']['conclusion'] in ('passed','insufficient_evidence'))
 
 
+def second_look_pairs(pairs,signals,duration):
+    """Preserve first-pass evidence and attach only authorized rechecks."""
+    for name,reference,other in (('A-B','cam_b','cam_a'),('E-B','cam_b','cam_e'),('A-E','cam_e','cam_a')):
+        pair=pairs[name]
+        eligible=(pair['conclusion']=='failed' if name=='A-E' else
+                  pair['reason']=='fraction_within_0_2 < 0.9')
+        if not eligible:continue
+        rows=window_lags(signals[reference],signals[other],window=120.,step=60.)
+        result=dict(windows=rows,window_seconds=120.,step_seconds=60.,**residual_summary(rows,duration))
+        if name=='A-E' and result['conclusion']!='insufficient_evidence':
+            failed=[]
+            if result['median_absolute_seconds']>.15:failed.append('median_absolute_seconds > 0.15')
+            if abs(result['c0_at_midpoint'])>.15:failed.append('abs(c0_at_midpoint) > 0.15')
+            if abs(result['c1_seconds_per_hour'])>.15:failed.append('abs(c1_seconds_per_hour) > 0.15')
+            result.update(passed=not failed,conclusion='failed' if failed else 'passed',
+                          reason='; '.join(failed) if failed else 'passed')
+        pair['second_look']=result
+
+
+def second_look_outcome(pairs,calibrations):
+    passed=all(pair['conclusion']=='passed' or (name=='A-E' and pair['conclusion']=='insufficient_evidence')
+               or pair.get('second_look',{}).get('passed') is True
+               for name in ('A-B','E-B','A-E') for pair in (pairs[name],))
+    used=(any(calibrations.get(c,{}).get('reason')=='valid_second_look' for c in ('cam_a','cam_e'))
+          or any('second_look' in pairs[name] for name in ('A-B','E-B','A-E')))
+    return passed,('second_look' if used else 'official') if passed else None
+
+
 def closure_summary(pairs):
     indexed={name:{r['t_mid_seconds']:r['lag_seconds'] for r in pair['windows'] if r['valid']}
              for name,pair in pairs.items()}
@@ -190,14 +218,14 @@ def export_events(session,root,out_root,signals,thumbnails,calibrations):
         cameras.append('cam_w')
         try:
             metadata['cam_w']=session['auxiliary_cameras']['cam_w']
-        except KeyError as error:
+        except Exception as error:
             raise WebcamEventError('W event metadata: '+str(error)) from error
     records=[]
     try:
         for camera in cameras:
             try:
                 captures[camera]=cv2.VideoCapture(str(root/metadata[camera]['video']))
-            except (OSError,ValueError,RuntimeError,KeyError,FFmpegError) as error:
+            except Exception as error:
                 if camera!='cam_w': raise
                 raise WebcamEventError('W event capture: '+str(error)) from error
         for number,event in enumerate(selected):
@@ -212,7 +240,7 @@ def export_events(session,root,out_root,signals,thumbnails,calibrations):
                         image=read_frame(captures[camera],index)
                         checked_thumbnail(image,thumbnails[camera][index])
                         rgb=cv2.cvtColor(cv2.resize(image,(320,180)),cv2.COLOR_BGR2RGB)
-                    except (OSError,ValueError,RuntimeError,KeyError,FFmpegError,cv2.error) as error:
+                    except Exception as error:
                         if camera!='cam_w': raise
                         raise WebcamEventError('W event frame: '+str(error)) from error
                     canvas.paste(Image.fromarray(rgb),(column*320,36+row*180))
@@ -263,18 +291,22 @@ def webcam_evidence(session,root,output,mapping,keyframes_root,stack):
         sync_uncertain_steps=sum(r.get('sync_uncertain',False) for r in sidecar['frames']))
 
 
-def run(proxies,out_root,session_name,clock_samples,timemaps,keyframes_root,inventory=None):
+def run(proxies,out_root,session_name,clock_samples,timemaps,keyframes_root,inventory=None,second_look=False):
     with ExitStack() as stack:
-        return _run(proxies,out_root,session_name,clock_samples,timemaps,keyframes_root,stack,inventory)
+        return _run(proxies,out_root,session_name,clock_samples,timemaps,keyframes_root,stack,inventory,second_look)
 
 
-def _run(proxies,out_root,session_name,clock_samples,timemaps,keyframes_root,stack,inventory=None):
+def _run(proxies,out_root,session_name,clock_samples,timemaps,keyframes_root,stack,inventory=None,second_look=False):
     root=Path(proxies)/session_name
     session=json.loads((root/'session.json').read_text(encoding='utf-8'))
     mapping_path=Path(timemaps)/(session_name+'.json')
     mapping=json.loads(mapping_path.read_text(encoding='utf-8'))
     if mapping.get('version')!=3 or mapping.get('calibrated') is not True:
         raise ValueError('Validation requires successful v3 calibration')
+    if second_look and session_name<'20261016':
+        raise ValueError('Second-look is restricted to recordings from 20261016 onward')
+    if not second_look and any(f.get('reason')=='valid_second_look' for f in mapping['calibration'].values()):
+        raise ValueError('A second-look calibrated map requires --second-look validation')
     inventory=load_inventory(inventory)
     mapping['files']=[resolve_source(r,inventory) if r.get('camera')!='cam_w' else r for r in mapping['files']]
     sources={r['source']:r for r in mapping['files']}
@@ -340,18 +372,21 @@ def _run(proxies,out_root,session_name,clock_samples,timemaps,keyframes_root,sta
                 cells['cam_w'],thumbnails['cam_w'],audits['cam_w']=webcam_evidence(
                     session,root,output,mapping,keyframes_root,stack)
                 signals['cam_w'],selection['cam_w']=select_webcam_signal(cells['cam_b'],cells['cam_w'])
-            except (OSError,ValueError,RuntimeError,KeyError,FFmpegError,subprocess.SubprocessError) as error:
+            except Exception as error:
                 auxiliary['cam_w']=dict(available=False,reason=str(error),error_type=type(error).__name__)
                 thumbnails.pop('cam_w',None)
                 signals.pop('cam_w',None)
     duration=(session['N']-1)*.2
     pairs=residual_pairs(signals,duration)
+    if second_look:second_look_pairs(pairs,signals,duration)
+    synchronization_passed=session_passed(pairs)
+    if second_look:synchronization_passed,sync_grade=second_look_outcome(pairs,mapping['calibration'])
     if 'W-B' in pairs:
         auxiliary['cam_w']=dict(available=pairs['W-B']['passed'],reason=pairs['W-B'].get('reason',pairs['W-B']['conclusion']))
     try:
         events=export_events(session,root,output,signals,thumbnails,mapping['calibration'])
     except WebcamEventError as error:
-        auxiliary['cam_w']=dict(available=False,reason=str(error),error_type=type(error).__name__)
+        auxiliary['cam_w']=dict(available=False,reason=str(error),error_type=type(error.__cause__ or error).__name__)
         thumbnails.pop('cam_w',None)
         events=export_events(session,root,output,signals,thumbnails,mapping['calibration'])
     clock=dict(indices=indices,rows=clock_rows,**clock_summary(clock_rows))
@@ -360,8 +395,9 @@ def _run(proxies,out_root,session_name,clock_samples,timemaps,keyframes_root,sta
                 validation_sha256=hash_file(__file__),proxy_session_sha256=hash_file(root/'session.json'),
                 convention='corr(reference[t], other[t + L]); positive L means other appears later',
                 pairs=pairs,closure=closure_summary(pairs),selection=selection,clock=clock,events=events,audit=audits,
-                synchronization_passed=session_passed(pairs),
-                passed=session_passed(pairs) and clock['passed'] and sum(e['kind']=='motion' for e in events)==3)
+                synchronization_passed=synchronization_passed,
+                passed=synchronization_passed and clock['passed'] and sum(e['kind']=='motion' for e in events)==3)
+    if second_look:result['sync_grade']=sync_grade
     if auxiliary: result['auxiliary_cameras']=auxiliary
     atomic_json(Path(out_root)/(session_name+'.json'),result)
     print(session_name,json.dumps(dict(pairs={k:v['passed'] for k,v in pairs.items()},
@@ -378,10 +414,11 @@ def main(argv=None):
     parser.add_argument('--timemaps',type=Path,required=True,help='Successful v3 maps; original proxy provenance is retained.')
     parser.add_argument('--keyframes-root',type=Path,required=True)
     parser.add_argument('--inventory',type=Path,help='Resolve moved originals in memory using verified inventory records.')
+    parser.add_argument('--second-look',action='store_true',help='Apply approved residual rechecks and record sync_grade.')
     args=parser.parse_args(argv)
     import psutil
     psutil.Process().nice(psutil.BELOW_NORMAL_PRIORITY_CLASS if hasattr(psutil,'BELOW_NORMAL_PRIORITY_CLASS') else 10)
-    result=run(args.proxies,args.out_root,args.session,args.clock_samples,args.timemaps,args.keyframes_root,args.inventory)
+    result=run(args.proxies,args.out_root,args.session,args.clock_samples,args.timemaps,args.keyframes_root,args.inventory,args.second_look)
     return int(not result['passed'])
 
 

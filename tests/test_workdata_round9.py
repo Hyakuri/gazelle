@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 import numpy as np
-from av.error import InvalidDataError
+from av.error import ExternalError
 
 from tools.workdata import sync_calibrate as calibration
 
@@ -58,12 +58,12 @@ class RelocatedSourceTest(unittest.TestCase):
         from types import SimpleNamespace
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory);raw=root/'raw';raw.mkdir();files=[];entries=[];opened=[]
-            for camera in ('cam_a','cam_b','cam_e'):
+            for camera in ('cam_a','cam_b','cam_e','cam_w'):
                 media=raw/(camera+'.mp4');media.write_bytes(b'fake')
                 files.append(dict(camera=camera,status='valid',source=media.name,media_path=str(media),
                     fingerprint=dict(media_size=4,media_mtime_ns=media.stat().st_mtime_ns,source_sha256='a'*64),
                     segments=[dict(a=100.,b=1.,valid=True,pts_start=0.,pts_end=.6)]))
-                entries.append(dict(relative_path=media.name,sha256='a'*64,size_bytes=4))
+                entries.append(dict(relative_path=media.name,sha256='a'*64,size_bytes=4,mtime_ns=media.stat().st_mtime_ns))
             original=deepcopy(files);raw.rename(root/'moved')
             inventory=dict(root=str(root/'moved'),files=entries)
             path=root/'base.json';path.write_text(json.dumps(dict(version=2,session='20261016',files=files,overlap=[[100.,100.6]])))
@@ -93,6 +93,8 @@ class RelocatedSourceTest(unittest.TestCase):
                  patch.object(calibration,'fit_calibration',side_effect=fit):
                 result=calibration.run(path,root/'cal',root/'samples',inventory=inventory)
             self.assertTrue(result['calibrated'])
+            self.assertTrue(result['auxiliary_cameras']['cam_w']['available'])
+            self.assertIn('calibration',result['files'][-1])
             self.assertEqual([r['media_path'] for r in result['files']],[r['media_path'] for r in original])
             self.assertEqual([r['fingerprint'] for r in result['files']],[r['fingerprint'] for r in original])
             def generate(files,grid,size,target,sidecar,fingerprint,camera,*args):
@@ -107,7 +109,7 @@ class RelocatedSourceTest(unittest.TestCase):
                                     {r['source']:r for r in original},'cam_a',Source,reader=object(),inventory=inventory)
             with patch('tools.workdata.sync_validate.read_frame',return_value=np.zeros((54,96,3),np.uint8)):
                 self.assertAlmostEqual(reader.base_at(0),100.2)
-            self.assertEqual(len(opened),7)
+            self.assertEqual(len(opened),9)
             self.assertTrue(all(p.parent==root/'moved' for p in opened))
 
     def test_resolve_without_rewriting_evidence_or_hashing_original(self):
@@ -118,7 +120,8 @@ class RelocatedSourceTest(unittest.TestCase):
             row=dict(source='video.mp4',media_path=str(media),camera='cam_b',
                      fingerprint=dict(source_sha256='a'*64,media_size=5,media_mtime_ns=media.stat().st_mtime_ns))
             before=deepcopy(row);new=root/'moved';old.rename(new)
-            inventory=dict(root=str(new),files=[dict(relative_path='video.mp4',size_bytes=5,sha256='a'*64)])
+            inventory=dict(root=str(new),files=[dict(relative_path='video.mp4',size_bytes=5,sha256='a'*64,
+                                                   mtime_ns=row['fingerprint']['media_mtime_ns'])])
             with patch('tools.workdata.common.hash_file',side_effect=AssertionError('no full source hash')):
                 resolved=resolve_source(row,inventory)
             self.assertEqual(resolved['media_path'],str(new/'video.mp4'))
@@ -173,7 +176,7 @@ class WebcamPipelineTest(unittest.TestCase):
                 self.assertTrue(np.isfinite(select.call_args.args[1][1:]).all())
                 self.assertEqual(result['available'],valid)
                 self.assertEqual('calibration' in row,valid)
-            for error in (InvalidDataError(1,'bad W'),KeyError('W metadata')):
+            for error in (ExternalError(1,'bad W'),KeyError('W metadata')):
                 with patch.object(calibration,'sample_camera',side_effect=error):
                     result=calibrate_webcam(mapping,root,grid,{},reference,root)
                 self.assertFalse(result['available'])
@@ -198,12 +201,13 @@ class WebcamPipelineTest(unittest.TestCase):
                 result=timemap.run(inventory,root/'remux',root/'maps')
             self.assertEqual(osd.call_count,3);filename.assert_called_once()
             self.assertEqual(result[0]['files'][-1]['clock_source'],'filename_clock')
-            for index,error in enumerate((InvalidDataError(1,'bad W'),KeyError('W metadata'))):
+            for index,error in enumerate((ExternalError(1,'bad W'),KeyError('W metadata'),ArithmeticError('W failure'))):
                 with patch.object(timemap,'sample_file',return_value=sampled), \
                      patch('tools.workdata.webcam.sample_filename_clock',side_effect=error):
                     result=timemap.run(inventory,root/'remux',root/('bad'+str(index)))
                 self.assertTrue(all(r['status']=='valid' for r in result[0]['files'][:-1]))
                 self.assertEqual(result[0]['files'][-1]['status'],'failed')
+                self.assertEqual(result[0]['files'][-1]['error_type'],type(error).__name__)
             with patch.object(timemap,'run',return_value=result):
                 self.assertEqual(timemap.main(['--inventory',str(inventory),'--remux-root',str(root/'remux'),
                                               '--out-root',str(root/'exit')]),0)

@@ -61,8 +61,8 @@ class ProxyTest(unittest.TestCase):
                 self.assertEqual(set(failed['cameras']),set(ROLES))
                 self.assertFalse(failed['auxiliary_cameras']['cam_w']['available'])
                 self.assertEqual(failed['auxiliary_cameras']['cam_w']['reason'],'W decode failed')
-                from av.error import InvalidDataError
-                for error in (InvalidDataError(1,'W packet'),KeyError('W field')):
+                from av.error import ExternalError
+                for error in (ExternalError(1,'W packet'),KeyError('W field'),ArithmeticError('W unexpected')):
                     def failure(*args):
                         if args[6]=='cam_w':raise error
                         return payload

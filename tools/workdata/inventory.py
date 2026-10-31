@@ -58,7 +58,8 @@ def create_inventory(root, out, ffprobe='ffprobe', sessions=None):
     if selected is not None and old.get('root') not in (None,str(root)):
         for row in old.get('files',[]):
             path=source_path(root,row['relative_path'])
-            if not path.is_file() or path.stat().st_size!=row['size_bytes']:
+            if (not path.is_file() or path.stat().st_size!=row['size_bytes']
+                    or path.stat().st_mtime_ns!=row['mtime_ns']):
                 raise ValueError('Selected root does not contain the existing inventory: '+row['relative_path'])
     records = [] if selected is None else [row for row in old.get('files', []) if row['session'] not in selected]
     for path in sorted(p for directory in directories for p in directory.rglob('*')):

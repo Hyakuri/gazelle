@@ -107,8 +107,21 @@ def validate_manifest(manifest):
     return manifest
 
 
+def read_sync_grade(index_path,session_name):
+    path=Path(index_path)
+    index=json.loads(path.read_text(encoding='utf-8')) if path.exists() else {}
+    record=index.get('sessions',{}).get(session_name,{})
+    if 'sync_grade' not in record and session_name in DEFAULT_SESSIONS:
+        return 'official'
+    grade=record.get('sync_grade')
+    if grade not in ('official','second_look'):
+        raise ValueError('Missing or unsuccessful sync_grade for '+session_name)
+    return grade
+
+
 def read_session(path):
     path=Path(path);session=json.loads(path.read_text(encoding='utf-8'))
+    session['sync_grade']=read_sync_grade(path.parent.parent/'manifest.json',session['session'])
     if session.get('version')!=1 or set(session['cameras'])!=set(ROLES):
         raise ValueError('Invalid proxy session')
     grid=session['grid']
@@ -144,10 +157,12 @@ def read_session(path):
 def read_webcam_reference(path,session,webcam):
     try:
         reference=_read_webcam_reference(path,session,webcam)
-    except (OSError,ValueError,KeyError) as error:
+    except Exception as error:
         session['webcam_unavailable']=str(error)
+        session['webcam_error_type']=type(error).__name__
         return None
     session.pop('webcam_unavailable',None)
+    session.pop('webcam_error_type',None)
     return reference
 
 
@@ -237,6 +252,8 @@ def plan(proxies_root,seed=20261015,per_session=4,seconds=60,sessions=DEFAULT_SE
                   segments=pilots+segments,created_at=datetime.now(timezone.utc).isoformat())
     if not include_pilot: manifest['pilot_policy']='none'
     if unavailable: manifest['webcam_unavailable']=unavailable
+    errors={name:session['webcam_error_type'] for name,session in loaded.items() if session.get('webcam_error_type')}
+    if errors:manifest['webcam_error_type']=errors
     if cohort is not None:
         if not isinstance(cohort,str) or not re.fullmatch(r'[A-Za-z0-9_-]+',cohort):
             raise ValueError('Invalid cohort identifier')

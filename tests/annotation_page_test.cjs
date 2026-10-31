@@ -4,6 +4,7 @@ const fs=require('node:fs');
 const path=require('node:path');
 const vm=require('node:vm');
 const html=fs.readFileSync(path.join(__dirname,'../tools/validation/annotation_page.html'),'utf8');
+assert.match(html, /id="webcamImage"[^>]*aspect-ratio:16\/9/, 'W placeholder retains aspect ratio before pixels arrive');
 const script=html.match(/<script>([\s\S]*?)<\/script>/)[1].replace(/start\(\)\.catch\(e=>error\(e.message\)\);\s*$/,'');
 class Element {
   constructor(tagName='DIV',type=''){this.tagName=tagName.toUpperCase();this.type=type;this.children=[];this.style={setProperty(){}};this.value='';this.attrs={};}

@@ -268,11 +268,12 @@ def run(inventory_path,remux_root,out_root,session=None,step=10.,window=2.25,for
                                  implementation_sha256=version,step=step,window=window)
                 cache=out_root/'anchors'/name/(Path(entry['relative_path']).stem+'.json')
                 row.update(media_path=str(path),fingerprint=fingerprint)
-            except (ValueError,OSError,RuntimeError,KeyError,FFmpegError) as error:
+            except Exception as error:
                 if row['camera']!='cam_w': raise
-                row.update(status='failed',error=str(error),elapsed_seconds=time.monotonic()-started)
+                row.update(status='failed',error=str(error),error_type=type(error).__name__,elapsed_seconds=time.monotonic()-started)
                 files.append(row)
-                atomic_json(out_root/(name+'.json'),assemble_session(name,files))
+                result=assemble_session(name,files)
+                atomic_json(out_root/(name+'.json'),result)
                 continue
             try:
                 old=json.loads(cache.read_text(encoding='utf-8')) if cache.exists() and not force else {}
@@ -307,8 +308,11 @@ def run(inventory_path,remux_root,out_root,session=None,step=10.,window=2.25,for
                 if row['camera']=='cam_w':
                     row.update(clock_source=sampled['clock_source'],clock_description=sampled['clock_description'])
                 row['status']='valid' if all(s['valid'] for s in row['segments']) else 'review'
-            except (ValueError,OSError,RuntimeError,KeyError,FFmpegError) as error:
+            except Exception as error:
+                if row['camera']!='cam_w' and not isinstance(error,(ValueError,OSError,RuntimeError,KeyError,FFmpegError)):
+                    raise
                 row.update(status='failed',error=str(error))
+                if row['camera']=='cam_w':row['error_type']=type(error).__name__
             row['elapsed_seconds']=time.monotonic()-started
             files.append(row)
             result=assemble_session(name,files)

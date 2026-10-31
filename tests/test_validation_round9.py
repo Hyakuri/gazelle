@@ -19,15 +19,15 @@ class ValidationRound9Test(unittest.TestCase):
             session=dict(session='20261016',grid=dict(t0=0.,N=10001,step=.2,step_hz=5.),
                 overlap=[[0.,2000.]],cameras={c:proxy for c in ROLES},time_map_version=3,time_map_sha256='b'*64,
                 webcam_reference=dict(proxy,role='webcam'))
-            workers=dict(version=1,spans=[dict(session='20261016',span_id='first',worker_id='P1',start_wall=0.,end_wall=100.),
-                dict(session='20261016',span_id='second',worker_id='P2',start_wall=120.,end_wall=2000.)])
+            workers=dict(version=1,spans=[dict(session='20261016',span_id='20261016_worker_1',worker_id='P1',start_wall=0.,end_wall=100.),
+                dict(session='20261016',span_id='20261016_worker_2',worker_id='P2',start_wall=120.,end_wall=2000.)])
             path=root/'workers.json';path.write_text(json.dumps(workers))
             def sample(session,*args):return [sampling._segment(session,450,300,'segment')]
             with patch.object(sampling,'read_session',return_value=(session,[False]*10001)), \
                  patch.object(sampling,'sample_session',side_effect=sample):
                 result=sampling.plan(root,sessions=['20261016'],include_pilot=False,worker_spans=path)
                 row=result['segments'][0]
-                self.assertEqual(row['span_id'],'second')
+                self.assertEqual(row['span_id'],'20261016_worker_2')
                 self.assertEqual(row['auxiliary_proxies']['cam_w'],session['webcam_reference'])
                 session.pop('webcam_reference');session['webcam_unavailable']='W validation index record is missing'
                 absent=sampling.plan(root,sessions=['20261016'],include_pilot=False)
@@ -36,7 +36,8 @@ class ValidationRound9Test(unittest.TestCase):
 
     def test_unavailable_webcam_is_not_read_and_reason_is_retained(self):
         with tempfile.TemporaryDirectory() as directory:
-            root=Path(directory);grid=dict(t0=0.,N=3,step=.2,step_hz=5.);cameras={}
+            root=Path(directory)/'20261016';root.mkdir();grid=dict(t0=0.,N=3,step=.2,step_hz=5.);cameras={}
+            (root.parent/'manifest.json').write_text(json.dumps(dict(sessions={'20261016':dict(sync_grade='official')})))
             for camera,role in ROLES.items():
                 video=root/(role+'.mp4');video.write_bytes(b'fake');sidecar=root/(role+'.json')
                 sidecar.write_text(json.dumps(dict(camera=camera,role=role,grid=grid,video_sha256=hash_file(video),
@@ -48,6 +49,9 @@ class ValidationRound9Test(unittest.TestCase):
                 session,_=sampling.read_session(path)
             self.assertNotIn('webcam_reference',session)
             self.assertEqual(session['webcam_unavailable'],'failed W fit')
+            self.assertEqual(session['sync_grade'],'official')
+            (root.parent/'manifest.json').write_text('{"sessions": {}}')
+            with self.assertRaisesRegex(ValueError,'sync_grade'):sampling.read_session(path)
 
     def test_manifest_rejects_wrong_reference_path_and_partial_reference_frames(self):
         proxy=dict(path='fake',sha256='a'*64)

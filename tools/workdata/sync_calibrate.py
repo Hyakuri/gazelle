@@ -362,12 +362,37 @@ def sample_camera(mapping,camera,root,grid,fingerprint):
         frames.close()
 
 
-def run(path,out_root,samples_root,reuse_samples=False,keyframes_root=None,sampling_provenance=None,inventory=None):
+def second_look_fit(fit,reference,other):
+    """Check residuals against the unchanged fit using longer windows."""
+    from .sync_validate import residual_summary
+    if fit['reason']!='residual_tail_exceeds_0_2':
+        return
+    rows=window_lags(reference,other,window=120.,step=60.)
+    for row in rows:
+        if not row['valid']:continue
+        t=row['t_mid_seconds']+row['lag_seconds']
+        segment=next((s for s in fit['segments'] if s['start']<=t<s['end']),None)
+        if segment is None:
+            segment=fit['segments'][0 if t<fit['segments'][0]['start'] else -1]
+        row['b_mid_seconds']=t
+        row['observed_lag_seconds']=row['lag_seconds']
+        row['lag_seconds']-=segment['c0']+segment['c1']*t
+    result=dict(windows=rows,window_seconds=120.,step_seconds=60.,
+                validation_sha256=hash_file(Path(__file__).with_name('sync_validate.py')),
+                **residual_summary(rows,fit['duration']))
+    fit['second_look']=result
+    if result['passed']:
+        fit.update(valid=True,reason='valid_second_look')
+
+
+def run(path,out_root,samples_root,reuse_samples=False,keyframes_root=None,sampling_provenance=None,inventory=None,second_look=False):
     from .proxies import make_grid
     from .timemap import assemble_session
     from .keyframes import source_keyframes,step_mask
     from .sampling_fingerprint import sampling_hash
     mapping=json.loads(Path(path).read_text(encoding='utf-8'))
+    if second_look and mapping['session']<'20261016':
+        raise ValueError('Second-look is restricted to recordings from 20261016 onward')
     required=[r for r in mapping['files'] if r['camera']!='cam_w']
     if mapping['version']!=2 or any(r['status']!='valid' or 'calibration' in r for r in required):
         raise ValueError('Every source requires a valid v2 base map')
@@ -409,6 +434,7 @@ def run(path,out_root,samples_root,reuse_samples=False,keyframes_root=None,sampl
         fit=fit_calibration(windows,(grid['N']-1)*grid['step'])
         fit['time_domain']='base'
         refine_breakpoints(fit,signals['cam_b'],signals[camera])
+        if second_look:second_look_fit(fit,signals['cam_b'],signals[camera])
         fit.update(origin=grid['t0'],selection=selection[camera],fingerprint=fingerprint)
         calibrations[camera]=fit
         if fit['valid']:
@@ -422,7 +448,7 @@ def run(path,out_root,samples_root,reuse_samples=False,keyframes_root=None,sampl
             webcam=calibrate_webcam(mapping,root,grid,fingerprint,cells['cam_b'],
                 keyframes_root or Path(out_root)/'keyframes',reuse_samples,
                 receipts.get(mapping['session'],{}).get('cam_w'),inventory=inventory)
-        except (OSError,ValueError,RuntimeError,KeyError,FFmpegError,subprocess.SubprocessError) as error:
+        except Exception as error:
             webcam=dict(available=False,reason=str(error),error_type=type(error).__name__)
     result=assemble_session(mapping['session'],mapping['files'])
     if webcam is not None:
@@ -448,11 +474,12 @@ def main(argv=None):
     parser.add_argument('--sampling-provenance',type=Path,
                         help='Verified legacy sampling receipts; never replaces the sampling-hash comparison.')
     parser.add_argument('--inventory',type=Path,help='Resolve moved originals in memory using verified inventory records.')
+    parser.add_argument('--second-look',action='store_true',help='Apply the approved 120-second residual recheck to new recordings.')
     args=parser.parse_args(argv)
     import psutil
     psutil.Process().nice(psutil.BELOW_NORMAL_PRIORITY_CLASS if hasattr(psutil,'BELOW_NORMAL_PRIORITY_CLASS') else 10)
     result=run(args.timemaps/(args.session+'.json'),args.out_root,args.samples_root,args.reuse_samples,
-               args.keyframes_root,args.sampling_provenance,args.inventory)
+               args.keyframes_root,args.sampling_provenance,args.inventory,args.second_look)
     return int(not result['calibrated'])
 
 

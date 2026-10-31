@@ -271,7 +271,7 @@ def run(path,out_root,hz=5.,size=(1920,1080),force=False,ffmpeg='ffmpeg',ffprobe
         records=auxiliary if camera=='cam_w' else cameras
         try:
             records[camera]=prepare_camera(files,root,grid,camera_size,version,camera,role,force,ffmpeg,ffprobe,inventory)
-        except (OSError,ValueError,RuntimeError,KeyError,FFmpegError,subprocess.SubprocessError) as error:
+        except Exception as error:
             if camera!='cam_w': raise
             auxiliary[camera]=dict(available=False,reason=str(error),error_type=type(error).__name__)
             print('{} cam_w: unavailable: {}'.format(mapping['session'],error),flush=True)

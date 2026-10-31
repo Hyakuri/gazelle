@@ -593,7 +593,9 @@ The formal `roi_r2_2026_10` dataset is generated only after its complete approve
 `sync_calibrate`, `proxies`, and `sync_validate` accept `--inventory <inventory.json>` for
 moved originals: valid recorded paths (including remux files) stay in use; missing paths
 are resolved in memory from inventory root/relative path after matching source SHA records
-and file sizes. They do not rehash entire source videos or rewrite old mapping paths.
+and file sizes. Disk mtime must equal inventory `mtime_ns` and mapped `media_mtime_ns`;
+resolved paths are checked again. A missing remux path (`needs_remux=true`) is rejected.
+They do not rehash entire source videos or rewrite old mapping paths.
 Refined cuts stay inside the closed `adjacent_window_centers` interval; without a candidate,
 the coarse cut is retained with `refined=false`. `--reuse-samples` refits verified saved
 samples into a fresh output map, without decoding; proxy generation records
@@ -606,9 +608,28 @@ is recorded in `webcam_unavailable` in the new dataset manifest, while A/B/E sam
 The W panel follows the timeline and class buttons; loading reserves its space, hides stale
 images and does not mark a step viewed or block three-view labelling on W failure.
 Worker files marked `review-only` are rejected. Spans must fit the overlap bounds; header and
-handover fields are allowlisted. Optional header fields are `clock`, `rule`, `precision_seconds`
+handover fields are allowlisted. Header fields are `clock`, `rule`, `precision_seconds`
 (5), `handover_face_grace_seconds` (10), `status` (`approved`), and `source_draft_sha256`;
 `tools/workdata/workers.py` defines the exact anonymous rule/clock values.
+
+`sync_calibrate` and `sync_validate` offer `--second-look` (off by default) for recordings
+from 20261016 onward. It reuses the same signals in 120-second windows, 60-second steps,
+without changing fit coefficients or first-pass evidence. A/E fits recheck only
+`residual_tail_exceeds_0_2`; A–B/E–B recheck only `fraction_within_0_2 < 0.9`.
+Those rechecks require fraction ≥0.9, median absolute residual ≤0.1 s, absolute midpoint
+bias ≤0.1 s and absolute drift ≤0.1 s/hour. A failed A–E pair rechecks with median and
+absolute midpoint bias ≤0.15 s, absolute drift ≤0.15 s/hour, without a fraction gate.
+Every recheck needs ≥10 valid windows and ≥30% coverage. W–B is never rechecked and
+cannot change the session grade. Original A–E `insufficient_evidence` remains allowed.
+Validation writes `sync_grade`: `official` for original gates, `second_look` if any authorized
+recheck was used, or null if synchronization failed. New index records require a successful
+grade; missing grades in the old seven recordings mean `official`. A `valid_second_look`
+map requires `--second-look` validation. Existing recordings are not implicitly rerun.
+The accepted 20261016 validation remains unchanged; only its index grade is added.
+Rechecks use CPU and write maps/validation outside the repository, with no model, CUDA,
+network or downloads; proxy validation decodes media and reads exact source frames.
+W exceptions record `error_type`; sampling retains `webcam_error_type` alongside the reason.
+Approved worker files require all header fields; `span_id` is `<recording>_worker_<n>`.
 
 
 Run from the repository root in the existing Gazelle-next environment. Keep the source

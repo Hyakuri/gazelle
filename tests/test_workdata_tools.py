@@ -62,7 +62,8 @@ class WorkdataToolsTest(unittest.TestCase):
             (root/'20261030/unknown.mp4').write_bytes(b'not selected')
             output=Path(tmp)/'inventory.json'
             (root/'20260821').mkdir();(root/'20260821/old.avi').write_bytes(b'old')
-            old=dict(session='20260821',relative_path='20260821/old.avi',size_bytes=3,private_marker='unchanged')
+            old=dict(session='20260821',relative_path='20260821/old.avi',size_bytes=3,
+                     mtime_ns=(root/'20260821/old.avi').stat().st_mtime_ns,private_marker='unchanged')
             output.write_text(json.dumps(dict(root=str(Path(tmp)/'old'),files=[old])))
             with patch.object(inventory,'probe_metadata',return_value=dict(duration=100,has_audio=True)),patch.object(
                     inventory,'probe_packets',return_value=dict(count=10,small_count=0)):

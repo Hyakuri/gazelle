@@ -13,6 +13,8 @@ def validate_worker_spans(document, coverages=None):
         raise ValueError('Review-only worker spans cannot be used for sampling')
     if set(document)-{'version','spans','handover_intervals','source_draft_sha256',*HEADER_VALUES}:
         raise ValueError('Unknown worker header fields')
+    if document.get('status')=='approved' and not {'source_draft_sha256',*HEADER_VALUES}<=set(document):
+        raise ValueError('Approved worker spans require every header field')
     if any(key in document and (type(document[key]) is not type(value) or document[key]!=value)
            for key,value in HEADER_VALUES.items()):
         raise ValueError('Invalid anonymous worker header')
@@ -25,7 +27,7 @@ def validate_worker_spans(document, coverages=None):
         if (set(row)!={'session','span_id','start_wall','end_wall','worker_id'}
                 or not isinstance(row['session'],str) or not isinstance(row['span_id'],str)
                 or not re.fullmatch(r'\d{8}',row['session'])
-                or not re.fullmatch(r'[A-Za-z0-9_-]+',row['span_id']) or row['span_id'] in seen
+                or not re.fullmatch(re.escape(row['session'])+r'_worker_[1-9]\d*',row['span_id']) or row['span_id'] in seen
                 or row['worker_id'] not in ('P1','P2','P3','P4')
                 or not all(type(row[k]) in (int,float) and math.isfinite(row[k]) for k in ('start_wall','end_wall'))
                 or row['start_wall']>=row['end_wall']):

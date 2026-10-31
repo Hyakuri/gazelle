@@ -45,7 +45,8 @@ class SyncRound8Test(unittest.TestCase):
     def test_read_session_unions_every_camera_and_sampling_excludes_the_union(self):
         for marked in ({'cam_a': {250}}, {'cam_a': {105,250}, 'cam_b': {105,450}}):
             with self.subTest(marked=marked), tempfile.TemporaryDirectory() as directory:
-                root=Path(directory);grid=dict(t0=100.,N=9000,step=.2,step_hz=5.)
+                root=Path(directory)/'20261016';root.mkdir();grid=dict(t0=100.,N=9000,step=.2,step_hz=5.)
+                (root.parent/'manifest.json').write_text(json.dumps(dict(sessions={'20261016':dict(sync_grade='official')})))
                 cameras={}
                 for camera,role in ROLES.items():
                     video=root/(role+'.mp4');video.write_bytes(camera.encode())
@@ -58,7 +59,7 @@ class SyncRound8Test(unittest.TestCase):
                                                        frames=rows,video_sha256=digest)))
                     cameras[camera]=dict(role=role,video=video.name,frames=sidecar.name,sha256=digest)
                 path=root/'session.json'
-                path.write_text(json.dumps(dict(version=1,session='fixture',grid=grid,cameras=cameras,
+                path.write_text(json.dumps(dict(version=1,session='20261016',grid=grid,cameras=cameras,
                                                 time_map_version=3,time_map_sha256='a'*64)))
                 session,gaps=read_session(path)
                 expected=set().union(*marked.values())

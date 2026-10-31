@@ -367,6 +367,8 @@ W 参考须有通过 W–B 检查且由 `proxies/manifest.json` 哈希绑定的�
 `sync_calibrate`、`proxies`、`sync_validate` 可用 `--inventory <inventory.json>` 解析迁移源文件：
 有效的记录路径（包括重封装文件）继续使用；路径失效时，比对源 SHA 记录与文件大小，
 再按清单根目录和相对路径仅在内存中解析，不重算整段源视频哈希，不改写旧映射路径。
+磁盘修改时间须与清单 `mtime_ns`、映射 `media_mtime_ns` 相等，解析后仍检查；
+`needs_remux=true` 且重封装记录路径失效时直接拒绝，不以 AVI 替代。
 细化切点须在 `adjacent_window_centers` 闭区间内；没有候选则保留粗切点并记 `refined=false`。
 `--reuse-samples` 核对保存的样本后拟合到全新输出映射，不重新解码；生成代理时在
 `session.json` 记录 `allow_internal_gaps` 与重叠范围。
@@ -376,8 +378,23 @@ W 事件帧失败时重做不含 W 的条图。W 验证证据缺失、迁移或�
 在 `webcam_unavailable` 中记录原因，A/B/E 抽样继续。
 W 面板位于时间轴和类别按钮之后；加载时保留占位、隐藏旧图，不计已看步，W 失败不阻塞三视角标注。
 拒绝 `review-only` 作业者文件，片段须在重叠范围内；文件头与交接行只接受许可字段。
-可选文件头字段为 `clock`、`rule`、`precision_seconds`（5）、`handover_face_grace_seconds`（10）、
+文件头字段为 `clock`、`rule`、`precision_seconds`（5）、`handover_face_grace_seconds`（10）、
 `status`（`approved`）与 `source_draft_sha256`；匿名规则和时钟的固定值见 `tools/workdata/workers.py`。
+
+`sync_calibrate` 与 `sync_validate` 提供默认关闭的 `--second-look`，仅用于
+20261016 起的录制。同一信号采用 120 秒窗口、60 秒步长复核，不改变拟合系数和原门槛证据。
+A/E 拟合仅在 `residual_tail_exceeds_0_2` 时复核；A–B/E–B 仅在
+`fraction_within_0_2 < 0.9` 时复核。四项条件为占比 ≥0.9、中位绝对残差 ≤0.1 秒、
+中点偏差绝对值 ≤0.1 秒、漂移绝对值 ≤0.1 秒/小时。A–E 原判定为失败时复核，
+中位绝对残差与中点偏差绝对值均 ≤0.15 秒、漂移绝对值 ≤0.15 秒/小时，不设占比条件。
+每项复核至少 10 个有效窗、覆盖率至少 30%；W–B 不复核，也不影响录制等级。
+原 A–E 的 `insufficient_evidence` 仍可放行。验证文件的 `sync_grade` 为：原门槛通过
+`official`，用过任一获准复核为 `second_look`，同步失败为 null。新索引必须有成功等级，
+旧七次缺字段视为 `official`。`valid_second_look` 映射必须带 `--second-look` 验证，
+不会自动重跑已有录制。已通过审查的 20261016 验证文件保持原样，仅补索引等级。
+复核使用 CPU，映射与验证写到仓库外，不运行模型、CUDA、网络或下载；代理验证会解码
+媒体并读取精确来源帧。W 异常记录 `error_type`，抽样另存 `webcam_error_type` 与原因。
+正式 `approved` 作业者文件必须含全部文件头，`span_id` 为 `<录制>_worker_<n>`。
 
 
 本机标注工具抽取三视角 60 秒片段与逐步 JPEG，在 `127.0.0.1` 提供自动保存的浏览器界面。

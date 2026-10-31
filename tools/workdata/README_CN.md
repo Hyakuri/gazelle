@@ -164,3 +164,29 @@ A–E 可证据不足但须报告闭合推算。逐窗/整体闭合差 (A−B)�
 对已有代理比较 v3/v2 全时长滞后，每机均 ≤0.05 s 则保留 v2 代理及原 SHA，否则重建并记录来源。
 已批准的替换批次全通过才切换目录、重建 `roi_r2_trial` 和已完成 ROI 的 `roi_r2`；不生成正式 labels。
 含 `sync_uncertain` 步的片段在同层重抽，记录每次尝试；正式标注等待独立同步验收。
+
+## 同步复核与迁移保护
+
+`sync_calibrate` 与 `sync_validate` 提供默认关闭的 `--second-look`，仅用于
+20261016 起的录制。同一信号采用 120 秒窗口、60 秒步长复核，不改变拟合系数和原门槛证据。
+A/E 拟合仅在 `residual_tail_exceeds_0_2` 时复核；A–B/E–B 仅在
+`fraction_within_0_2 < 0.9` 时复核。四项条件为占比 ≥0.9、中位绝对残差 ≤0.1 秒、
+中点偏差绝对值 ≤0.1 秒、漂移绝对值 ≤0.1 秒/小时。A–E 原判定为失败时复核，
+中位绝对残差与中点偏差绝对值均 ≤0.15 秒、漂移绝对值 ≤0.15 秒/小时，不设占比条件。
+每项复核至少 10 个有效窗、覆盖率至少 30%；W–B 不复核，也不影响录制等级。
+原 A–E 的 `insufficient_evidence` 仍可放行。验证文件的 `sync_grade` 为：原门槛通过
+`official`，用过任一获准复核为 `second_look`，同步失败为 null。新索引必须有成功等级，
+旧七次缺字段视为 `official`。`valid_second_look` 映射必须带 `--second-look` 验证，
+不会自动重跑已有录制。已通过审查的 20261016 验证文件保持原样，仅补索引等级。
+复核使用 CPU，映射与验证写到仓库外，不运行模型、CUDA、网络或下载；代理验证会解码
+媒体并读取精确来源帧。W 异常记录 `error_type`，抽样另存 `webcam_error_type` 与原因。
+正式 `approved` 作业者文件必须含全部文件头，`span_id` 为 `<录制>_worker_<n>`。
+
+`sync_calibrate`、`proxies`、`sync_validate` 可传 `--inventory <inventory.json>`，在内存中
+解析失效的源路径，核对 SHA 记录、大小和清单 `mtime_ns` / 映射 `media_mtime_ns` / 磁盘修改时间。
+`needs_remux=true` 的失效路径拒绝解析，原始文件保持只读。细化切点限于
+`adjacent_window_centers` 闭区间，无候选保留粗切点并记 `refined=false`。
+W 不可用原因保存在 `webcam_unavailable`，不阻塞 A/B/E。拒绝 `review-only` 作业者表；
+文件头包括 `clock`、`rule`、`precision_seconds`、`handover_face_grace_seconds`、`status`、
+`source_draft_sha256`，格式定义在 `tools/workdata/workers.py`。代理保留 `allow_internal_gaps`。
+W 文件名共用 `camera_roles.json`。新录制验证写到 `sync_validation_r5`，旧七次产物不变。
