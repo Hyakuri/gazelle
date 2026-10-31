@@ -793,3 +793,41 @@ Claude 实际运行的检查：
 - Q-025 颜色仍未批准，未换色、重导出或更新数据集。正式区域/类别/参考图/完成标记和两个数据集 manifest/classes 共八项哈希不变，两数据集仍无正式 labels.json。全部证据在 `gazelle_runs/codex-round6/`，截图 `browser-proof.png`、审计 `browser-audit.json`。
 - 环境预检的普通权限与 yun Git/GitHub 例外分开记录；未改配置或 Conda。真实活动仅 CPU/本机 HTTP/JPEG/哈希/临时标签及 GitHub；无模型推理、下载、缓存更新或转码。GPU、FFmpeg/ffprobe 仅查询。临时页面已关闭、服务已停止、8786 无监听，已有忽略目录保留。
 - 本轮按 build → snapshot“第 6 轮结束” → check 完成交接；`last_accepted` 不变。第 7 轮与阶段 3 未开始，正式标注继续暂停。`next_actor=claude`；只读输出和实现提交供 Claude 审查，不作为已接受结果。
+
+## 第 7 轮审查结论（Claude，2026-10-30）
+
+| 任务 | 结论 | 要点 |
+| --- | --- | --- |
+| TASK-125 第 3 轮 | accepted | 第 6 轮的回归已修好；真实按住重复事件在 Edge 中补测通过；换色与数据集逐项核对无误。新发现的焦点问题不写错数据，由第 4 轮修复 |
+
+- 审查记录见 [evidence/2026-10-30-round7-review.md](evidence/2026-10-30-round7-review.md)，第 4 轮要求见 TASK-125 §3。
+- Claude 实际运行的检查：
+  - 完整离线门 717 项（0 skip）与两个 Node harness；15 个命令行工具的 `--help`；
+  - Edge 155 无界面模式的浏览器实测：可信输入、真实的按住重复、未替换的 `requestAnimationFrame`；正式 `roi_r2` 只读，标签写在临时文件。`run_keys.mjs` 28/28，`run_new.mjs` 37/37，`run_rate.mjs` 3/3，`run_space_focus.mjs` 3/3；
+  - 同一 `run_keys.mjs` 用于第 6 轮的页面，28 项有 17 项失败，说明测试有效；
+  - 键盘处理代码的 21 个变异全部被 Node 测试捕获；
+  - 换色：8 项正式文件与备份的哈希、类别与 manifest 的逐字段差异、13 种颜色的 CIE76 重算、两个数据集的 `--validate-only`。
+
+## 第 7 轮交接记录（Codex，2026-10-30）
+
+- 仅执行 TASK-125 第 3 轮，主线程 Inline Execution，无子代理。协调文档 `36aa643`、实现 `806068c`、完整报告 `342f5ed` 已推送现有分支；PR #6 正文按来源同步，已发[英中双语评论](https://github.com/Hyakuri/gazelle/pull/6#issuecomment-6501255581)。任务 §2 第 7 轮报告有命令、失败/跳过、前后哈希、13 色 CIE76 与 A/B/C 记录。
+- 重复页面快捷键先阻止默认动作；撤销只允许不带 Shift/Alt 的 Ctrl/Cmd+Z，按住只执行一次；补输入焦点、S/O 取消等测试。六份使用文档同步。最终离线门 **717 tests / 32.143s / 0 skip**，两个 Node harness、compileall、help、list-models 与 docs build/check 通过。小项 A 级修复：Python 3.14 的 argparse 帮助字符串 `%` 转义；不改区域阈值或导出语义。
+- Q-025 已实施：手部类 `#b6ff00`，唯一一次实际正式导出成功，旧导出备份 `roi/export-backup-20261029T152657019554Z`。首次 CLI 在解析帮助文本阶段失败，核对零改写后才修复并导出。区域 SHA `6511ff108c397e4d7dc474bddf6531810f505443f80cf8aca4967c8d4cddf0bb`、参考图及七张叠加图逐字节不变。新颜色最小色差 58.0235，高于其余颜色两两最小 21.4303。
+- `roi_r2` 与 `roi_r2_trial` 只更新类别和 manifest 的类别哈希，旧元数据改名 `*.before-task125-r3-20261030` 保留。各 **27 段 / 8,100 帧** 的 `--validate-only` 通过；片段与帧不变、无正式 `labels.json`。
+- **仍待 Claude 独立验收**：内置浏览器 7 项通过（颜色、撤销组合键、S/O 取消、焦点按钮上的一次空格长按结果），但不能证明真实 repeat=true。独立 Edge 155 在页面控制阶段 CDP 1006 断开，未取得有效真实重复测试结果；请按现有审查计划复测。推荐沿用 Claude 已成功的环境，不扩大本轮权限。正式标注继续暂停，用户独立 checkout 未验收。
+- 外部证据 `gazelle_runs/codex-round7/`。实际 CPU/本机 HTTP/浏览器/Pillow 导出/JPEG 校验及 GitHub 活动；没有模型推理、下载、FFmpeg 转码、Conda/全局配置修改。GPU/FFmpeg/ffprobe 仅查询。普通权限探针与 yun Git/GitHub 例外分开记录。页面已关闭，8797/8798 服务已停止，临时 Edge 配置清理；旧缓存及未知文件保留。
+- 本轮按 build → snapshot“第 7 轮结束” → check 交接，`last_accepted` 不变。`next_actor=claude`，第 8 轮及阶段 3 未开始。
+
+## 第 6、7 轮给用户的审查说明（第 8 轮审查后从 STATE 移入）
+
+- **第 7 轮审查结果（2026-10-30）**：TASK-125 第 3 轮通过，正式标注可以开始。
+  - 第 6 轮发现的按住空格问题已修好；撤销只认 Ctrl/Cmd+Z；按住按键只算一次。Codex 没能验证的真实按住事件，我用 Edge 补测通过。同样的测试放到旧页面上，28 项有 17 项失败，说明测试有效。
+  - 手部类已改为 `#b6ff00`。你画的区域、参考图与 7 张叠加图都没有变，两个数据集只改了类别颜色和对应的哈希，都没有 `labels.json`。
+  - 新发现一个不写错数据的小问题，见下面的“标注时注意”，第 8 轮修复。
+  - 详见 `docs/collab/evidence/2026-10-30-round7-review.md`。
+- **第 6 轮审查结果（2026-10-29）**：
+  - Codex 修好了第 5 轮的两处问题：同一片段内注视点与“跳过/画面外”现在只能二选一；Ctrl+S 等组合键与按住按键不再改动标注。
+  - 我用 Edge 浏览器发出真实的键盘、鼠标与页面隐藏事件做了实测，37 项检查中 36 项通过，没通过的一项是我的测试脚本预期写错。用第 5 轮的旧页面做对照，旧缺陷全部能复现，说明这些测试有效。
+  - 但这次改动带来一个新问题：用鼠标点过某个按钮后，如果按住空格，松开时浏览器会替你再点一次这个按钮。点过“撤销”会多撤销一次；点过“本片段跳过注视点”会删掉这个片段的注视点。修复只需几行，放在第 7 轮。
+  - 你画的区域与正式类别文件在测试前后没有变化，两个数据集都没有生成 `labels.json`。
+  - 详见「第 6 轮审查结论」与 `docs/collab/evidence/2026-10-29-round6-review.md`。

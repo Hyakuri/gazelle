@@ -616,6 +616,68 @@
         "docs/rules/COLLABORATION_PLAN_CN.md": "61cd631c8015e49b09bdd37f4d885e30b03a113ed8c0bcc3347b6e95f8669416",
         "docs/rules/DOCS_SYSTEM_CN.md": "4455cee71c032a000e506fd3dd6d53d75e18a12017c4fe4a304b3d69bcfd94d8"
       }
+    },
+    {
+      "date": "2026-10-31",
+      "documents": {
+        "COLLAB": "0.10.0",
+        "DOCS": "1.2.0",
+        "GOALS": "3.5.1",
+        "PERCEPTION": "1.2.0",
+        "ROIREG": "1.0.2",
+        "STAGE3": "3.7.0",
+        "SYSTEM": "1.7.1",
+        "VALSET": "4.4.2"
+      },
+      "files": {
+        "docs/archive/baselines/B022/README.md": "6abe86607f72a92637793bb72c39621bb703e99cd289d80d660d49503e467846",
+        "docs/archive/baselines/B022/index.html": "e37543f016ad89dbb09f5b627b05439fd8525e1bdd6f9854a6588a63ccb38e8f"
+      },
+      "id": "B022",
+      "note": "第 8 轮审查：PERCEPTION 1.2.0、VALSET 4.4.2",
+      "sources": {
+        "docs/collab/ROADMAP.md": "fc4cd9acc374dabd946f41fc2592052fcbfe4f2be4370cd64a54074b74b03c01",
+        "docs/collab/STATE.md": "56a10a7d37a3ac1392e62a3d988da5b0fb30abb173609e54799faad02c849b03",
+        "docs/design/PERCEPTION_D1_D2_DESIGN.md": "9caa0d4061cee1f6aee5c99529f8a9d22a123758a26feb58481135ab78dc0eb2",
+        "docs/design/REGION_REGISTRATION_CN.md": "ff702ca5b3b14e75b29981fc19ec9f5a3389338cb070c58dcb69b5c87bc90eff",
+        "docs/design/STAGE3_GAZE_ATTENTION_CN.md": "095dfe9a6510be18f7185f0550b0d60ca8f6e5af3b596bb4644bd587d2e77535",
+        "docs/design/SYSTEM_OVERVIEW_CN.md": "d119f8ae7ee88bbfe0991eb64a19e4e9c1f207d5ff325c629657a3d6dc7b3fef",
+        "docs/design/VALIDATION_SET_DESIGN.md": "f1ceec4a56284d3e2cea20f43a75f21039613d4813e2137db30eb7a5ab8f9c23",
+        "docs/requirements/PROJECT_GOALS_CN.md": "ea262bd0f780a371240bc5643712cebb542eeb45affe3799bd0abdf9b3563a08",
+        "docs/rules/COLLABORATION_PLAN_CN.md": "61cd631c8015e49b09bdd37f4d885e30b03a113ed8c0bcc3347b6e95f8669416",
+        "docs/rules/DOCS_SYSTEM_CN.md": "4455cee71c032a000e506fd3dd6d53d75e18a12017c4fe4a304b3d69bcfd94d8"
+      }
+    },
+    {
+      "date": "2026-10-31",
+      "documents": {
+        "COLLAB": "0.10.0",
+        "DOCS": "1.2.0",
+        "GOALS": "3.5.1",
+        "PERCEPTION": "1.2.0",
+        "ROIREG": "1.0.2",
+        "STAGE3": "3.7.0",
+        "SYSTEM": "1.7.1",
+        "VALSET": "4.5.0"
+      },
+      "files": {
+        "docs/archive/baselines/B023/README.md": "dd43125c475d131436f7689b79ee2266e580ce67477936654e6107f13e2b7a49",
+        "docs/archive/baselines/B023/index.html": "68a5391f3e4161f899a942c5345f6448b3a695f1dd98397bf4a9d07006433a47"
+      },
+      "id": "B023",
+      "note": "第 8 轮审查后的记录核对：VALSET 4.5.0 改正交接时段的说明",
+      "sources": {
+        "docs/collab/ROADMAP.md": "16fc4cc842fa548f404c5269a4ba473c34a0484a1247f0a6304e6a1219be5df9",
+        "docs/collab/STATE.md": "1547c011fbdc3b9a2f6d0f62cdc126e08ce6b131541b1bf652b1f7bb29612f59",
+        "docs/design/PERCEPTION_D1_D2_DESIGN.md": "9caa0d4061cee1f6aee5c99529f8a9d22a123758a26feb58481135ab78dc0eb2",
+        "docs/design/REGION_REGISTRATION_CN.md": "ff702ca5b3b14e75b29981fc19ec9f5a3389338cb070c58dcb69b5c87bc90eff",
+        "docs/design/STAGE3_GAZE_ATTENTION_CN.md": "095dfe9a6510be18f7185f0550b0d60ca8f6e5af3b596bb4644bd587d2e77535",
+        "docs/design/SYSTEM_OVERVIEW_CN.md": "d119f8ae7ee88bbfe0991eb64a19e4e9c1f207d5ff325c629657a3d6dc7b3fef",
+        "docs/design/VALIDATION_SET_DESIGN.md": "cf82fa620cf717806e8f858aa253b15b18010e595c03ddebb4610fd1734d26fe",
+        "docs/requirements/PROJECT_GOALS_CN.md": "ea262bd0f780a371240bc5643712cebb542eeb45affe3799bd0abdf9b3563a08",
+        "docs/rules/COLLABORATION_PLAN_CN.md": "61cd631c8015e49b09bdd37f4d885e30b03a113ed8c0bcc3347b6e95f8669416",
+        "docs/rules/DOCS_SYSTEM_CN.md": "4455cee71c032a000e506fd3dd6d53d75e18a12017c4fe4a304b3d69bcfd94d8"
+      }
     }
   ],
   "documents": [
@@ -978,6 +1040,16 @@
       "status": "已确认（协调者）",
       "summary": "文件移入 `docs/design/` 并改为稳定文件名，链接与路径随之更新；内容不变",
       "version": "1.1.2"
+    },
+    {
+      "date": "2026-10-31",
+      "doc_id": "PERCEPTION",
+      "path": "docs/archive/PERCEPTION/PERCEPTION_v1.2.0.md",
+      "sha256": "9caa0d4061cee1f6aee5c99529f8a9d22a123758a26feb58481135ab78dc0eb2",
+      "source": "worktree",
+      "status": "已确认（协调者）",
+      "summary": "§4.4 修订：选择增加同身份优先，共存过的轨迹不能接替主体，上一帧选择记录已确认的选择（TASK-101 契约 r3）",
+      "version": "1.2.0"
     },
     {
       "date": "2026-10-30",
@@ -1468,6 +1540,26 @@
       "status": "已确认（协调者）",
       "summary": "你确认 Q-028，去掉方案待确认的标记；内容不变",
       "version": "4.4.1"
+    },
+    {
+      "date": "2026-10-31",
+      "doc_id": "VALSET",
+      "path": "docs/archive/VALSET/VALSET_v4.4.2.md",
+      "sha256": "f1ceec4a56284d3e2cea20f43a75f21039613d4813e2137db30eb7a5ab8f9c23",
+      "source": "worktree",
+      "status": "已确认（协调者）",
+      "summary": "§11.3 写明交接边界的精度（Q-030）；内容不变",
+      "version": "4.4.2"
+    },
+    {
+      "date": "2026-10-31",
+      "doc_id": "VALSET",
+      "path": "docs/archive/VALSET/VALSET_v4.5.0.md",
+      "sha256": "cf82fa620cf717806e8f858aa253b15b18010e595c03ddebb4610fd1734d26fe",
+      "source": "worktree",
+      "status": "已确认（协调者）",
+      "summary": "§11.3 改正 4.4.2 的说法：交接时段的定义只精确到几秒，用户确认的边界不动，逐帧确认的人脸最多早 8.3 秒，这几秒留在交接时段内（Q-030）",
+      "version": "4.5.0"
     }
   ],
   "mirror_writes": [

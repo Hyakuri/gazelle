@@ -1,11 +1,11 @@
 ---
 doc_id: PERCEPTION
 title: 人脸与姿态关联、新轨迹确认设计（D1、D2）
-version: 1.1.2
+version: 1.2.0
 status: 已确认（协调者）
-updated: 2026-10-18
+updated: 2026-10-31
 owner: Claude
-confirm_ref: 用户 2026-10-15（方向）；协调者 2026-10-18（§4.4）
+confirm_ref: 用户 2026-10-15（方向）；协调者 2026-10-18（§4.4）、2026-10-31（§4.4 修订）
 ---
 # Face/Pose Association and Spawn-Frame Track Confirmation Design
 
@@ -195,16 +195,20 @@ candidate.
 an optional `previous_selection`: a tuple of `(person_id, head_bbox)` for the
 heads selected on the previous video frame. Selection is deterministic:
 
-1. **Spatial continuity with fresh evidence.** For each previous entry, choose
-   the unselected observed perception whose head-box center is closest to the
-   previous head-box center, provided the distance is at most the previous box
-   diagonal. Ties break by the existing priority key.
-2. **Identity continuity through short gaps.** For each previous entry not
-   satisfied in step 1, choose the perception with the same `person_id` if it is
+1. **Same identity with fresh evidence.** For each previous entry whose
+   `person_id` has an observed perception, select that perception.
+2. **Spatial continuity with fresh evidence.** For each previous entry not
+   satisfied in step 1, choose the unselected observed perception whose head-box
+   center is closest to the previous head-box center, provided the distance is at
+   most the previous box diagonal and the perception's track has never been
+   observed in the same frame as the previous `person_id`. Ties break by the
+   existing priority key.
+3. **Identity continuity through short gaps.** For each previous entry not
+   satisfied above, choose the perception with the same `person_id` if it is
    present, including a bridged `tracked_only` perception.
-3. **Fill.** Fill remaining slots by the existing priority key (observed first,
+4. **Fill.** Fill remaining slots by the existing priority key (observed first,
    then state, confidence, missed time, track age, ID).
-4. Return the selected perceptions in their original order, at most
+5. Return the selected perceptions in their original order, at most
    `max_heads`.
 
 Video mode stores the selected `(person_id, head_bbox)` pairs after each frame
@@ -220,14 +224,29 @@ provisional heads. A one-frame spawn therefore never changes which bridges are
 kept, and a real identity change prunes the old bridge on the frame where the
 new identity is confirmed, one frame later than the original wording.
 
+Amendment, 2026-10-31 (TASK-101 contract r3, after the round-8 review): the rules
+above had two defects. A provisional head that won the output selection was
+stored as the previous selection, so the next frame lost the subject and a
+one-frame spawn was not neutral. An observed bystander inside one box diagonal
+also replaced a subject missed for a few frames. Video mode therefore stores the
+confirmed selection, and stores the output selection only when the confirmed
+selection is empty. The provider keeps the set of `person_id` pairs that have
+been observed in the same frame, drops a pair when either ID leaves the
+perception list, resets the set together with the previous selection, and passes
+it to both selections as `coexisted`. Two tracks seen together are two people,
+so a track that coexisted with a previous entry cannot continue it. Selection
+steps 1 and 2 above are written for these rules, and the signature gains
+`coexisted=frozenset()`.
+
 Image mode passes no previous selection. It selects from the pool by the
 existing priority key and then assigns `person_id` values `0..n−1` in the
 selected order.
 
 Rationale for step 1: in the Sunny clip the two people alternate as the highest
 confidence candidate on several frames. Without continuity, single-person output
-would jump between them. Step 1 also handles a tracker identity change for the
-same physical person, because the new identity is observed at the old location.
+would jump between them. Step 2 also handles a tracker identity change for the
+same physical person, because the new identity is observed at the old location
+and was never seen together with the old one.
 
 ### 4.5 Output contract
 
@@ -317,7 +336,8 @@ Run on local hardware with cached resources only, outputs outside the repository
 <!-- portal:versions -->
 | 版本 | 日期 | 状态 | 变更摘要 | 确认 | 归档 |
 | --- | --- | --- | --- | --- | --- |
-| 1.1.2 | 2026-10-18 | 已确认（协调者） | 文件移入 `docs/design/` 并改为稳定文件名，链接与路径随之更新；内容不变 | 用户 2026-10-15（方向）；协调者 2026-10-18（§4.4） | [v1.1.2](../archive/PERCEPTION/PERCEPTION_v1.1.2.md) |
+| 1.2.0 | 2026-10-31 | 已确认（协调者） | §4.4 修订：选择增加同身份优先，共存过的轨迹不能接替主体，上一帧选择记录已确认的选择（TASK-101 契约 r3） | 用户 2026-10-15（方向）；协调者 2026-10-18（§4.4）、2026-10-31（§4.4 修订） | [v1.2.0](../archive/PERCEPTION/PERCEPTION_v1.2.0.md) |
+| 1.1.2 | 2026-10-18 | 已取代 | 文件移入 `docs/design/` 并改为稳定文件名，链接与路径随之更新；内容不变 | 用户 2026-10-15（方向）；协调者 2026-10-18（§4.4） | [v1.1.2](../archive/PERCEPTION/PERCEPTION_v1.1.2.md) |
 | 1.1.1 | 2026-10-18 | 已取代 | 加入文件头与版本记录，内容不变 | 用户 2026-10-15（方向）；协调者 2026-10-18（§4.4） | [v1.1.1](../archive/PERCEPTION/PERCEPTION_v1.1.1.md) |
 | 1.1.0 | 2026-10-18 | 已取代 | §4.4 修订：临时头中立的保留集合（TASK-101 契约 r2） | 协调者 2026-10-18（B 级） | [v1.1.0](../archive/PERCEPTION/PERCEPTION_v1.1.0.md) |
 | 1.0.0 | 2026-10-15 | 已取代 | D1、D2 设计：单人模式的人脸与姿态关联、新轨迹首帧确认 | 用户 2026-10-15（方向） | [v1.0.0](../archive/PERCEPTION/PERCEPTION_v1.0.0.md) |

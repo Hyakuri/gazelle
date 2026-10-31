@@ -50,15 +50,18 @@ Details: `docs/collab/analysis/2026-10-15-workdata-analysis.md`.
 | 5 | TASK-125 Annotation scheme r3: hands/held-object class and attention points, plus the out-of-view mark r3.1 | changes requested (2026-10-29): points and skip marks can coexist; modifier keys edit marks |
 | 6 | TASK-125 round 2: exclusive points and marks, shortcut guards, save on hide, dataset version gate, tests and docs | changes requested (2026-10-29): one regression, holding Space clicks the focused button |
 | 7 | TASK-125 round 3: held-key and undo fixes, small test and doc items, hands colour change (Q-025) | accepted (2026-10-30) |
-| 8 | TASK-125 round 4: release focus after mouse use of the slider, dropdowns and buttons | ready |
-| 8 | TASK-101 Face–pose association fix (D1, contract r2) | ready |
-| 8 | TASK-150 Intake of the two new recordings (20261016, 20261023) and the webcam | ready; contracts r2–r4 written; the cohort dataset moves to TASK-152 |
-| 8 | TASK-140 round 3: test follow-ups only | ready |
-| 9 | TASK-151 Per-region re-registration of the formal regions with in-recording monitoring (D27, D29) | proposed; the design is confirmed (Q-028) |
-| 10 | TASK-153 Review mode and blind landmark test; the user confirms the regions of each recording | proposed |
-| 9 | TASK-152 Intake of the new recording 20261030 and the 2026-10 cohort dataset (12 segments) | proposed |
+| 8 | TASK-125 round 4: release focus after mouse use of the slider, dropdowns and buttons | accepted (2026-10-31) |
+| 8 | TASK-101 Face–pose association fix (D1, contract r2) | changes requested (2026-10-31): cross-person fusion is fixed; a winning one-frame head and a coexisting bystander can still take the subject away |
+| 8 | TASK-150 Intake of the two new recordings (20261016, 20261023) and the webcam | changes requested (2026-10-31): main implementation correct; W isolation, the page and tests need work; the data goal is not met |
+| 8 | TASK-140 round 3: test follow-ups only | accepted (2026-10-31) |
+| 9 | TASK-101 contract r3: same identity first, a track seen with the subject cannot replace it, neutrality; real smoke again | ready |
+| 9 | TASK-150 revision r5: cut rule, path resolver, W isolation, page, tests, worker table, proxies and validation; item 10 waits for Q-032 | ready |
+| 10 | TASK-152 Intake of the new recording 20261030 and the 2026-10 cohort dataset (12 segments) | proposed |
+| 10 | TASK-151 Per-region re-registration of the formal regions with in-recording monitoring (D27, D29) | proposed; the design is confirmed (Q-028) |
+| 11 | TASK-153 Review mode and blind landmark test; the user confirms the regions of each recording | proposed |
 | Stage 4 | Pixel-isotropic reference rays (GZ-28) | proposed; no longer a stage-3 prerequisite because stage 3 uses 3D gaze |
 | User | Label 26 one-minute segments with scheme r3 (about 3 hours) | can start; dataset `roi_r2` is ready |
+| User | Answer Q-032: how the new recordings are judged for synchronization | waiting; blocks 20261023 and TASK-152, not labelling |
 | User | Label the 12 segments of the new recordings (about 1.5 hours) | after TASK-152 |
 | — | Stage acceptance by Claude, final acceptance by the user | not started |
 
@@ -168,6 +171,15 @@ Round 7 review on 2026-10-30 (`docs/collab/evidence/2026-10-30-round7-review.md`
 - **One new usability finding, already present before this round.** After mouse use of the slider or a dropdown, focus stays there and shortcuts do not respond; arrow keys on the segment dropdown switch segments. No label goes to the wrong place. TASK-125 round 4 fixes it in round 8.
 - **Plan.** Formal labelling can start from `24baf57`. Round 8 is TASK-125 round 4, TASK-101, TASK-150 and the TASK-140 test follow-ups.
 
+Round 8 review on 2026-10-31 (`docs/collab/evidence/2026-10-31-round8-review.md`):
+
+- **TASK-125 round 4 and TASK-140 round 3 are accepted.** After mouse use of the slider, dropdowns or buttons, shortcuts work at once. Real-mouse checks in headless Edge pass 23 of 23, and the same script fails 15 on the previous page. The 13 mutants of the synchronization tests were reproduced from a copy.
+- **TASK-101 goes back.** Cross-person fusion is fixed, and every statistic was recomputed from the raw output and matches. Two selection defects remain. A one-frame provisional head that wins the output makes the next frame lose the subject, so the neutrality promised by contract r2 does not hold. A bystander seen together with the subject can take over when the subject is missed for a few frames, which happens once in the Sunny clip. Contract r3 and PERCEPTION 1.2.0 give the corrected rules, tested on a scratch copy: 3000 fuzz cases with 0 failures, and a replay of Sunny that keeps one subject through all 30 frames.
+- **TASK-150 goes back.** The main implementation is correct, and an independent re-hash of 16,836 protected files found only the two shared files that were allowed to grow. A W failure can still stop the A, B, E results, the W panel makes the page jump at every step, and 39 of 57 mutants survive.
+- **Why the two calibrations failed.** The 20261016 E failure is a real defect: cut refinement can leave the bracket of the neighbouring long windows. All four accepted cuts stay inside it and all three new cuts leave it. A bracket rule goes into TASK-150 revision r5. It keeps the gate numbers but changes a frozen fit function, and it was set after seeing the failure. In an in-memory simulation the accepted cuts do not move, 20261016 E passes exactly at the limit (5/50 = 10.0%), and 20261023 E improves from 7.3% to 3.6% with moved cuts; round 9 gives the real result. The 20261023 A failure is mostly measurement noise: offset windows give 9.6% and 120 s windows 3.7%, though some measures do not improve. A systematic offset of about 0.05 to 0.14 s remains, and the A–E drift of 20261016 is a real small difference.
+- **The user decides Q-032.** An offline preview shows that 20261023 A–B and the A–E pair of both recordings would miss the unchanged proxy gates. The recommended option adds a second look and records a `sync_grade`. Its rule was written after seeing these two recordings, so only 20261030 would be a first use on unseen data. Other options drop 20261023, which is about half of P2's data, or redesign the calibration.
+- **Plan.** Labelling uses `476ebdf`. Round 9 is TASK-101 contract r3 and TASK-150 revision r5. The coordinator proposes moving TASK-152 and TASK-151 to round 10 and TASK-153 to round 11. This changes the rounds the user confirmed in Q-028 item 7, so it waits for Q-033.
+
 ## How this PR is used
 
 - Both agents start from `docs/collab/STATE.md`.
@@ -232,15 +244,18 @@ Work videos stay read-only on the local drive. Derived data, labels, and outputs
 | 5 | TASK-125 标注方案 r3：“手部/手中物体”类别与注视点，以及“画面外”标记 r3.1 | 退回修改（2026-10-29）：注视点与跳过标记可以并存；组合键会改动标记 |
 | 6 | TASK-125 第 2 轮：注视点与标记互斥、快捷键防护、隐藏页面时的保存、数据集版本门、测试与文档 | 退回修改（2026-10-29）：一处回归，按住空格会点击获得焦点的按钮 |
 | 7 | TASK-125 第 3 轮：按住按键与撤销键的修复、测试与文档的小项、手部类换色（Q-025） | accepted（2026-10-30） |
-| 8 | TASK-125 第 4 轮：鼠标用过的滑块、下拉框与按钮释放焦点 | ready |
-| 8 | TASK-101 人脸与姿态关联修正（D1，契约 r2） | ready |
-| 8 | TASK-150 两次新录制（20261016、20261023）与 webcam 的接入 | ready；契约 r2 至 r4 已写，分层数据集移到 TASK-152 |
-| 8 | TASK-140 第 3 轮：只补测试 | ready |
-| 9 | TASK-151 正式区域逐区域重配准与录制内监测（D27、D29） | proposed；方案已确认（Q-028） |
-| 10 | TASK-153 区域复核模式与盲测，用户逐次确认 | proposed |
-| 9 | TASK-152 新录制 `20261030` 的接入与 2026-10 分层数据集（12 段） | proposed |
+| 8 | TASK-125 第 4 轮：鼠标用过的滑块、下拉框与按钮释放焦点 | accepted（2026-10-31） |
+| 8 | TASK-101 人脸与姿态关联修正（D1，契约 r2） | 退回修改（2026-10-31）：跨人融合已修好；胜出的一帧临时头与共存的旁人仍会让主体丢失 |
+| 8 | TASK-150 两次新录制（20261016、20261023）与 webcam 的接入 | 退回修改（2026-10-31）：主体实现正确；W 的隔离、页面与测试要补；数据目标未达成 |
+| 8 | TASK-140 第 3 轮：只补测试 | accepted（2026-10-31） |
+| 9 | TASK-101 契约修订 r3：同身份优先、共存过的轨迹不能接替主体、中立性，重跑真实 smoke | ready |
+| 9 | TASK-150 契约修订 r5：切点规则、路径解析、W 的隔离、页面、测试、作业者表、代理与验证；第 10 条等 Q-032 | ready |
+| 10 | TASK-152 新录制 `20261030` 的接入与 2026-10 分层数据集（12 段） | proposed |
+| 10 | TASK-151 正式区域逐区域重配准与录制内监测（D27、D29） | proposed；方案已确认（Q-028） |
+| 11 | TASK-153 区域复核模式与盲测，用户逐次确认 | proposed |
 | 阶段 4 | 参考射线改为像素各向同性方向（GZ-28） | proposed；阶段 3 改用三维视线，不再是其前置 |
 | 用户 | 按方案 r3 标注 26 个一分钟片段（约 3 小时） | 可以开始；数据集 `roi_r2` 已就绪 |
+| 用户 | 回复 Q-032：新录制的同步判定 | 等待中；阻塞 20261023 与 TASK-152，不阻塞标注 |
 | 用户 | 标注新录制的 12 段（约 1.5 小时） | TASK-152 之后 |
 | — | Claude 阶段验收，用户最终验收 | 未开始 |
 
@@ -349,6 +364,15 @@ Work videos stay read-only on the local drive. Derived data, labels, and outputs
 - **换色核对无误。** 只有手部类颜色变化。区域、参考图与 7 张叠加图逐字节相同，两个数据集只改颜色与哈希，都没有 `labels.json`。
 - **新发现一个易用性问题，本轮之前就存在。** 用鼠标操作滑块或下拉框后，焦点留在控件上，快捷键不响应；片段下拉框上的方向键会切换片段。标签不会写错。第 8 轮由 TASK-125 第 4 轮修复。
 - **计划。** 正式标注可以从 `24baf57` 开始。第 8 轮做 TASK-125 第 4 轮、TASK-101、TASK-150 与 TASK-140 的测试补充。
+
+2026-10-31 的第 8 轮审查（`docs/collab/evidence/2026-10-31-round8-review.md`）：
+
+- **TASK-125 第 4 轮、TASK-140 第 3 轮通过。** 用鼠标操作过滑块、下拉框或按钮后，快捷键立刻可用。无界面 Edge 的真实鼠标实测 23 项全部通过，同一脚本在上一版页面上失败 15 项。同步测试的 13 个变异从副本复现。
+- **TASK-101 退回。** 跨人融合已修好，全部统计按原始输出重算，结果一致。选择还有两处缺陷：胜出输出的一帧临时头会让下一帧丢失主体，契约 r2 承诺的中立性不成立；与主体同时可见过的旁人，会在主体漏检几帧时接替它，Sunny 片段中发生了一次。契约 r3 与 PERCEPTION 1.2.0 给出修正规则，已在副本上验证：模糊测试 3000 次失败 0 次，Sunny 回放 30 帧都是同一人。
+- **TASK-150 退回。** 主体实现正确，16,836 个受保护文件独立重算后，只有两个获准追加的共享文件变化。但 W 失败仍可能挡住 A、B、E 的结果，W 面板让页面每步都跳，57 个变异存活 39 个。
+- **两次校准失败的原因。** 20261016 E 是真实缺陷：切点细化可以越出相邻长窗。已通过的 4 个切点都在其间，新的 3 个都不在。切点规则写入 TASK-150 修订 r5。它不改门槛数字，但改了冻结的拟合函数，也是看过失败之后定的。内存模拟中已通过的切点不动，20261016 E 恰好在门槛上通过（5/50=10.0%），20261023 E 由 7.3% 降到 3.6%，切点移动；真实结果要等第 9 轮。20261023 A 主要是测量噪声：错开窗口 9.6%，120 秒窗口 3.7%，但也有几种测量没有改善。还剩约 0.05 至 0.14 秒的系统差，20261016 的 A–E 漂移也是真实的小差异。
+- **Q-032 由用户决定。** 离线预演显示，20261023 的 A–B 与两次录制的 A–E 过不了未改动的代理门槛。推荐方案加一道复核，并记录 `sync_grade`。规则是看过这两次录制才写的，只有 20261030 是第一次用在没看过的数据上。其他选项是放弃 20261023（约占 P2 数据的一半），或重做校准方法。
+- **计划。** 标注用 `476ebdf`。第 9 轮做 TASK-101 契约 r3 与 TASK-150 修订 r5。协调者提议把 TASK-152、TASK-151 移到第 10 轮，TASK-153 移到第 11 轮。这改动用户在 Q-028 第 7 项确认过的轮次，所以等 Q-033。
 
 ## 本 PR 的用法
 
